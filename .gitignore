@@ -1,4 +1,4 @@
 *.log
 *.sqlite
 .env
-*.bin
+*_bin
