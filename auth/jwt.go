@@ -3,6 +3,7 @@ package auth
 import (
 	"ch/kirari04/videocms/models"
 	"errors"
+	"fmt"
 	"os"
 	"time"
 
@@ -40,7 +41,7 @@ func GenerateJWT(user models.User) (string, error) {
 	return tokenString, nil
 }
 
-func VerifyJWT(tknStr string) (*jwt.Token, error) {
+func VerifyJWT(tknStr string) (*jwt.Token, *Claims, error) {
 	jwtKey = []byte(os.Getenv("secretKey"))
 	claims := &Claims{}
 
@@ -52,11 +53,9 @@ func VerifyJWT(tknStr string) (*jwt.Token, error) {
 		return jwtKey, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
-	return tkn, nil
-
+	return tkn, claims, nil
 }
 
 func RefreshJWT(tknStr string) (string, error) {
@@ -71,13 +70,12 @@ func RefreshJWT(tknStr string) (string, error) {
 	if !tkn.Valid {
 		return "", errors.New("Invalid jwt key")
 	}
-	// (END) The code until this point is the same as the first part of the `Welcome` route
 
 	// We ensure that a new token is not issued until enough time has elapsed
 	// In this case, a new token will only be issued if the old token is within
 	// 30 seconds of expiry. Otherwise, return a bad request status
 	if time.Until(claims.ExpiresAt.Time) > 30*time.Second {
-		return "", errors.New("Wait until time to expire")
+		return "", errors.New(fmt.Sprintf("Wait until time to expire: %v", claims.ExpiresAt.Time.String()))
 	}
 
 	// Now, create a new token for the current use, with a renewed expiration time
