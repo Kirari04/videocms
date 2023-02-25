@@ -18,4 +18,11 @@ func Api() {
 	inits.Api.
 		Use(limiter.New(*helpers.LimiterConfig(10, time.Hour))).
 		Post("/login", controllers.Login)
+
+	inits.Api.
+		Use(limiter.New(*helpers.LimiterConfig(1, time.Second*10))).
+		Get("/auth/check", controllers.AuthCheck)
+	inits.Api.
+		Use(limiter.New(*helpers.LimiterConfig(1, time.Minute))).
+		Get("/auth/refresh", controllers.AuthRefresh)
 }
