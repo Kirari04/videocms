@@ -19,7 +19,7 @@ var logFile *os.File
 
 func Server() {
 	app := fiber.New(fiber.Config{
-		Prefork:       true,
+		Prefork:       false,
 		CaseSensitive: true,
 		StrictRouting: true,
 		ServerHeader:  "Fiber",
@@ -27,7 +27,7 @@ func Server() {
 		IdleTimeout:   time.Minute,
 		ReadTimeout:   time.Minute * 10,
 		WriteTimeout:  time.Minute * 10,
-		BodyLimit:     100 * 1024 * 1024,
+		BodyLimit:     5 * 1024 * 1024 * 1024, //5gb
 	})
 
 	// recovering from panics
@@ -79,5 +79,5 @@ func ServerStart() {
 	}
 
 	defer logFile.Close()
-	log.Fatal(App.Listen(listen))
+	App.Listen(listen)
 }
