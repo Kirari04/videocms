@@ -11,7 +11,9 @@ import (
 )
 
 type Claims struct {
+	UserID   uint   `json:"userid"`
 	Username string `json:"username"`
+	Admin    bool   `json:"admin"`
 	jwt.RegisteredClaims
 }
 
@@ -24,7 +26,9 @@ func GenerateJWT(user models.User) (string, error) {
 	expirationTime := time.Now().Add(5 * time.Minute)
 	// Create the JWT claims, which includes the username and expiry time
 	claims := &Claims{
+		UserID:   user.ID,
 		Username: user.Username,
+		Admin:    user.Admin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			// In JWT, the expiry time is expressed as unix milliseconds
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
