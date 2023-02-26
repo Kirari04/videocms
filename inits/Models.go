@@ -6,4 +6,6 @@ func Models() {
 	DB.AutoMigrate(&models.User{})
 	DB.AutoMigrate(&models.Folder{})
 	DB.AutoMigrate(&models.File{})
+	DB.AutoMigrate(&models.Link{})
+	DB.AutoMigrate(&models.Quality{})
 }
