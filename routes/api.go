@@ -26,4 +26,7 @@ func Api() {
 	folders.Get("/list", controllers.ListFolders)
 	folders.Post("/create", controllers.CreateFolder)
 	folders.Delete("/delete", controllers.DeleteFolder)
+
+	files := inits.Api.Use(middlewares.Auth).Group("/files")
+	files.Post("/create", controllers.CreateFile)
 }
