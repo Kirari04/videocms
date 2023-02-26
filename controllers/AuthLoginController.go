@@ -10,7 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func Login(c *fiber.Ctx) error {
+func AuthLogin(c *fiber.Ctx) error {
 	var userValidation models.UserLoginValidation
 	if err := c.BodyParser(&userValidation); err != nil {
 		return c.Status(400).JSON([]helpers.ValidationError{
