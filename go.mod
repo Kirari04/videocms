@@ -9,7 +9,14 @@ require (
 	gorm.io/gorm v1.24.5
 )
 
-require github.com/golang-jwt/jwt/v5 v5.0.0-rc.1 // indirect
+require (
+	github.com/aws/aws-sdk-go v1.38.20 // indirect
+	github.com/golang-jwt/jwt/v5 v5.0.0-rc.1 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/u2takey/ffmpeg-go v0.4.1 // indirect
+	github.com/u2takey/go-utils v0.3.1 // indirect
+	gopkg.in/vansante/go-ffprobe.v2 v2.1.1 // indirect
+)
 
 require (
 	github.com/andybalholm/brotli v1.0.4 // indirect
