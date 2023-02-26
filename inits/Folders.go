@@ -21,7 +21,13 @@ func Folders() {
 	if fileInfo, err := os.Stat(".env"); err != nil || fileInfo.IsDir() {
 		data, err := os.ReadFile(".env.example")
 		if err != nil {
-			log.Panic("No .env.example or .env file")
+			log.Println("No .env.example or .env file")
+			log.Println("Using Go defual env data")
+			data = []byte(
+				"AppName=VideoCMS\n" +
+					"Host=127.0.0.1:3000\n" +
+					"secretKey=sampleSecretKeyForAuthentication\n",
+			)
 		}
 		if err := os.WriteFile(".env", data, 0777); err != nil {
 			log.Panic("Failed to generate .env file")
