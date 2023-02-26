@@ -3,6 +3,7 @@ package inits
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
@@ -23,6 +24,9 @@ func Server() {
 		StrictRouting: true,
 		ServerHeader:  "Fiber",
 		AppName:       os.Getenv("VideoCMS"),
+		IdleTimeout:   time.Minute,
+		ReadTimeout:   time.Minute * 10,
+		WriteTimeout:  time.Minute * 10,
 	})
 
 	// recovering from panics
