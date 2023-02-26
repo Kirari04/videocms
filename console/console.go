@@ -43,7 +43,7 @@ func main() {
 			log.Println("running database:fresh")
 			os.Remove("./database/database.sqlite")
 			os.RemoveAll("./videos")
-			os.Mkdir("./videos", 750)
+			os.Mkdir("./videos", 0776)
 			os.Create("./database/database.sqlite")
 
 			// migrate
