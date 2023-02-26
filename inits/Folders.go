@@ -10,7 +10,10 @@ func Folders() {
 	createFolders := []string{"./database", "./videos", "./logs"}
 	for _, createFolder := range createFolders {
 		if fileInfo, err := os.Stat(createFolder); err != nil || !fileInfo.IsDir() {
-			os.Mkdir(createFolder, 0777)
+			if err := os.Mkdir(createFolder, 0777); err != nil {
+				log.Panic("Failed to generate essential folder")
+			}
+			log.Printf("Generated folder: %s\n", createFolder)
 		}
 	}
 
@@ -23,5 +26,6 @@ func Folders() {
 		if err := os.WriteFile(".env", data, 0777); err != nil {
 			log.Panic("Failed to generate .env file")
 		}
+		log.Println("Generated .env file from .env.example")
 	}
 }
