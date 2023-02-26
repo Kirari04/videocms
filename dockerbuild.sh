@@ -1,0 +1,1 @@
+docker build . -t kirari04/videocms:alpha-1
