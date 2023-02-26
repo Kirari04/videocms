@@ -39,6 +39,17 @@ func main() {
 				Hash:     hash,
 				Admin:    true,
 			})
+		case "database:fresh":
+			log.Println("running database:fresh")
+			os.Remove("./database/database.sqlite")
+			os.RemoveAll("./videos")
+			os.Mkdir("./videos", 750)
+			os.Create("./database/database.sqlite")
+
+			// migrate
+			inits.Dotenv()
+			inits.Database()
+			inits.Models()
 		default:
 			log.Fatal("Bad arguments passed")
 			functions()
@@ -50,4 +61,5 @@ func functions() {
 	log.Println("")
 	log.Println("Available commands:")
 	log.Println("seed:adminuser")
+	log.Println("database:fresh")
 }
