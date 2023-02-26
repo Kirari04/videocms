@@ -4,6 +4,7 @@ import (
 	"ch/kirari04/videocms/controllers"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
+	"ch/kirari04/videocms/middlewares"
 	"time"
 
 	"github.com/gofiber/fiber/v2/middleware/limiter"
@@ -21,6 +22,8 @@ func Api() {
 	auth.Use(limiter.New(*helpers.LimiterConfig(1, time.Minute))).
 		Get("/refresh", controllers.AuthRefresh)
 
-	folders := inits.Api.Group("/folders")
+	folders := inits.Api.Use(middlewares.Auth).Group("/folders")
 	folders.Get("/list", controllers.ListFolders)
+	folders.Post("/create", controllers.CreateFolder)
+	folders.Delete("/delete", controllers.DeleteFolder)
 }
