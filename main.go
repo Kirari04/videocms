@@ -7,6 +7,8 @@ import (
 )
 
 func main() {
+	// setting up required folders and config files
+	inits.Folders()
 	// for loading the .env file into the application
 	inits.Dotenv()
 	// for setting up the database connection
