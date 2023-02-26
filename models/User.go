@@ -7,9 +7,9 @@ import (
 type User struct {
 	gorm.Model
 	Username string `gorm:"unique;size:32;"`
-	Hash     string `gorm:"size:250;"`
+	Hash     string `gorm:"size:250;" json:"-"`
 	Admin    bool
-	Folders  []Folder
+	Folders  []Folder `json:"-"`
 }
 
 type UserLoginValidation struct {
