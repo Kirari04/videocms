@@ -27,6 +27,7 @@ func Server() {
 		IdleTimeout:   time.Minute,
 		ReadTimeout:   time.Minute * 10,
 		WriteTimeout:  time.Minute * 10,
+		BodyLimit:     100 * 1024 * 1024,
 	})
 
 	// recovering from panics
