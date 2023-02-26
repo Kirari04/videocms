@@ -7,18 +7,21 @@ import (
 type Folder struct {
 	gorm.Model
 	Name           string `gorm:"size:120;"`
-	User           User
+	User           User   `json:"-"`
 	UserID         uint
-	ParentFolder   *Folder
-	ParentFolderID *uint
+	ParentFolder   *Folder `json:"-"`
+	ParentFolderID uint
 }
 
 type FolderCreateValidation struct {
-	Name string `validate:"required,min=1,max=120"`
+	Name           string `validate:"required,min=1,max=120"`
+	ParentFolderID uint   `validate:"number"`
 }
 
-func (folder *FolderCreateValidation) ToFolder() Folder {
-	return Folder{
-		Name: folder.Name,
-	}
+type FolderListValidation struct {
+	ParentFolderID uint `validate:"number"`
+}
+
+type FolderDeleteValidation struct {
+	FolderID uint `validate:"number"`
 }
