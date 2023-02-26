@@ -11,6 +11,7 @@ require (
 
 require (
 	github.com/aws/aws-sdk-go v1.38.20 // indirect
+	github.com/gofiber/template v1.7.5 // indirect
 	github.com/golang-jwt/jwt/v5 v5.0.0-rc.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/u2takey/ffmpeg-go v0.4.1 // indirect

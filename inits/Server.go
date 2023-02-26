@@ -11,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/etag"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/template/html"
 )
 
 var App *fiber.App
@@ -18,6 +19,7 @@ var Api fiber.Router
 var logFile *os.File
 
 func Server() {
+	engine := html.New("./views", ".html")
 	app := fiber.New(fiber.Config{
 		Prefork:       false,
 		CaseSensitive: true,
@@ -28,6 +30,7 @@ func Server() {
 		ReadTimeout:   time.Minute * 10,
 		WriteTimeout:  time.Minute * 10,
 		BodyLimit:     5 * 1024 * 1024 * 1024, //5gb
+		Views:         engine,
 	})
 
 	// recovering from panics

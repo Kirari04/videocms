@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watch {{.Title}}</title>
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.3/plyr.css" />
+    <style>
+        video {
+            width: 500px;
+            height: 500px;
+        }
+
+        quali {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>{{.Title}}</h1>
+
+
+    <video id="player" playsinline controls>
+        {{range .Qualitys}}
+        <source src="{{.Path}}/out.mp4" type="video/mp4" size="{{.Height}}"></source>
+        {{end}}
+    </video>
+
+    <script src="https://cdn.plyr.io/3.7.3/plyr.js"></script>
+    <script>
+        const sources = Array.from(document.querySelectorAll("source")).map(el => {
+            return {
+                src: el.getAttribute('src').substring(1, el.getAttribute('src').length - 1),
+                type: 'video/mp4',
+                size: parseInt(el.getAttribute('size')),
+            };
+        }).reverse()
+
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const player = new Plyr('#player', {
+                quality: { default: sources[0].size, options: sources.map(src => src.size) },
+                controls: [
+                    'play-large', // The large play button in the center
+                    // 'restart', // Restart playback
+                    'rewind', // Rewind by the seek time (default 10 seconds)
+                    'play', // Play/pause playback
+                    'fast-forward', // Fast forward by the seek time (default 10 seconds)
+                    'progress', // The progress bar and scrubber for playback and buffering
+                    'current-time', // The current time of playback
+                    'duration', // The full duration of the media
+                    'mute', // Toggle mute
+                    'volume', // Volume control
+                    'captions', // Toggle captions
+                    'settings', // Settings menu
+                    'pip', // Picture-in-picture (currently Safari only)
+                    'airplay', // Airplay (currently Safari only)
+                    // 'download', // Show a download button with a link to either the current source or a custom URL you specify in your options
+                    'fullscreen' // Toggle fullscreen
+                ],
+                // settings: ['quality'],
+            });
+        });
+
+    </script>
+</body>
+
+</html>
