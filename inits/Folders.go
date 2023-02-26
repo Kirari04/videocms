@@ -25,7 +25,7 @@ func Folders() {
 			log.Println("Using Go defual env data")
 			data = []byte(
 				"AppName=VideoCMS\n" +
-					"Host=127.0.0.1:3000\n" +
+					"Host=:3000\n" +
 					"secretKey=sampleSecretKeyForAuthentication\n",
 			)
 		}
