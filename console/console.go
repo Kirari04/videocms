@@ -9,6 +9,8 @@ import (
 )
 
 func main() {
+	//loading folders
+	inits.Folders()
 	// for loading the .env file into the application
 	inits.Dotenv()
 	// for setting up the database connection
@@ -27,6 +29,7 @@ func main() {
 	for _, v := range argsWithoutProg {
 		switch v {
 		case "seed:adminuser":
+
 			log.Println("running seed:adminuser")
 			res := inits.DB.Where(&models.User{Username: "admin"}).Unscoped().Delete(&models.User{})
 			if res.Error != nil {
@@ -47,6 +50,7 @@ func main() {
 			os.Create("./database/database.sqlite")
 
 			// migrate
+			inits.Folders()
 			inits.Dotenv()
 			inits.Database()
 			inits.Models()
