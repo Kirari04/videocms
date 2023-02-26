@@ -112,15 +112,15 @@ func CreateFile(c *fiber.Ctx) error {
 
 	// add qualitys to database
 	for _, qualityOpt := range models.AvailableQualitys {
+		log.Printf("Adding %vx%v", qualityOpt.Width, qualityOpt.Height)
 		qualityPath := fmt.Sprintf("./videos/qualitys/%s/%s", fileId, qualityOpt.FolderName)
 		if videoHeight > videoWidth {
 			// vertical -> compare height
 			if qualityOpt.Height <= int64(videoHeight) {
-				// add quality
 				if res := inits.DB.Create(&models.Quality{
 					FileID:   dbFile.ID,
 					Name:     qualityOpt.Name,
-					Width:    int64((int64(videoHeight) / qualityOpt.Height) * qualityOpt.Width),
+					Width:    int64(float64(videoWidth) / (float64(videoHeight) / float64(qualityOpt.Height))),
 					Height:   qualityOpt.Height,
 					Crf:      qualityOpt.Crf,
 					Path:     qualityPath,
@@ -129,19 +129,18 @@ func CreateFile(c *fiber.Ctx) error {
 					Ready:    false,
 					Error:    "",
 				}); res.Error != nil {
-					log.Printf("Error saving quality in database: %v", res.Error)
+					log.Printf("Error saving quality in database: %v\n", res.Error)
 					return c.SendStatus(fiber.StatusInternalServerError)
 				}
 			}
 		} else {
 			//horizontal -> compare width
 			if qualityOpt.Width <= int64(videoWidth) {
-				// add quality
 				if res := inits.DB.Create(&models.Quality{
 					FileID:   dbFile.ID,
 					Name:     qualityOpt.Name,
 					Width:    qualityOpt.Width,
-					Height:   int64((int64(videoWidth) / qualityOpt.Width) * qualityOpt.Height),
+					Height:   int64(float64(videoHeight) / (float64(videoWidth) / float64(qualityOpt.Width))),
 					Crf:      qualityOpt.Crf,
 					Path:     qualityPath,
 					Encoding: false,
@@ -149,7 +148,7 @@ func CreateFile(c *fiber.Ctx) error {
 					Ready:    false,
 					Error:    "",
 				}); res.Error != nil {
-					log.Printf("Error saving quality in database: %v", res.Error)
+					log.Printf("Error saving quality in database: %v\n", res.Error)
 					return c.SendStatus(fiber.StatusInternalServerError)
 				}
 			}
