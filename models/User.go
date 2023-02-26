@@ -9,6 +9,7 @@ type User struct {
 	Username string `gorm:"unique;size:32;"`
 	Hash     string `gorm:"size:250;"`
 	Admin    bool
+	Folders  []Folder
 }
 
 type UserLoginValidation struct {
