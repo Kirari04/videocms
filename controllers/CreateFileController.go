@@ -85,20 +85,76 @@ func CreateFile(c *fiber.Ctx) error {
 
 	// save file to database
 	dbFile := models.File{
-		Name:           fileValidation.Name,
-		ParentFolderID: fileValidation.ParentFolderID,
-		Path:           filePath,
-		UserID:         c.Locals("UserID").(uint),
-		Height:         int64(videoHeight),
-		Width:          int64(videoWidth),
-		Duration:       videoDuration,
-		Size:           file.Size,
+		Name:     fileValidation.Name,
+		Path:     filePath,
+		UserID:   c.Locals("UserID").(uint),
+		Height:   int64(videoHeight),
+		Width:    int64(videoWidth),
+		Duration: videoDuration,
+		Size:     file.Size,
 	}
 	if res := inits.DB.Create(&dbFile); res.Error != nil {
 		log.Printf("Error saving file in database: %v", res.Error)
 		os.Remove(filePath)
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
+	// save link
+	dbLink := models.Link{
+		UUID:           uuid.NewString(),
+		ParentFolderID: fileValidation.ParentFolderID,
+		UserID:         c.Locals("UserID").(uint),
+		FileID:         dbFile.ID,
+	}
+	if res := inits.DB.Create(&dbLink); res.Error != nil {
+		log.Printf("Error saving link in database: %v", res.Error)
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
 
-	return c.SendStatus(200)
+	// add qualitys to database
+	for _, qualityOpt := range models.AvailableQualitys {
+		qualityPath := fmt.Sprintf("./videos/qualitys/%s/%s", fileId, qualityOpt.FolderName)
+		if videoHeight > videoWidth {
+			// vertical -> compare height
+			if qualityOpt.Height <= int64(videoHeight) {
+				// add quality
+				if res := inits.DB.Create(&models.Quality{
+					FileID:   dbFile.ID,
+					Name:     qualityOpt.Name,
+					Width:    int64((int64(videoHeight) / qualityOpt.Height) * qualityOpt.Width),
+					Height:   qualityOpt.Height,
+					Crf:      qualityOpt.Crf,
+					Path:     qualityPath,
+					Encoding: false,
+					Failed:   false,
+					Ready:    false,
+					Error:    "",
+				}); res.Error != nil {
+					log.Printf("Error saving quality in database: %v", res.Error)
+					return c.SendStatus(fiber.StatusInternalServerError)
+				}
+			}
+		} else {
+			//horizontal -> compare width
+			if qualityOpt.Width <= int64(videoWidth) {
+				// add quality
+				if res := inits.DB.Create(&models.Quality{
+					FileID:   dbFile.ID,
+					Name:     qualityOpt.Name,
+					Width:    qualityOpt.Width,
+					Height:   int64((int64(videoWidth) / qualityOpt.Width) * qualityOpt.Height),
+					Crf:      qualityOpt.Crf,
+					Path:     qualityPath,
+					Encoding: false,
+					Failed:   false,
+					Ready:    false,
+					Error:    "",
+				}); res.Error != nil {
+					log.Printf("Error saving quality in database: %v", res.Error)
+					return c.SendStatus(fiber.StatusInternalServerError)
+				}
+			}
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(dbLink)
 }
