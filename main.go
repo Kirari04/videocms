@@ -1,6 +1,7 @@
 package main
 
 import (
+	"ch/kirari04/videocms/encworker"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/routes"
 )
@@ -13,6 +14,13 @@ func main() {
 	// for migrating all the models
 	inits.Models()
 
+	// start encoding process
+	encworker.ResetEncodingState()
+	go encworker.StartEncode()
+	WebServer()
+}
+
+func WebServer() {
 	// for setting up the webserver
 	inits.Server()
 
