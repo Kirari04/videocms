@@ -40,17 +40,11 @@ func CreateFolder(c *fiber.Ctx) error {
 		}
 	}
 
-	// Get userid passed from middleware
-	UserID, ok := c.Locals("UserID").(uint)
-	if !ok {
-		return c.SendStatus(fiber.StatusInternalServerError)
-	}
-
 	// create folder
 	folder := models.Folder{
 		Name:           folderValidation.Name,
 		ParentFolderID: folderValidation.ParentFolderID,
-		UserID:         UserID,
+		UserID:         c.Locals("UserID").(uint),
 	}
 	res := inits.DB.Model(&models.Folder{}).Create(&folder)
 	if res.Error != nil {
