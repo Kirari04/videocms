@@ -6,15 +6,17 @@ import (
 
 type File struct {
 	gorm.Model
-	Name     string `gorm:"size:120;"`
-	Size     int64
-	Duration float64
-	Height   int64
-	Width    int64
-	Path     string `gorm:"size:120;" json:"-"`
-	User     User   `json:"-"`
-	UserID   uint
-	Qualitys []Quality
+	Name      string `gorm:"size:120;"`
+	Size      int64
+	Duration  float64
+	Height    int64
+	Width     int64
+	UUID      string
+	Path      string `gorm:"size:120;" json:"-"`
+	User      User   `json:"-"`
+	UserID    uint
+	Qualitys  []Quality
+	Subtitles []Subtitle
 }
 
 type FileCreateValidation struct {
