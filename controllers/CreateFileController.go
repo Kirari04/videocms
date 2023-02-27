@@ -15,6 +15,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
@@ -59,10 +60,31 @@ func CreateFile(c *fiber.Ctx) error {
 	fileSplit := strings.Split(file.Filename, ".")
 	fileExt := fileSplit[len(fileSplit)-1]
 	filePath := fmt.Sprintf("./videos/%s.%s", fileId, fileExt)
+	filePathTmp := fmt.Sprintf("./videos/%s_tmp.%s", fileId, fileExt)
 
 	// Save file to storage
 	if err := c.SaveFile(file, filePath); err != nil {
 		log.Printf("Failed to save file: %v", err)
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
+	//repackage file
+	if err := ffmpeg_go.Input(filePath).
+		Output(filePathTmp, ffmpeg_go.KwArgs{
+			"vcodec": "copy",
+			"acodec": "copy",
+		}).
+		OverWriteOutput().
+		Run(); err != nil {
+		log.Printf("Cant repackage file: %v\n", err)
+		return c.SendStatus(fiber.StatusBadRequest)
+	}
+	if err := os.Remove(filePath); err != nil {
+		log.Println(err)
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+	if err := os.Rename(filePathTmp, filePath); err != nil {
+		log.Println(err)
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 
@@ -94,9 +116,26 @@ func CreateFile(c *fiber.Ctx) error {
 		if streamInfo.CodecType == "subtitle" {
 			subtitleStreams = append(subtitleStreams, streamInfo)
 		}
-		// get any duration time
-		if streamInfo.Duration != "" {
+
+		// get any duration time (subtitles may have one too => on mkvs)
+		if streamInfo.Duration != "" && videoDuration == 0 {
 			videoDuration, _ = strconv.ParseFloat(streamInfo.Duration, 64)
+		}
+
+		// get video duration (usually webm files)
+		if tmpDuration, err := streamInfo.TagList.GetString("DURATION"); err == nil && tmpDuration != "" && videoDuration == 0 {
+			log.Printf("tmpDuration: %v", tmpDuration)
+			var hours float64
+			var minutes float64
+			var seconds float64
+			tmpDurationSlices := strings.Split(tmpDuration, ":")
+			if len(tmpDurationSlices) == 3 {
+				hours, _ = strconv.ParseFloat(tmpDurationSlices[0], 64)
+				minutes, _ = strconv.ParseFloat(tmpDurationSlices[1], 64)
+				seconds, _ = strconv.ParseFloat(tmpDurationSlices[2], 64)
+				videoDuration = seconds + (minutes * 60) + (hours * 60 * 60)
+			}
+
 		}
 	}
 
