@@ -1,5 +1,5 @@
 # Video-CMS
-This project is cms videos.
+This project is a cms for hosting your videos.
 
 ## Api-Doc
 
