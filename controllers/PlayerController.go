@@ -4,6 +4,8 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
+	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/gofiber/fiber/v2"
@@ -28,6 +30,7 @@ func PlayerController(c *fiber.Ctx) error {
 	res := inits.DB.
 		Preload("File").
 		Preload("File.Qualitys").
+		Preload("File.Subtitles").
 		Where(&models.Link{
 			UUID: requestValidation.UUID,
 		}).
@@ -41,9 +44,29 @@ func PlayerController(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).Render("404", fiber.Map{})
 	}
 
+	var jsonQualitys []map[string]string
+	for _, qualiItem := range dbLink.File.Qualitys {
+		jsonQualitys = append(jsonQualitys, map[string]string{
+			"file":  fmt.Sprintf("%s/out.mp4", qualiItem.Path),
+			"label": qualiItem.Name,
+		})
+	}
+	rawQuality, _ := json.Marshal(jsonQualitys)
+
+	var jsonSubtitles []map[string]string
+	for _, subItem := range dbLink.File.Subtitles {
+		jsonSubtitles = append(jsonSubtitles, map[string]string{
+			"file":  fmt.Sprintf("%s/out.vtt", subItem.Path),
+			"label": subItem.Name,
+			"kind":  "captions",
+		})
+	}
+	rawSubtitles, _ := json.Marshal(jsonSubtitles)
+
 	return c.Render("player", fiber.Map{
-		"Title":    dbLink.File.Name,
-		"Qualitys": dbLink.File.Qualitys,
-		"UUID":     requestValidation.UUID,
+		"Title":     dbLink.File.Name,
+		"Qualitys":  string(rawQuality),
+		"Subtitles": string(rawSubtitles),
+		"UUID":      requestValidation.UUID,
 	})
 }

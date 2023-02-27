@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watch {{.Title}}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.plyr.io" crossorigin>
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.3/plyr.css" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap"
+        rel="stylesheet">
+    <style>
+        video {
+            width: 500px;
+            height: 500px;
+        }
+
+        quali {
+            display: none;
+        }
+
+        .plyr__caption {
+            background-color: transparent !important;
+            color: white !important;
+            font-weight: 900;
+            font-family: 'Roboto', sans-serif !important;
+        }
+
+        @supports (-webkit-text-stroke: 2px black) {
+            .plyr__caption {
+                -webkit-text-stroke: 2px black;
+                -webkit-text-fill-color: white;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>{{.Title}}</h1>
+    <ul>
+        {{range .Qualitys}}
+        <li>
+            {{.Name}} [{{.Progress}}] ({{.Width}}x{{.Height}}) <a href="{{.Path}}/out.mp4" target="_blank">File</a>
+        </li>
+        {{end}}
+    </ul>
+
+    <video id="player" playsinline controls>
+        {{range .Qualitys}}
+        <source src="{{.Path}}/out.mp4" type="video/mp4" size="{{.Height}}">
+        </source>
+        {{end}}
+        {{range .Subtitles}}
+        <track kind="captions" label="{{.Name}} Sub" srclang="{{.Lang}}" src="{{.Path}}/out.vtt">
+        {{end}}
+
+    </video>
+
+    <script src="https://cdn.plyr.io/3.7.3/plyr.js"></script>
+    <script>
+        const sources = Array.from(document.querySelectorAll("source")).map(el => {
+            return {
+                src: el.getAttribute('src').substring(1, el.getAttribute('src').length - 1),
+                type: 'video/mp4',
+                size: parseInt(el.getAttribute('size')),
+            };
+        }).reverse()
+
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const player = new Plyr('#player', {
+                quality: { default: sources[0].size, options: sources.map(src => src.size) },
+                controls: [
+                    'play-large', // The large play button in the center
+                    // 'restart', // Restart playback
+                    'rewind', // Rewind by the seek time (default 10 seconds)
+                    'play', // Play/pause playback
+                    'fast-forward', // Fast forward by the seek time (default 10 seconds)
+                    'progress', // The progress bar and scrubber for playback and buffering
+                    'current-time', // The current time of playback
+                    'duration', // The full duration of the media
+                    'mute', // Toggle mute
+                    'volume', // Volume control
+                    'captions', // Toggle captions
+                    'settings', // Settings menu
+                    'pip', // Picture-in-picture (currently Safari only)
+                    'airplay', // Airplay (currently Safari only)
+                    // 'download', // Show a download button with a link to either the current source or a custom URL you specify in your options
+                    'fullscreen' // Toggle fullscreen
+                ],
+                settings: ['quality', 'captions'],
+            });
+        });
+
+    </script>
+</body>
+
+</html>
