@@ -8,4 +8,5 @@ func Models() {
 	DB.AutoMigrate(&models.File{})
 	DB.AutoMigrate(&models.Link{})
 	DB.AutoMigrate(&models.Quality{})
+	DB.AutoMigrate(&models.Subtitle{})
 }
