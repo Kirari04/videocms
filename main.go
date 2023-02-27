@@ -19,6 +19,8 @@ func main() {
 	// start encoding process
 	encworker.ResetEncodingState()
 	go encworker.StartEncode()
+	encworker.ResetEncodingState_sub()
+	go encworker.StartEncode_sub()
 	WebServer()
 }
 

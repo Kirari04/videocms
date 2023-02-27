@@ -17,83 +17,79 @@ import (
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 )
 
-var runningEncodes int = 0
-var maxRunningEncodes int = 2
+var runningEncodes_sub int = 0
+var maxrunningEncodes_sub int = 2
 
-func StartEncode() {
+func StartEncode_sub() {
 	for true {
-		loadEncodingTasks()
+		loadEncodingTasks_sub()
 		time.Sleep(time.Second * 10)
 	}
 }
 
-func ResetEncodingState() {
-	var encodingQualitys []models.Quality
+func ResetEncodingState_sub() {
+	var encodingSubtitles []models.Subtitle
 	inits.DB.
-		Model(&models.Quality{}).
+		Model(&models.Subtitle{}).
 		Preload("File").
-		Where(&models.Quality{
+		Where(&models.Subtitle{
 			Encoding: true,
 		}, "Encoding").
-		Find(&encodingQualitys)
+		Find(&encodingSubtitles)
 
-	for _, v := range encodingQualitys {
+	for _, v := range encodingSubtitles {
 		v.Encoding = false
 		inits.DB.Save(&v)
 	}
 }
 
-func loadEncodingTasks() {
-	var encodingQualitys []models.Quality
+func loadEncodingTasks_sub() {
+	var encodingSubtitles []models.Subtitle
 	inits.DB.
-		Model(&models.Quality{}).
+		Model(&models.Subtitle{}).
 		Preload("File").
-		Where(&models.Quality{
+		Where(&models.Subtitle{
 			Encoding: false,
 			Ready:    false,
 			Failed:   false,
 		}, "Encoding", "Ready", "Error").
-		Find(&encodingQualitys)
+		Find(&encodingSubtitles)
 
-	if len(encodingQualitys) > 0 {
-		log.Printf("Loaded %v qualitys to encode", len(encodingQualitys))
+	if len(encodingSubtitles) > 0 {
+		log.Printf("Loaded %v Subtitles to encode", len(encodingSubtitles))
 	}
 
-	for _, v := range encodingQualitys {
+	for _, v := range encodingSubtitles {
 		v.Encoding = true
 		inits.DB.Save(&v)
 
-		go func(v models.Quality) {
-			runEncode(v)
+		go func(v models.Subtitle) {
+			runEncode_sub(v)
 		}(v)
 
 	}
 }
 
-func runEncode(encodingTask models.Quality) {
-	for runningEncodes >= maxRunningEncodes {
+func runEncode_sub(encodingTask models.Subtitle) {
+	for runningEncodes_sub >= maxrunningEncodes_sub {
 		time.Sleep(time.Second * 10)
 	}
-	runningEncodes += 1
+	runningEncodes_sub += 1
 	log.Printf("Start encoding %s %s\n", encodingTask.File.Name, encodingTask.Name)
 
 	totalDuration := encodingTask.File.Duration
-	encFilePath := fmt.Sprintf("%s/out.mp4", encodingTask.Path)
+	encFilePath := fmt.Sprintf("%s/out.vtt", encodingTask.Path)
 	os.MkdirAll(encodingTask.Path, 0777)
 
 	err := ffmpeg_go.Input(encodingTask.File.Path).
 		Output(encFilePath, ffmpeg_go.KwArgs{
-			"c:v":    "libx264",
-			"c:a":    "aac",
-			"preset": "fast",
-			"s":      fmt.Sprintf("%dx%d", encodingTask.Width, encodingTask.Height),
-			"crf":    encodingTask.Crf,
+			"map": fmt.Sprintf("0:s:%d", encodingTask.Index),
 		}).
-		GlobalArgs("-progress", "unix://"+TempSock(totalDuration, &encodingTask)).
+		GlobalArgs("-progress", "unix://"+TempSock_sub(totalDuration, &encodingTask)).
 		OverWriteOutput().
 		Run()
 	if err != nil {
-		runningEncodes -= 1
+		runningEncodes_sub -= 1
 		encodingTask.Ready = false
 		encodingTask.Failed = true
 		inits.DB.Save(&encodingTask)
@@ -104,12 +100,12 @@ func runEncode(encodingTask models.Quality) {
 	encodingTask.Ready = true
 	inits.DB.Save(&encodingTask)
 	log.Printf("Finish encoding %s %s\n", encodingTask.File.Name, encodingTask.Name)
-	runningEncodes -= 1
+	runningEncodes_sub -= 1
 }
 
-func TempSock(totalDuration float64, encodingTask *models.Quality) string {
+func TempSock_sub(totalDuration float64, encodingTask *models.Subtitle) string {
 	rand.Seed(time.Now().Unix())
-	sockFileName := path.Join(os.TempDir(), fmt.Sprintf("%s_%vx%v_%d_sock", encodingTask.File.UUID, encodingTask.Width, encodingTask.Height, rand.Int()))
+	sockFileName := path.Join(os.TempDir(), fmt.Sprintf("%s_subtitle_%d_sock", encodingTask.UUID, rand.Int()))
 	l, err := net.Listen("unix", sockFileName)
 	if err != nil {
 		panic(err)
