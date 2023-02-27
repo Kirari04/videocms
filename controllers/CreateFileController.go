@@ -82,9 +82,11 @@ func CreateFile(c *fiber.Ctx) error {
 	var videoStream ffprobe.Stream
 	var subtitleStreams []ffprobe.Stream = []ffprobe.Stream{}
 	var videoDuration float64
+	hasVideoStream := false
 	for _, streamInfo := range videoInfo {
 		if streamInfo.CodecType == "video" {
 			videoStream = streamInfo
+			hasVideoStream = true
 		}
 		if streamInfo.CodecType == "subtitle" {
 			subtitleStreams = append(subtitleStreams, streamInfo)
@@ -93,6 +95,11 @@ func CreateFile(c *fiber.Ctx) error {
 		if streamInfo.Duration != "" {
 			videoDuration, _ = strconv.ParseFloat(streamInfo.Duration, 64)
 		}
+	}
+
+	if !hasVideoStream {
+		os.Remove(filePath)
+		return c.SendStatus(fiber.StatusBadRequest)
 	}
 
 	if videoStream.Height == 0 || videoStream.Width == 0 {
