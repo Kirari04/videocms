@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -120,8 +121,8 @@ func CreateFile(c *fiber.Ctx) error {
 				if res := inits.DB.Create(&models.Quality{
 					FileID:   dbFile.ID,
 					Name:     qualityOpt.Name,
-					Width:    int64(float64(videoWidth) / (float64(videoHeight) / float64(qualityOpt.Height))),
-					Height:   qualityOpt.Height,
+					Width:    int64(math.RoundToEven(float64(videoWidth) / (float64(videoHeight) / float64(qualityOpt.Height)))),
+					Height:   int64(math.RoundToEven(float64(qualityOpt.Height))),
 					Crf:      qualityOpt.Crf,
 					Path:     qualityPath,
 					Encoding: false,
@@ -139,8 +140,8 @@ func CreateFile(c *fiber.Ctx) error {
 				if res := inits.DB.Create(&models.Quality{
 					FileID:   dbFile.ID,
 					Name:     qualityOpt.Name,
-					Width:    qualityOpt.Width,
-					Height:   int64(float64(videoHeight) / (float64(videoWidth) / float64(qualityOpt.Width))),
+					Width:    int64(math.RoundToEven(float64(qualityOpt.Width))),
+					Height:   int64(math.RoundToEven(float64(videoHeight) / (float64(videoWidth) / float64(qualityOpt.Width)))),
 					Crf:      qualityOpt.Crf,
 					Path:     qualityPath,
 					Encoding: false,
