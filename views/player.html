@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Encoding</title>
+    <title>Watch {{.Title}}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -40,12 +40,66 @@
             width: 100%;
             height: 100%;
         }
+
+        .jw-icon-rewind {
+            display: none !important;
+        }
     </style>
 </head>
 
 <body>
     <script src='/jwplayer/jwplayer.js'></script>
     <div id="player">Loading the player...</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        const Qualitys = JSON.parse(decodeURI('{{.Qualitys}}'));
+        const Subtitles = JSON.parse(decodeURI('{{.Subtitles}}'));
+        const UUID = '{{.UUID}}'
+    </script>
+    <script>
+        const playerInstance = jwplayer('player').setup({
+            sources: Qualitys,
+            width: "100%",
+            height: "100%",
+            title: "{{.Title}}",
+            tracks: Subtitles,
+        })
+        const buttonId = 'plusbutton';
+        const iconPath = '/plus.svg';
+        const tooltipText = 'Download Video';
+
+        // Call the player's `addButton` API method to add the custom button
+        playerInstance.addButton("/plus.svg", "Forward", plus10, "plusbutton");
+        playerInstance.addButton("/minus.svg", "Rewind", minus10, "minusbutton");
+
+        function plus10() {
+            playerInstance.seek(playerInstance.getPosition() + 10)
+        }
+        function minus10() {
+            playerInstance.seek(playerInstance.getPosition() - 10)
+        }
+
+        setInterval(() => {
+            localStorage.setItem(`POSITION-${UUID}`, playerInstance.getPosition())
+        }, 1000);
+
+        const oldPosition = parseInt(localStorage.getItem(`POSITION-${UUID}`))
+        if (oldPosition > 0) {
+            Swal.fire({
+                title: 'Do you want to start where you left last time?',
+                showDenyButton: true,
+                confirmButtonText: 'Yes',
+                denyButtonText: 'No',
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    playerInstance.seek(oldPosition)   
+                }
+            })
+        }
+    </script>
+
+    {{if gt .ActiveEncodes 0}}
     <template id="my-template">
         <swal-title id="popuptitle">
             This file is still encoding {{.ActiveEncodes}} more quality! <br>
@@ -60,20 +114,7 @@
         </swal-button>
         <swal-param name="allowEscapeKey" value="true" />
     </template>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        const Qualitys = JSON.parse(decodeURI('{{.Qualitys}}'));
-        const Subtitles = JSON.parse(decodeURI('{{.Subtitles}}'));
-    </script>
-    <script>
-        const player = jwplayer('player').setup({
-            sources: Qualitys,
-            width: "100%",
-            height: "100%",
-            title: "{{.Title}}",
-            tracks: Subtitles,
-        });
-
         function showEncodingProcess() {
             Swal.fire({
                 template: '#my-template'
@@ -83,12 +124,6 @@
                 }
             })
         }
-
-
-    </script>
-
-    {{if gt .ActiveEncodes 0}}
-    <script>
         showEncodingProcess()
     </script>
     {{end}}
