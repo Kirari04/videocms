@@ -31,6 +31,10 @@ func PlayerController(c *fiber.Ctx) error {
 		Where(&models.Link{
 			UUID: requestValidation.UUID,
 		}).
+		// Where(&models.Quality{
+		// 	Ready:  true,
+		// 	Failed: false,
+		// }).
 		First(&dbLink)
 	if res.Error != nil {
 		log.Print(res.Error)
