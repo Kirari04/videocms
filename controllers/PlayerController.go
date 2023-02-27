@@ -34,32 +34,41 @@ func PlayerController(c *fiber.Ctx) error {
 		Where(&models.Link{
 			UUID: requestValidation.UUID,
 		}).
-		// Where(&models.Quality{
-		// 	Ready:  true,
-		// 	Failed: false,
-		// }).
 		First(&dbLink)
 	if res.Error != nil {
 		log.Print(res.Error)
 		return c.Status(fiber.StatusNotFound).Render("404", fiber.Map{})
 	}
 
+	//check if has some file is ready
+
 	var jsonQualitys []map[string]string
 	for _, qualiItem := range dbLink.File.Qualitys {
-		jsonQualitys = append(jsonQualitys, map[string]string{
-			"file":  fmt.Sprintf("%s/out.mp4", qualiItem.Path),
-			"label": qualiItem.Name,
+		if qualiItem.Ready {
+			jsonQualitys = append(jsonQualitys, map[string]string{
+				"file":  fmt.Sprintf("%s/out.mp4", qualiItem.Path),
+				"label": qualiItem.Name,
+			})
+		}
+
+	}
+	if len(jsonQualitys) == 0 {
+		return c.Render("encoding", fiber.Map{
+			"Title":    dbLink.File.Name,
+			"Qualitys": dbLink.File.Qualitys,
 		})
 	}
 	rawQuality, _ := json.Marshal(jsonQualitys)
 
 	var jsonSubtitles []map[string]string
 	for _, subItem := range dbLink.File.Subtitles {
-		jsonSubtitles = append(jsonSubtitles, map[string]string{
-			"file":  fmt.Sprintf("%s/out.vtt", subItem.Path),
-			"label": subItem.Name,
-			"kind":  "captions",
-		})
+		if subItem.Ready {
+			jsonSubtitles = append(jsonSubtitles, map[string]string{
+				"file":  fmt.Sprintf("%s/out.vtt", subItem.Path),
+				"label": subItem.Name,
+				"kind":  "captions",
+			})
+		}
 	}
 	rawSubtitles, _ := json.Marshal(jsonSubtitles)
 
