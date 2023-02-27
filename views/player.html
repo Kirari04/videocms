@@ -21,7 +21,13 @@
 
 <body>
     <h1>{{.Title}}</h1>
-
+    <ul>
+        {{range .Qualitys}}
+        <li>
+            {{.Name}} [{{.Progress}}] ({{.Width}}x{{.Height}}) <a href="{{.Path}}/out.mp4" target="_blank">File</a>
+        </li>
+        {{end}}
+    </ul>
 
     <video id="player" playsinline controls>
         {{range .Qualitys}}
