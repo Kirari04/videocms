@@ -121,8 +121,8 @@ func CreateFile(c *fiber.Ctx) error {
 				if res := inits.DB.Create(&models.Quality{
 					FileID:   dbFile.ID,
 					Name:     qualityOpt.Name,
-					Width:    int64(math.RoundToEven(float64(videoWidth) / (float64(videoHeight) / float64(qualityOpt.Height)))),
-					Height:   int64(math.RoundToEven(float64(qualityOpt.Height))),
+					Width:    int64(math.RoundToEven((float64(videoWidth)/(float64(videoHeight)/float64(qualityOpt.Height)))/2) * 2),
+					Height:   int64(math.RoundToEven(float64(qualityOpt.Height)/2) * 2),
 					Crf:      qualityOpt.Crf,
 					Path:     qualityPath,
 					Encoding: false,
@@ -140,8 +140,8 @@ func CreateFile(c *fiber.Ctx) error {
 				if res := inits.DB.Create(&models.Quality{
 					FileID:   dbFile.ID,
 					Name:     qualityOpt.Name,
-					Width:    int64(math.RoundToEven(float64(qualityOpt.Width))),
-					Height:   int64(math.RoundToEven(float64(videoHeight) / (float64(videoWidth) / float64(qualityOpt.Width)))),
+					Width:    int64(math.RoundToEven(float64(qualityOpt.Width)/2) * 2),
+					Height:   int64(math.RoundToEven((float64(videoHeight)/(float64(videoWidth)/float64(qualityOpt.Width)))/2) * 2),
 					Crf:      qualityOpt.Crf,
 					Path:     qualityPath,
 					Encoding: false,
