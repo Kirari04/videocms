@@ -22,6 +22,7 @@ RUN apt install ffmpeg -y
 COPY --from=build_base /tmp/app/main.bin ./
 COPY --from=build_base /tmp/app/console.bin ./
 COPY --from=build_base /tmp/app/views ./views/
+COPY --from=build_base /tmp/app/public ./public/
 
 RUN ./console.bin database:fresh seed:adminuser
 
