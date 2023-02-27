@@ -2,14 +2,27 @@
 <html>
 
 <head>
-    <script src='/jwplayer/jwplayer.js'></script>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Encoding</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap"
+        rel="stylesheet">
     <style>
-        html, body{
+        html,
+        body {
             height: 100vh;
             width: 100vw;
             padding: 0;
             margin: 0;
+            background-color: black;
+            color: white;
+            font-family: 'Roboto', sans-serif;
         }
+
         #player {
             position: relative;
             top: 0;
@@ -31,7 +44,23 @@
 </head>
 
 <body>
+    <script src='/jwplayer/jwplayer.js'></script>
     <div id="player">Loading the player...</div>
+    <template id="my-template">
+        <swal-title id="popuptitle">
+            This file is still encoding {{.ActiveEncodes}} more quality! <br>
+            Thats why some qualitys may not be available yet. <br>
+            Reload the page to check for new qualitys.
+        </swal-title>
+        <swal-button type="confirm">
+            Ok
+        </swal-button>
+        <swal-button type="deny" color="'#545454">
+            Reload
+        </swal-button>
+        <swal-param name="allowEscapeKey" value="true" />
+    </template>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         const Qualitys = JSON.parse(decodeURI('{{.Qualitys}}'));
         const Subtitles = JSON.parse(decodeURI('{{.Subtitles}}'));
@@ -45,11 +74,24 @@
             tracks: Subtitles,
         });
 
-        // // Listen to an event
-        // player.on('pause', (event) => {
-        //     alert('Why did my user pause their video instead of watching it?');
-        // });
+        function showEncodingProcess() {
+            Swal.fire({
+                template: '#my-template'
+            }).then(SweetAlertResult => {
+                if (SweetAlertResult.isDenied) {
+                    window.location.reload()
+                }
+            })
+        }
+
+
     </script>
+
+    {{if gt .ActiveEncodes 0}}
+    <script>
+        showEncodingProcess()
+    </script>
+    {{end}}
 </body>
 
 </html>

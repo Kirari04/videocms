@@ -43,12 +43,16 @@ func PlayerController(c *fiber.Ctx) error {
 	//check if has some file is ready
 
 	var jsonQualitys []map[string]string
+	activeEncodes := 0
 	for _, qualiItem := range dbLink.File.Qualitys {
 		if qualiItem.Ready {
 			jsonQualitys = append(jsonQualitys, map[string]string{
 				"file":  fmt.Sprintf("%s/out.mp4", qualiItem.Path),
 				"label": qualiItem.Name,
 			})
+		}
+		if qualiItem.Encoding {
+			activeEncodes++
 		}
 
 	}
@@ -73,9 +77,10 @@ func PlayerController(c *fiber.Ctx) error {
 	rawSubtitles, _ := json.Marshal(jsonSubtitles)
 
 	return c.Render("player", fiber.Map{
-		"Title":     dbLink.File.Name,
-		"Qualitys":  string(rawQuality),
-		"Subtitles": string(rawSubtitles),
-		"UUID":      requestValidation.UUID,
+		"Title":         dbLink.File.Name,
+		"Qualitys":      string(rawQuality),
+		"Subtitles":     string(rawSubtitles),
+		"UUID":          requestValidation.UUID,
+		"ActiveEncodes": activeEncodes,
 	})
 }
