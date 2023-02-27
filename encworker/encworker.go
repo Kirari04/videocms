@@ -22,9 +22,7 @@ var maxRunningEncodes int = 1
 
 func StartEncode() {
 	for true {
-		log.Println("Loading tasks")
 		loadEncodingTasks()
-		log.Printf("RunningEncodes: %d", runningEncodes)
 		time.Sleep(time.Second * 10)
 	}
 }
@@ -57,7 +55,9 @@ func loadEncodingTasks() {
 		}, "Encoding", "Ready", "Error").
 		Find(&encodingQualitys)
 
-	log.Printf("Loaded %v qualitys to encode", len(encodingQualitys))
+	if len(encodingQualitys) > 0 {
+		log.Printf("Loaded %v qualitys to encode", len(encodingQualitys))
+	}
 
 	for _, v := range encodingQualitys {
 		v.Encoding = true
