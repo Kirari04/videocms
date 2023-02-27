@@ -15,6 +15,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
@@ -55,7 +56,7 @@ func CreateFile(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("No File uploaded")
 	}
 
-	fileId := uuid.New()
+	fileId := uuid.NewString()
 	fileSplit := strings.Split(file.Filename, ".")
 	fileExt := fileSplit[len(fileSplit)-1]
 	filePath := fmt.Sprintf("./videos/%s.%s", fileId, fileExt)
@@ -69,24 +70,55 @@ func CreateFile(c *fiber.Ctx) error {
 	ctx, cancelFn := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelFn()
 
+	dataProbe, _ := ffmpeg_go.Probe("filePath")
+	log.Print(dataProbe)
+
 	data, err := ffprobe.ProbeURL(ctx, filePath)
 	if err != nil {
 		log.Printf("Error getting data: %v", err)
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
-	videoInfo := data.StreamType(ffprobe.StreamVideo)
+	videoInfo := data.StreamType(ffprobe.StreamAny)
+	var videoStream ffprobe.Stream
+	var subtitleStreams []ffprobe.Stream = []ffprobe.Stream{}
+	var videoDuration float64
+	for _, streamInfo := range videoInfo {
+		if streamInfo.CodecType == "video" {
+			videoStream = streamInfo
+		}
+		if streamInfo.CodecType == "subtitle" {
+			subtitleStreams = append(subtitleStreams, streamInfo)
+		}
+		// get any duration time
+		if streamInfo.Duration != "" {
+			videoDuration, _ = strconv.ParseFloat(streamInfo.Duration, 64)
+		}
+	}
 
-	videoHeight := videoInfo[len(videoInfo)-1].Height
-	videoWidth := videoInfo[len(videoInfo)-1].Width
-	videoDuration, err := strconv.ParseFloat(videoInfo[len(videoInfo)-1].Duration, 64)
-	if err != nil {
-		log.Printf("Error getting videoDuration: %v", err)
+	if videoStream.Height == 0 || videoStream.Width == 0 {
+		log.Printf(
+			"Error getting valid videoStream data: type: %v size: %vx%v",
+			videoStream.CodecType,
+			videoStream.Width,
+			videoStream.Height,
+		)
+		os.Remove(filePath)
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
+	videoHeight := videoStream.Height
+	videoWidth := videoStream.Width
+
+	if videoDuration == 0 {
+		log.Printf("Error getting videoDuration: %v %v", err, videoInfo)
+		os.Remove(filePath)
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 
 	// save file to database
 	dbFile := models.File{
 		Name:     fileValidation.Name,
+		UUID:     fileId,
 		Path:     filePath,
 		UserID:   c.Locals("UserID").(uint),
 		Height:   int64(videoHeight),
@@ -99,6 +131,36 @@ func CreateFile(c *fiber.Ctx) error {
 		os.Remove(filePath)
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
+	// save subtitle
+	for index, subtitleStream := range subtitleStreams {
+		var subtitleName = fmt.Sprintf("Subtitle %v", index+1)
+		if autoName, err := subtitleStream.TagList.GetString("title"); err == nil && autoName != "" {
+			subtitleName = autoName
+		}
+		var subtitleLang = "en"
+		if autoLang, err := subtitleStream.TagList.GetString("language"); err == nil && autoLang != "" && len(autoLang) < 10 {
+			subtitleLang = autoLang
+		}
+		subtitleId := uuid.NewString()
+		dbSubtitle := models.Subtitle{
+			UUID:     subtitleId,
+			Name:     subtitleName,
+			Lang:     subtitleLang,
+			Index:    index,
+			FileID:   dbFile.ID,
+			Path:     fmt.Sprintf("./videos/qualitys/%s/%s", dbFile.UUID, subtitleId),
+			Encoding: false,
+			Failed:   false,
+			Ready:    false,
+			Error:    "",
+		}
+		if res := inits.DB.Create(&dbSubtitle); res.Error != nil {
+			log.Printf("Error saving Subtitle in database: %v", res.Error)
+			os.Remove(filePath)
+			return c.SendStatus(fiber.StatusInternalServerError)
+		}
+	}
+
 	// save link
 	dbLink := models.Link{
 		UUID:           uuid.NewString(),
