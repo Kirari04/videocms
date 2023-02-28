@@ -1,132 +1,140 @@
 <!DOCTYPE html>
 <html>
-
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Watch {{.Title}}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-        href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap"
-        rel="stylesheet">
+      href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap"
+      rel="stylesheet"
+    />
     <style>
-        html,
-        body {
-            height: 100vh;
-            width: 100vw;
-            padding: 0;
-            margin: 0;
-            background-color: black;
-            color: white;
-            font-family: 'Roboto', sans-serif;
-        }
+      html,
+      body {
+        height: 100vh;
+        width: 100vw;
+        padding: 0;
+        margin: 0;
+        background-color: black;
+        color: white;
+        font-family: "Roboto", sans-serif;
+      }
 
-        #player {
-            position: relative;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
+      #dplayer {
+        position: relative;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+      }
 
-        #player iframe,
-        #player object,
-        #player embed {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-
-        .jw-icon-rewind {
-            display: none !important;
-        }
+      /* #player iframe,
+      #player object,
+      #player embed {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+      } */
     </style>
-</head>
+  </head>
 
-<body>
-    <script src='/jwplayer/jwplayer.js'></script>
-    <div id="player">Loading the player...</div>
-
+  <body>
+    <div id="dplayer"></div>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+    <script src="https://unpkg.com/dplayer@1.27.1/dist/DPlayer.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        const Qualitys = JSON.parse(decodeURI('{{.Qualitys}}'));
-        const Subtitles = JSON.parse(decodeURI('{{.Subtitles}}'));
-        const UUID = '{{.UUID}}'
+      const Qualitys = JSON.parse(decodeURI("{{.Qualitys}}")).map((el) => {
+        el.file = el.file.replace("./", "/");
+        return el;
+      });
+      const Subtitles = JSON.parse(decodeURI("{{.Subtitles}}"));
+      const UUID = "{{.UUID}}";
+
+      function getM3u8String(file, width, height) {
+        return `\n#EXT-X-STREAM-INF:BANDWIDTH=1210000,RESOLUTION=${width}x${height},CODECS="avc1.640015,mp4a.40.2"\n${window.location.origin}${file}\n`;
+      }
+      function getM3u8Stream(qualitys) {
+        let m3u8 = `#EXTM3U\n#EXT-X-VERSION:6`;
+        qualitys.forEach((quality) => {
+          m3u8 += getM3u8String(quality.file, quality.width, quality.height);
+        });
+
+        const blob = new Blob([m3u8], {
+          type: "text/plain",
+        });
+        let url = URL.createObjectURL(blob);
+        return url;
+      }
     </script>
     <script>
-        const playerInstance = jwplayer('player').setup({
-            sources: Qualitys,
-            width: "100%",
-            height: "100%",
-            title: "{{.Title}}",
-            tracks: Subtitles,
-        })
-        const buttonId = 'plusbutton';
-        const iconPath = '/plus.svg';
-        const tooltipText = 'Download Video';
+      const dp = new DPlayer({
+        container: document.getElementById("dplayer"),
+        screenshot: false,
+        video: {
+          defaultQuality: 0,
+          quality: Qualitys.map((Quality) => {
+            return {
+              name: Quality.label,
+              url: Quality.file,
+              type: "hls",
+            };
+          }),
+        },
 
-        // Call the player's `addButton` API method to add the custom button
-        playerInstance.addButton("/plus.svg", "Forward", plus10, "plusbutton");
-        playerInstance.addButton("/minus.svg", "Rewind", minus10, "minusbutton");
+        // subtitle: {
+        //   url: "webvtt.vtt",
+        // },
+      });
 
-        function plus10() {
-            playerInstance.seek(playerInstance.getPosition() + 10)
-        }
-        function minus10() {
-            playerInstance.seek(playerInstance.getPosition() - 10)
-        }
+      // save position
+      //   setInterval(() => {
+      //     localStorage.setItem(`POSITION-${UUID}`, playerInstance.getPosition());
+      //   }, 1000);
 
-        setInterval(() => {
-            localStorage.setItem(`POSITION-${UUID}`, playerInstance.getPosition())
-        }, 1000);
-
-        const oldPosition = parseInt(localStorage.getItem(`POSITION-${UUID}`))
-        if (oldPosition > 0) {
-            Swal.fire({
-                title: 'Do you want to start where you left last time?',
-                showDenyButton: true,
-                confirmButtonText: 'Yes',
-                denyButtonText: 'No',
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    playerInstance.seek(oldPosition)   
-                }
-            })
-        }
+      //   const oldPosition = parseInt(localStorage.getItem(`POSITION-${UUID}`));
+      //   if (oldPosition > 0) {
+      //     Swal.fire({
+      //       title: "Do you want to start where you left last time?",
+      //       showDenyButton: true,
+      //       confirmButtonText: "Yes",
+      //       denyButtonText: "No",
+      //     }).then((result) => {
+      //       if (result.isConfirmed) {
+      //         playerInstance.seek(oldPosition);
+      //       }
+      //     });
+      //   }
     </script>
 
     {{if gt .ActiveEncodes 0}}
     <template id="my-template">
-        <swal-title id="popuptitle">
-            This file is still encoding {{.ActiveEncodes}} more quality! <br>
-            Thats why some qualitys may not be available yet. <br>
-            Reload the page to check for new qualitys.
-        </swal-title>
-        <swal-button type="confirm">
-            Ok
-        </swal-button>
-        <swal-button type="deny" color="'#545454">
-            Reload
-        </swal-button>
-        <swal-param name="allowEscapeKey" value="true" />
+      <swal-title id="popuptitle">
+        This file is still encoding {{.ActiveEncodes}} more quality! <br />
+        Thats why some qualitys may not be available yet. <br />
+        Reload the page to check for new qualitys.
+      </swal-title>
+      <swal-button type="confirm"> Ok </swal-button>
+      <swal-button type="deny" color="'#545454"> Reload </swal-button>
+      <swal-param name="allowEscapeKey" value="true" />
     </template>
     <script>
-        function showEncodingProcess() {
-            Swal.fire({
-                template: '#my-template'
-            }).then(SweetAlertResult => {
-                if (SweetAlertResult.isDenied) {
-                    window.location.reload()
-                }
-            })
-        }
-        showEncodingProcess()
+      function showEncodingProcess() {
+        Swal.fire({
+          template: "#my-template",
+        }).then((SweetAlertResult) => {
+          if (SweetAlertResult.isDenied) {
+            window.location.reload();
+          }
+        });
+      }
+      showEncodingProcess();
     </script>
     {{end}}
-</body>
-
+  </body>
 </html>

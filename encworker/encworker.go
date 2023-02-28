@@ -78,16 +78,20 @@ func runEncode(encodingTask models.Quality) {
 	log.Printf("Start encoding %s %s\n", encodingTask.File.Name, encodingTask.Name)
 
 	totalDuration := encodingTask.File.Duration
-	encFilePath := fmt.Sprintf("%s/out.mp4", encodingTask.Path)
+	encFilePath := fmt.Sprintf("%s/%s", encodingTask.Path, encodingTask.OutputFile)
 	os.MkdirAll(encodingTask.Path, 0777)
 
 	err := ffmpeg_go.Input(encodingTask.File.Path).
 		Output(encFilePath, ffmpeg_go.KwArgs{
-			"c:v":    "libx264",
-			"c:a":    "aac",
-			"preset": "fast",
-			"s":      fmt.Sprintf("%dx%d", encodingTask.Width, encodingTask.Height),
-			"crf":    encodingTask.Crf,
+			"c:v":           "libx264",
+			"c:a":           "aac",
+			"preset":        "fast",
+			"s":             fmt.Sprintf("%dx%d", encodingTask.Width, encodingTask.Height),
+			"crf":           encodingTask.Crf,
+			"start_number":  0,
+			"hls_time":      10,
+			"hls_list_size": 0,
+			"f":             "hls",
 		}).
 		GlobalArgs("-progress", "unix://"+TempSock(totalDuration, &encodingTask)).
 		OverWriteOutput().

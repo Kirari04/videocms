@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -47,8 +48,10 @@ func PlayerController(c *fiber.Ctx) error {
 	for _, qualiItem := range dbLink.File.Qualitys {
 		if qualiItem.Ready {
 			jsonQualitys = append(jsonQualitys, map[string]string{
-				"file":  fmt.Sprintf("%s/out.mp4", qualiItem.Path),
-				"label": qualiItem.Name,
+				"file":   fmt.Sprintf("%s/%s", qualiItem.Path, qualiItem.OutputFile),
+				"label":  qualiItem.Name,
+				"height": strconv.Itoa(int(qualiItem.Height)),
+				"width":  strconv.Itoa(int(qualiItem.Width)),
 			})
 		}
 		if qualiItem.Encoding {

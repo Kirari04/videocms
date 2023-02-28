@@ -239,16 +239,17 @@ func CreateFile(c *fiber.Ctx) error {
 			// vertical -> compare height
 			if qualityOpt.Height <= int64(videoHeight) {
 				if res := inits.DB.Create(&models.Quality{
-					FileID:   dbFile.ID,
-					Name:     qualityOpt.Name,
-					Width:    int64(math.RoundToEven((float64(videoWidth)/(float64(videoHeight)/float64(qualityOpt.Height)))/2) * 2),
-					Height:   int64(math.RoundToEven(float64(qualityOpt.Height)/2) * 2),
-					Crf:      qualityOpt.Crf,
-					Path:     qualityPath,
-					Encoding: false,
-					Failed:   false,
-					Ready:    false,
-					Error:    "",
+					FileID:     dbFile.ID,
+					Name:       qualityOpt.Name,
+					Width:      int64(math.RoundToEven((float64(videoWidth)/(float64(videoHeight)/float64(qualityOpt.Height)))/2) * 2),
+					Height:     int64(math.RoundToEven(float64(qualityOpt.Height)/2) * 2),
+					Crf:        qualityOpt.Crf,
+					Path:       qualityPath,
+					OutputFile: "out.m3u8",
+					Encoding:   false,
+					Failed:     false,
+					Ready:      false,
+					Error:      "",
 				}); res.Error != nil {
 					log.Printf("Error saving quality in database: %v\n", res.Error)
 					return c.SendStatus(fiber.StatusInternalServerError)
@@ -258,16 +259,17 @@ func CreateFile(c *fiber.Ctx) error {
 			//horizontal -> compare width
 			if qualityOpt.Width <= int64(videoWidth) {
 				if res := inits.DB.Create(&models.Quality{
-					FileID:   dbFile.ID,
-					Name:     qualityOpt.Name,
-					Width:    int64(math.RoundToEven(float64(qualityOpt.Width)/2) * 2),
-					Height:   int64(math.RoundToEven((float64(videoHeight)/(float64(videoWidth)/float64(qualityOpt.Width)))/2) * 2),
-					Crf:      qualityOpt.Crf,
-					Path:     qualityPath,
-					Encoding: false,
-					Failed:   false,
-					Ready:    false,
-					Error:    "",
+					FileID:     dbFile.ID,
+					Name:       qualityOpt.Name,
+					Width:      int64(math.RoundToEven(float64(qualityOpt.Width)/2) * 2),
+					Height:     int64(math.RoundToEven((float64(videoHeight)/(float64(videoWidth)/float64(qualityOpt.Width)))/2) * 2),
+					Crf:        qualityOpt.Crf,
+					Path:       qualityPath,
+					OutputFile: "out.m3u8",
+					Encoding:   false,
+					Failed:     false,
+					Ready:      false,
+					Error:      "",
 				}); res.Error != nil {
 					log.Printf("Error saving quality in database: %v\n", res.Error)
 					return c.SendStatus(fiber.StatusInternalServerError)
