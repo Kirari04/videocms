@@ -44,7 +44,7 @@ func PlayerController(c *fiber.Ctx) error {
 	//check if has some file is ready
 
 	var jsonQualitys []map[string]string
-	activeEncodes := 0
+	var jsonEncQualitys []map[string]string
 	for _, qualiItem := range dbLink.File.Qualitys {
 		if qualiItem.Ready {
 			jsonQualitys = append(jsonQualitys, map[string]string{
@@ -55,7 +55,12 @@ func PlayerController(c *fiber.Ctx) error {
 			})
 		}
 		if qualiItem.Encoding {
-			activeEncodes++
+			jsonEncQualitys = append(jsonEncQualitys, map[string]string{
+				"progress": fmt.Sprintf("%v", qualiItem.Progress),
+				"label":    qualiItem.Name,
+				"height":   strconv.Itoa(int(qualiItem.Height)),
+				"width":    strconv.Itoa(int(qualiItem.Width)),
+			})
 		}
 
 	}
@@ -66,24 +71,25 @@ func PlayerController(c *fiber.Ctx) error {
 		})
 	}
 	rawQuality, _ := json.Marshal(jsonQualitys)
+	rawEncQualitys, _ := json.Marshal(jsonEncQualitys)
 
 	var jsonSubtitles []map[string]string
 	for _, subItem := range dbLink.File.Subtitles {
 		if subItem.Ready {
 			jsonSubtitles = append(jsonSubtitles, map[string]string{
-				"file":  fmt.Sprintf("%s/out.vtt", subItem.Path),
-				"label": subItem.Name,
-				"kind":  "captions",
+				"subtitle": fmt.Sprintf("%s/out.vtt", subItem.Path),
+				"name":     subItem.Name,
+				"lang":     subItem.Lang,
 			})
 		}
 	}
 	rawSubtitles, _ := json.Marshal(jsonSubtitles)
 
 	return c.Render("player", fiber.Map{
-		"Title":         dbLink.File.Name,
-		"Qualitys":      string(rawQuality),
-		"Subtitles":     string(rawSubtitles),
-		"UUID":          requestValidation.UUID,
-		"ActiveEncodes": activeEncodes,
+		"Title":       dbLink.File.Name,
+		"Qualitys":    string(rawQuality),
+		"Subtitles":   string(rawSubtitles),
+		"EncQualitys": string(rawEncQualitys),
+		"UUID":        requestValidation.UUID,
 	})
 }
