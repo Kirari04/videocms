@@ -114,7 +114,7 @@
                 quality: dpQualitys,
             },
             subtitle: {
-                url: (!Subtitles)?[]:Subtitles,
+                url: (!Subtitles) ? [] : Subtitles,
                 defaultSubtitle: Subtitles.length,
                 type: 'webvtt',
                 fontSize: '25px',
@@ -164,7 +164,9 @@
 
         // save position
         setInterval(() => {
-            localStorage.setItem(`POSITION-${UUID}`, dp.video.currentTime);
+            if (!dp.video.paused) {
+                localStorage.setItem(`POSITION-${UUID}`, dp.video.currentTime);
+            }
         }, 1000);
 
         const oldPosition = parseInt(localStorage.getItem(`POSITION-${UUID}`));
@@ -182,9 +184,9 @@
         }
 
         EncQualitys.forEach(EncQuality => {
-            dp.notice(`The server is still encoding the quality ${EncQuality.label} (${Math.round(parseFloat(EncQuality.progress)*100)}%)`, 10000, 0.8);
+            dp.notice(`The server is still encoding the quality ${EncQuality.label} (${Math.round(parseFloat(EncQuality.progress) * 100)}%)`, 10000, 0.8);
         })
-        
+
     </script>
 </body>
 
