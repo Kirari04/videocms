@@ -81,18 +81,22 @@ func runEncode(encodingTask models.Quality) {
 	encFilePath := fmt.Sprintf("%s/%s", encodingTask.Path, encodingTask.OutputFile)
 	os.MkdirAll(encodingTask.Path, 0777)
 
+	ffmpegArgs := ffmpeg_go.KwArgs{}
+	ffmpegArgs["c:v"] = "libx264"
+	ffmpegArgs["c:a"] = "aac"
+	ffmpegArgs["preset"] = "fast"
+	ffmpegArgs["s"] = fmt.Sprintf("%dx%d", encodingTask.Width, encodingTask.Height)
+	ffmpegArgs["crf"] = encodingTask.Crf
+	if encodingTask.AvgFrameRate > 0 {
+		ffmpegArgs["r"] = fmt.Sprintf("%.4f", encodingTask.AvgFrameRate)
+	}
+	ffmpegArgs["start_number"] = 0
+	ffmpegArgs["hls_time"] = 10
+	ffmpegArgs["hls_list_size"] = 0
+	ffmpegArgs["f"] = "hls"
+
 	err := ffmpeg_go.Input(encodingTask.File.Path).
-		Output(encFilePath, ffmpeg_go.KwArgs{
-			"c:v":           "libx264",
-			"c:a":           "aac",
-			"preset":        "fast",
-			"s":             fmt.Sprintf("%dx%d", encodingTask.Width, encodingTask.Height),
-			"crf":           encodingTask.Crf,
-			"start_number":  0,
-			"hls_time":      10,
-			"hls_list_size": 0,
-			"f":             "hls",
-		}).
+		Output(encFilePath, ffmpegArgs).
 		GlobalArgs("-progress", "unix://"+TempSock(totalDuration, &encodingTask)).
 		OverWriteOutput().
 		Run()
