@@ -82,8 +82,13 @@ func CreateFile(c *fiber.Ctx) error {
 	// declare needed informations
 	var videoStream ffprobe.Stream
 	var subtitleStreams []ffprobe.Stream
-	var videoDuration = data.Format.Duration().Seconds()
+	var avgFramerate float64
+	videoDuration := data.Format.Duration().Seconds()
 	hasVideoStream := false
+
+	if videoDuration == 0 || videoDuration > 60*60*10 {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid video duration")
+	}
 
 	// loop over streams in file
 	for _, streamInfo := range dataStreams {
@@ -95,33 +100,26 @@ func CreateFile(c *fiber.Ctx) error {
 		if streamInfo.CodecType == "subtitle" {
 			subtitleStreams = append(subtitleStreams, streamInfo)
 		}
-
-		// get any duration time (subtitles may have one too => on mkvs)
-		if streamInfo.Duration != "" && videoDuration == 0 {
-			videoDuration, _ = strconv.ParseFloat(streamInfo.Duration, 64)
-		}
-
-		// get video duration (usually webm files)
-		if tmpDuration, err := streamInfo.TagList.GetString("DURATION"); err == nil && tmpDuration != "" && videoDuration == 0 {
-			log.Printf("tmpDuration: %v", tmpDuration)
-			var hours float64
-			var minutes float64
-			var seconds float64
-			tmpDurationSlices := strings.Split(tmpDuration, ":")
-			if len(tmpDurationSlices) == 3 {
-				hours, _ = strconv.ParseFloat(tmpDurationSlices[0], 64)
-				minutes, _ = strconv.ParseFloat(tmpDurationSlices[1], 64)
-				seconds, _ = strconv.ParseFloat(tmpDurationSlices[2], 64)
-				videoDuration = seconds + (minutes * 60) + (hours * 60 * 60)
-			}
-
-		}
 	}
 
 	//check if video stream exists
 	if !hasVideoStream {
 		os.Remove(filePath)
 		return c.SendStatus(fiber.StatusBadRequest)
+	}
+
+	// set average framerate
+	if rawAvgFramerateObj := strings.Split(videoStream.AvgFrameRate, "/"); len(rawAvgFramerateObj) == 2 {
+		a, errA := strconv.ParseFloat(rawAvgFramerateObj[0], 64)
+		b, errB := strconv.ParseFloat(rawAvgFramerateObj[1], 64)
+		if a > 0 && b > 0 && errA == nil && errB == nil {
+			avgFramerate = a / b
+		}
+	}
+
+	// check average framerate
+	if avgFramerate < 1 || avgFramerate > 120 {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid video framerate")
 	}
 
 	// check video stream data
@@ -148,14 +146,15 @@ func CreateFile(c *fiber.Ctx) error {
 
 	// save file data to database
 	dbFile := models.File{
-		Name:     fileValidation.Name,
-		UUID:     fileId,
-		Path:     filePath,
-		UserID:   c.Locals("UserID").(uint),
-		Height:   int64(videoHeight),
-		Width:    int64(videoWidth),
-		Duration: videoDuration,
-		Size:     file.Size,
+		Name:         fileValidation.Name,
+		UUID:         fileId,
+		Path:         filePath,
+		UserID:       c.Locals("UserID").(uint),
+		Height:       int64(videoHeight),
+		Width:        int64(videoWidth),
+		Duration:     videoDuration,
+		AvgFrameRate: avgFramerate,
+		Size:         file.Size,
 	}
 	if res := inits.DB.Create(&dbFile); res.Error != nil {
 		log.Printf("Error saving file in database: %v", res.Error)
@@ -216,21 +215,28 @@ func CreateFile(c *fiber.Ctx) error {
 	// add qualitys to database so they can be converted later
 	for _, qualityOpt := range models.AvailableQualitys {
 		qualityPath := fmt.Sprintf("./videos/qualitys/%s/%s", fileId, qualityOpt.FolderName)
+		// switch framerate if too high
+		var qualityFrameRate float64 = 0
+		if avgFramerate > 30 {
+			qualityFrameRate = 30
+		}
+
 		if videoHeight > videoWidth {
 			// vertical -> compare height
 			if qualityOpt.Height <= int64(videoHeight) {
 				if res := inits.DB.Create(&models.Quality{
-					FileID:     dbFile.ID,
-					Name:       qualityOpt.Name,
-					Width:      int64(math.RoundToEven((float64(videoWidth)/(float64(videoHeight)/float64(qualityOpt.Height)))/2) * 2),
-					Height:     int64(math.RoundToEven(float64(qualityOpt.Height)/2) * 2),
-					Crf:        qualityOpt.Crf,
-					Path:       qualityPath,
-					OutputFile: "out.m3u8",
-					Encoding:   false,
-					Failed:     false,
-					Ready:      false,
-					Error:      "",
+					FileID:       dbFile.ID,
+					Name:         qualityOpt.Name,
+					Width:        int64(math.RoundToEven((float64(videoWidth)/(float64(videoHeight)/float64(qualityOpt.Height)))/2) * 2),
+					Height:       int64(math.RoundToEven(float64(qualityOpt.Height)/2) * 2),
+					Crf:          qualityOpt.Crf,
+					AvgFrameRate: qualityFrameRate,
+					Path:         qualityPath,
+					OutputFile:   "out.m3u8",
+					Encoding:     false,
+					Failed:       false,
+					Ready:        false,
+					Error:        "",
 				}); res.Error != nil {
 					log.Printf("Error saving quality in database: %v\n", res.Error)
 					return c.SendStatus(fiber.StatusInternalServerError)
@@ -240,17 +246,18 @@ func CreateFile(c *fiber.Ctx) error {
 			//horizontal -> compare width
 			if qualityOpt.Width <= int64(videoWidth) {
 				if res := inits.DB.Create(&models.Quality{
-					FileID:     dbFile.ID,
-					Name:       qualityOpt.Name,
-					Width:      int64(math.RoundToEven(float64(qualityOpt.Width)/2) * 2),
-					Height:     int64(math.RoundToEven((float64(videoHeight)/(float64(videoWidth)/float64(qualityOpt.Width)))/2) * 2),
-					Crf:        qualityOpt.Crf,
-					Path:       qualityPath,
-					OutputFile: "out.m3u8",
-					Encoding:   false,
-					Failed:     false,
-					Ready:      false,
-					Error:      "",
+					FileID:       dbFile.ID,
+					Name:         qualityOpt.Name,
+					Width:        int64(math.RoundToEven(float64(qualityOpt.Width)/2) * 2),
+					Height:       int64(math.RoundToEven((float64(videoHeight)/(float64(videoWidth)/float64(qualityOpt.Width)))/2) * 2),
+					Crf:          qualityOpt.Crf,
+					AvgFrameRate: qualityFrameRate,
+					Path:         qualityPath,
+					OutputFile:   "out.m3u8",
+					Encoding:     false,
+					Failed:       false,
+					Ready:        false,
+					Error:        "",
 				}); res.Error != nil {
 					log.Printf("Error saving quality in database: %v\n", res.Error)
 					return c.SendStatus(fiber.StatusInternalServerError)
