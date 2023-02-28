@@ -99,12 +99,14 @@ func runEncode(encodingTask models.Quality) {
 	if err != nil {
 		runningEncodes -= 1
 		encodingTask.Ready = false
+		encodingTask.Encoding = false
 		encodingTask.Failed = true
 		inits.DB.Save(&encodingTask)
 		log.Printf("Error happend while encoding: %v", err.Error())
 		return
 	}
 
+	encodingTask.Encoding = false
 	encodingTask.Ready = true
 	inits.DB.Save(&encodingTask)
 	log.Printf("Finish encoding %s %s\n", encodingTask.File.Name, encodingTask.Name)
