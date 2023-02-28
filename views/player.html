@@ -24,7 +24,7 @@
       }
 
       #dplayer {
-        position: relative;
+        position: absolute;
         top: 0;
         left: 0;
         width: 100%;
@@ -54,10 +54,33 @@
         return el;
       });
       const Subtitles = JSON.parse(decodeURI("{{.Subtitles}}"));
+      const SubtitlesMap = {
+        null: "None",
+      };
       const UUID = "{{.UUID}}";
-
+    </script>
+    <template id="encoding-template">
+      <swal-title id="popuptitle">
+        This file is still encoding {{.ActiveEncodes}} more quality! <br />
+        Thats why some qualitys may not be available yet. <br />
+        Reload the page to check for new qualitys.
+      </swal-title>
+      <swal-button type="confirm"> Ok </swal-button>
+      <swal-button type="deny" color="#545454"> Reload </swal-button>
+      <swal-param name="allowEscapeKey" value="true" />
+    </template>
+    <script>
+      if (Subtitles) {
+        Subtitles.forEach((el) => {
+          SubtitlesMap[el.file] = label;
+        });
+      }
       function getM3u8String(file, width, height) {
-        return `\n#EXT-X-STREAM-INF:BANDWIDTH=1210000,RESOLUTION=${width}x${height},CODECS="avc1.640015,mp4a.40.2"\n${window.location.origin}${file}\n`;
+        return `\n#EXT-X-STREAM-INF:BANDWIDTH=${
+          parseInt(width) * parseInt(height) * 20
+        },RESOLUTION=${width}x${height},CODECS="avc1.640015,mp4a.40.2"\n${
+          window.location.origin
+        }${file}\n`;
       }
       function getM3u8Stream(qualitys) {
         let m3u8 = `#EXTM3U\n#EXT-X-VERSION:6`;
@@ -71,20 +94,33 @@
         let url = URL.createObjectURL(blob);
         return url;
       }
-    </script>
-    <script>
+
+      let defaultQuality = 0;
+      let index720p = Qualitys.findIndex((el) => el.label === "720p");
+      if (index720p !== -1 && defaultQuality == 0) defaultQuality = index720p;
+      let index480p = Qualitys.findIndex((el) => el.label === "480p");
+      if (index480p !== -1 && defaultQuality == 0) defaultQuality = index480p;
+      let index1080p = Qualitys.findIndex((el) => el.label === "1080p");
+      if (index1080p !== -1 && defaultQuality == 0) defaultQuality = index1080p;
+
+      let dpQualitys = Qualitys.map((Quality) => {
+        return {
+          name: Quality.label,
+          url: Quality.file,
+          type: "hls",
+        };
+      });
+      dpQualitys.push({
+        name: "Auto",
+        url: getM3u8Stream(Qualitys),
+        type: "hls",
+      });
       const dp = new DPlayer({
         container: document.getElementById("dplayer"),
         screenshot: false,
         video: {
-          defaultQuality: 0,
-          quality: Qualitys.map((Quality) => {
-            return {
-              name: Quality.label,
-              url: Quality.file,
-              type: "hls",
-            };
-          }),
+          defaultQuality: defaultQuality,
+          quality: dpQualitys,
         },
 
         // subtitle: {
@@ -92,47 +128,91 @@
         // },
       });
 
+      // getM3u8Stream
+      // custom scipp buttons
+      function addRightButton(className, label, img, callback) {
+        const rightControls = document.querySelector(
+          ".dplayer-icons.dplayer-icons-right"
+        );
+        const div = document.createElement("div");
+        div.addEventListener("click", callback);
+        div.classList.add("dplayer-icon");
+        div.classList.add(className);
+        div.style.position = "relative";
+        div.style.height = "40px";
+        div.style.padding = "0px";
+        const button = document.createElement("button");
+        button.classList.add("dplayer-icon");
+        button.classList.add("dplayer-setting-icon");
+        button.setAttribute("data-balloon", label);
+        button.style.position = "relative";
+        button.style.height = "100%";
+        const span = document.createElement("span");
+        span.style.position = "relative";
+        span.style.height = "100%";
+        span.style.color = "#fff";
+        span.style.display = "inline-block";
+        span.classList.add("dplayer-icon-content");
+        span.innerHTML = `<img src="${img}" style="height: 100%;">`;
+
+        button.appendChild(span);
+        div.appendChild(button);
+        rightControls.prepend(div);
+      }
+
+      addRightButton("dplayer-cool", "Forward 10 sec", "/plus.svg", () =>
+        dp.seek(dp.video.currentTime + 10)
+      );
+      addRightButton("dplayer-cool", "Rewind 10 sec", "/minus.svg", () =>
+        dp.seek(dp.video.currentTime - 10)
+      );
+      if (Subtitles) {
+        addRightButton("dplayer-cool", "Subtitles", "/subtitles.svg", () =>
+          Swal.fire({
+            title: "Select Subtitle",
+            input: "radio",
+            inputOptions: SubtitlesMap,
+            inputValidator: (value) => {
+              if (!value) {
+                return "You need to choose something!";
+              }
+            },
+          }).then((SweetAlertResult) => {
+            console.log("SweetAlertResult", SweetAlertResult);
+          })
+        );
+      }
+
       // save position
-      //   setInterval(() => {
-      //     localStorage.setItem(`POSITION-${UUID}`, playerInstance.getPosition());
-      //   }, 1000);
+      setInterval(() => {
+        localStorage.setItem(`POSITION-${UUID}`, dp.video.currentTime);
+      }, 1000);
 
-      //   const oldPosition = parseInt(localStorage.getItem(`POSITION-${UUID}`));
-      //   if (oldPosition > 0) {
-      //     Swal.fire({
-      //       title: "Do you want to start where you left last time?",
-      //       showDenyButton: true,
-      //       confirmButtonText: "Yes",
-      //       denyButtonText: "No",
-      //     }).then((result) => {
-      //       if (result.isConfirmed) {
-      //         playerInstance.seek(oldPosition);
-      //       }
-      //     });
-      //   }
-    </script>
-
-    {{if gt .ActiveEncodes 0}}
-    <template id="my-template">
-      <swal-title id="popuptitle">
-        This file is still encoding {{.ActiveEncodes}} more quality! <br />
-        Thats why some qualitys may not be available yet. <br />
-        Reload the page to check for new qualitys.
-      </swal-title>
-      <swal-button type="confirm"> Ok </swal-button>
-      <swal-button type="deny" color="'#545454"> Reload </swal-button>
-      <swal-param name="allowEscapeKey" value="true" />
-    </template>
-    <script>
+      const oldPosition = parseInt(localStorage.getItem(`POSITION-${UUID}`));
+      if (oldPosition > 0) {
+        Swal.fire({
+          title: "Do you want to start where you left last time?",
+          showDenyButton: true,
+          confirmButtonText: "Yes",
+          denyButtonText: "No",
+        }).then((result) => {
+          if (result.isConfirmed) {
+            dp.seek(oldPosition);
+          }
+        });
+      }
       function showEncodingProcess() {
         Swal.fire({
-          template: "#my-template",
+          template: "#encoding-template",
         }).then((SweetAlertResult) => {
           if (SweetAlertResult.isDenied) {
             window.location.reload();
           }
         });
       }
+    </script>
+    {{if gt .ActiveEncodes 0}}
+    <script>
       showEncodingProcess();
     </script>
     {{end}}
