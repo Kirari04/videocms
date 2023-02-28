@@ -5,7 +5,9 @@ import (
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"context"
+	"crypto/sha256"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"os"
@@ -64,6 +66,40 @@ func CreateFile(c *fiber.Ctx) error {
 	if err := c.SaveFile(file, filePath); err != nil {
 		log.Printf("Failed to save file: %v", err)
 		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
+	// create hash
+	f, err := os.Open(filePath)
+	if err != nil {
+		log.Printf("Failed to open file: %v", err)
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		log.Printf("Failed to copy file: %v", err)
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+	FileHash := fmt.Sprintf("%x", h.Sum(nil))
+
+	var existingFile models.File
+	if res := inits.DB.
+		Where(&models.File{
+			Hash: FileHash,
+		}).First(&existingFile); res.Error == nil {
+		// file exists
+		dbLink := models.Link{
+			UUID:           uuid.NewString(),
+			ParentFolderID: fileValidation.ParentFolderID,
+			UserID:         c.Locals("UserID").(uint),
+			FileID:         existingFile.ID,
+		}
+		if res := inits.DB.Create(&dbLink); res.Error != nil {
+			log.Printf("Error saving link in database: %v", res.Error)
+			return c.SendStatus(fiber.StatusInternalServerError)
+		}
+		return c.Status(fiber.StatusOK).JSON(dbLink)
 	}
 
 	// ffprobe context
@@ -148,6 +184,7 @@ func CreateFile(c *fiber.Ctx) error {
 	dbFile := models.File{
 		Name:         fileValidation.Name,
 		UUID:         fileId,
+		Hash:         FileHash,
 		Path:         filePath,
 		UserID:       c.Locals("UserID").(uint),
 		Height:       int64(videoHeight),
