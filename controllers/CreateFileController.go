@@ -82,7 +82,7 @@ func CreateFile(c *fiber.Ctx) error {
 	// declare needed informations
 	var videoStream ffprobe.Stream
 	var subtitleStreams []ffprobe.Stream
-	var videoDuration float64
+	var videoDuration = data.Format.Duration().Seconds()
 	hasVideoStream := false
 
 	// loop over streams in file
