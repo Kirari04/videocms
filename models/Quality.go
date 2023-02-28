@@ -6,19 +6,20 @@ import (
 
 type Quality struct {
 	gorm.Model
-	Name       string `gorm:"size:20;"`
-	Height     int64
-	Width      int64
-	Crf        int    `json:"-"`
-	Path       string `gorm:"size:120;" json:"-"`
-	OutputFile string
-	Encoding   bool
-	Progress   float64
-	Failed     bool
-	Ready      bool   `json:"-"`
-	Error      string `json:"-"`
-	File       File   `json:"-"`
-	FileID     uint
+	Name         string `gorm:"size:20;"`
+	Height       int64
+	Width        int64
+	Crf          int `json:"-"`
+	AvgFrameRate float64
+	Path         string `gorm:"size:120;" json:"-"`
+	OutputFile   string
+	Encoding     bool
+	Progress     float64
+	Failed       bool
+	Ready        bool   `json:"-"`
+	Error        string `json:"-"`
+	File         File   `json:"-"`
+	FileID       uint
 }
 
 type AvailableQuality struct {
