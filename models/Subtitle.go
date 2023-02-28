@@ -16,6 +16,6 @@ type Subtitle struct {
 	Failed   bool
 	Ready    bool   `json:"-"`
 	Error    string `json:"-"`
-	File     File
+	File     File   `json:"-"`
 	FileID   uint
 }

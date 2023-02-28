@@ -6,8 +6,6 @@ import (
 
 type Quality struct {
 	gorm.Model
-	File       File
-	FileID     uint
 	Name       string `gorm:"size:20;"`
 	Height     int64
 	Width      int64
@@ -19,6 +17,8 @@ type Quality struct {
 	Failed     bool
 	Ready      bool   `json:"-"`
 	Error      string `json:"-"`
+	File       File   `json:"-"`
+	FileID     uint
 }
 
 type AvailableQuality struct {

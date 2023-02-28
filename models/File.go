@@ -15,8 +15,8 @@ type File struct {
 	Path      string `gorm:"size:120;" json:"-"`
 	User      User   `json:"-"`
 	UserID    uint
-	Qualitys  []Quality
-	Subtitles []Subtitle
+	Qualitys  []Quality  `json:"-"`
+	Subtitles []Subtitle `json:"-"`
 }
 
 type FileCreateValidation struct {
@@ -29,5 +29,9 @@ type FileListValidation struct {
 }
 
 type FileDeleteValidation struct {
+	FileID uint `validate:"required,number"`
+}
+
+type FileGetValidation struct {
 	FileID uint `validate:"required,number"`
 }

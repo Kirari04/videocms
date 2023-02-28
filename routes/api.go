@@ -30,4 +30,6 @@ func Api() {
 	files := inits.Api.Use(middlewares.Auth).Group("/files")
 	files.Post("/create", controllers.CreateFile)
 	files.Get("/list", controllers.ListFiles)
+	files.Get("/get", controllers.GetFile)
+
 }
