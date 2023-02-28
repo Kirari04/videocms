@@ -15,7 +15,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
@@ -60,31 +59,10 @@ func CreateFile(c *fiber.Ctx) error {
 	fileSplit := strings.Split(file.Filename, ".")
 	fileExt := fileSplit[len(fileSplit)-1]
 	filePath := fmt.Sprintf("./videos/%s.%s", fileId, fileExt)
-	filePathTmp := fmt.Sprintf("./videos/%s_tmp.%s", fileId, fileExt)
 
 	// Save file to storage
 	if err := c.SaveFile(file, filePath); err != nil {
 		log.Printf("Failed to save file: %v", err)
-		return c.SendStatus(fiber.StatusInternalServerError)
-	}
-
-	//repackage file
-	if err := ffmpeg_go.Input(filePath).
-		Output(filePathTmp, ffmpeg_go.KwArgs{
-			"vcodec": "copy",
-			"acodec": "copy",
-		}).
-		OverWriteOutput().
-		Run(); err != nil {
-		log.Printf("Cant repackage file: %v\n", err)
-		return c.SendStatus(fiber.StatusBadRequest)
-	}
-	if err := os.Remove(filePath); err != nil {
-		log.Println(err)
-		return c.SendStatus(fiber.StatusInternalServerError)
-	}
-	if err := os.Rename(filePathTmp, filePath); err != nil {
-		log.Println(err)
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 
@@ -99,20 +77,21 @@ func CreateFile(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 	// proobe type
-	videoInfo := data.StreamType(ffprobe.StreamAny)
+	dataStreams := data.StreamType(ffprobe.StreamAny)
 
 	// declare needed informations
 	var videoStream ffprobe.Stream
-	var subtitleStreams []ffprobe.Stream = []ffprobe.Stream{}
+	var subtitleStreams []ffprobe.Stream
 	var videoDuration float64
 	hasVideoStream := false
 
 	// loop over streams in file
-	for _, streamInfo := range videoInfo {
+	for _, streamInfo := range dataStreams {
 		if streamInfo.CodecType == "video" {
 			videoStream = streamInfo
 			hasVideoStream = true
 		}
+
 		if streamInfo.CodecType == "subtitle" {
 			subtitleStreams = append(subtitleStreams, streamInfo)
 		}
@@ -162,7 +141,7 @@ func CreateFile(c *fiber.Ctx) error {
 	videoWidth := videoStream.Width
 
 	if videoDuration == 0 {
-		log.Printf("Error getting videoDuration: %v %v", err, videoInfo)
+		log.Printf("Error getting videoDuration: %v %v", err, dataStreams)
 		os.Remove(filePath)
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
@@ -197,6 +176,8 @@ func CreateFile(c *fiber.Ctx) error {
 			subtitleLang = autoLang
 		}
 
+		log.Printf("subtitleName: %s / subtitleLang: %s", subtitleName, subtitleLang)
+
 		// generate unique identifier for subtitle
 		subtitleId := uuid.NewString()
 
@@ -220,7 +201,7 @@ func CreateFile(c *fiber.Ctx) error {
 		}
 	}
 
-	// save link data dto database
+	// save link data to database
 	dbLink := models.Link{
 		UUID:           uuid.NewString(),
 		ParentFolderID: fileValidation.ParentFolderID,
