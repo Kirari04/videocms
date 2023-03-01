@@ -48,7 +48,7 @@ func PlayerController(c *fiber.Ctx) error {
 	for _, qualiItem := range dbLink.File.Qualitys {
 		if qualiItem.Ready {
 			jsonQualitys = append(jsonQualitys, map[string]string{
-				"file":   fmt.Sprintf("%s/%s", qualiItem.Path, qualiItem.OutputFile),
+				"file":   fmt.Sprintf("/videos/qualitys/%s/%s/%s", dbLink.UUID, qualiItem.Name, qualiItem.OutputFile),
 				"label":  qualiItem.Name,
 				"height": strconv.Itoa(int(qualiItem.Height)),
 				"width":  strconv.Itoa(int(qualiItem.Width)),

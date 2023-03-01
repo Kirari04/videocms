@@ -8,7 +8,8 @@ import (
 func Web() {
 
 	inits.App.Static("/", "./public")
-	inits.App.Static("/videos/qualitys", "./videos/qualitys")
 
 	inits.App.Get("/:UUID", controllers.PlayerController)
+
+	inits.App.Get("/videos/qualitys/:UUID/:QUALITY/:FILE", controllers.GetVideoData)
 }
