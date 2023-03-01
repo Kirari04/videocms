@@ -78,7 +78,7 @@ func PlayerController(c *fiber.Ctx) error {
 	for _, subItem := range dbLink.File.Subtitles {
 		if subItem.Ready {
 			jsonSubtitles = append(jsonSubtitles, map[string]string{
-				"url":  fmt.Sprintf("%s/out.vtt", subItem.Path),
+				"url":  fmt.Sprintf("/videos/qualitys/%s/%s/subtitle/out.vtt", dbLink.UUID, subItem.UUID),
 				"name": subItem.Name,
 				"lang": subItem.Lang,
 			})
