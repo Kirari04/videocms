@@ -1,9 +1,11 @@
 package main
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/encworker"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/routes"
+	"log"
 )
 
 func main() {
@@ -11,6 +13,9 @@ func main() {
 	inits.Folders()
 	// for loading the .env file into the application
 	inits.Dotenv()
+	// for setting up configuration file from env
+	config.Setup()
+	log.Println(config.ENV.String())
 	// for setting up the database connection
 	inits.Database()
 	// for migrating all the models

@@ -1,6 +1,7 @@
 package inits
 
 import (
+	"ch/kirari04/videocms/config"
 	"log"
 	"os"
 	"time"
@@ -25,7 +26,7 @@ func Server() {
 		CaseSensitive: true,
 		StrictRouting: true,
 		ServerHeader:  "Fiber",
-		AppName:       os.Getenv("VideoCMS"),
+		AppName:       config.ENV.AppName,
 		IdleTimeout:   time.Minute,
 		ReadTimeout:   time.Minute * 10,
 		WriteTimeout:  time.Minute * 10,
@@ -76,11 +77,6 @@ func Server() {
 }
 
 func ServerStart() {
-	listen := os.Getenv("Host")
-	if listen == "" {
-		listen = "127.0.0.1:3000"
-	}
-
 	defer logFile.Close()
-	App.Listen(listen)
+	App.Listen(config.ENV.Host)
 }

@@ -1,10 +1,10 @@
 package auth
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -20,7 +20,7 @@ type Claims struct {
 var jwtKey []byte
 
 func GenerateJWT(user models.User) (string, error) {
-	jwtKey = []byte(os.Getenv("secretKey"))
+	jwtKey = []byte(config.ENV.JwtSecretKey)
 	// Declare the expiration time of the token
 	// here, we have kept it as 5 minutes
 	expirationTime := time.Now().Add(5 * time.Minute)
@@ -46,7 +46,7 @@ func GenerateJWT(user models.User) (string, error) {
 }
 
 func VerifyJWT(tknStr string) (*jwt.Token, *Claims, error) {
-	jwtKey = []byte(os.Getenv("secretKey"))
+	jwtKey = []byte(config.ENV.JwtSecretKey)
 	claims := &Claims{}
 
 	// Parse the JWT string and store the result in `claims`.
@@ -63,7 +63,7 @@ func VerifyJWT(tknStr string) (*jwt.Token, *Claims, error) {
 }
 
 func RefreshJWT(tknStr string) (string, error) {
-	jwtKey = []byte(os.Getenv("secretKey"))
+	jwtKey = []byte(config.ENV.JwtSecretKey)
 	claims := &Claims{}
 	tkn, err := jwt.ParseWithClaims(tknStr, claims, func(token *jwt.Token) (interface{}, error) {
 		return jwtKey, nil
