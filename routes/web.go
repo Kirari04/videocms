@@ -12,4 +12,5 @@ func Web() {
 	inits.App.Get("/:UUID", controllers.PlayerController)
 
 	inits.App.Get("/videos/qualitys/:UUID/:QUALITY/:FILE", controllers.GetVideoData)
+	inits.App.Get("/videos/qualitys/:UUID/:SUBUUID/subtitle/:FILE", controllers.GetSubtitleData)
 }
