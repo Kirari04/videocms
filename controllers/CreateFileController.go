@@ -133,7 +133,7 @@ func CreateFile(c *fiber.Ctx) error {
 			hasVideoStream = true
 		}
 
-		if streamInfo.CodecType == "subtitle" {
+		if streamInfo.CodecType == "subtitle" && streamInfo.CodecName != "hdmv_pgs_subtitle" {
 			subtitleStreams = append(subtitleStreams, streamInfo)
 		}
 	}
@@ -219,16 +219,17 @@ func CreateFile(c *fiber.Ctx) error {
 
 		// save subtitle data to database
 		dbSubtitle := models.Subtitle{
-			UUID:     subtitleId,
-			Name:     subtitleName,
-			Lang:     subtitleLang,
-			Index:    index,
-			FileID:   dbFile.ID,
-			Path:     fmt.Sprintf("./videos/qualitys/%s/%s", dbFile.UUID, subtitleId),
-			Encoding: false,
-			Failed:   false,
-			Ready:    false,
-			Error:    "",
+			UUID:          subtitleId,
+			Name:          subtitleName,
+			Lang:          subtitleLang,
+			Index:         index,
+			FileID:        dbFile.ID,
+			Path:          fmt.Sprintf("./videos/qualitys/%s/%s", dbFile.UUID, subtitleId),
+			OriginalCodec: subtitleStream.CodecName,
+			Encoding:      false,
+			Failed:        false,
+			Ready:         false,
+			Error:         "",
 		}
 		if res := inits.DB.Create(&dbSubtitle); res.Error != nil {
 			log.Printf("Error saving Subtitle in database: %v", res.Error)
@@ -260,12 +261,12 @@ func CreateFile(c *fiber.Ctx) error {
 
 		if videoHeight > videoWidth {
 			// vertical -> compare height
-			if qualityOpt.Height <= int64(videoHeight) {
+			if qualityOpt.Width <= int64(videoWidth) {
 				if res := inits.DB.Create(&models.Quality{
 					FileID:       dbFile.ID,
 					Name:         qualityOpt.Name,
-					Width:        int64(math.RoundToEven((float64(videoWidth)/(float64(videoHeight)/float64(qualityOpt.Height)))/2) * 2),
-					Height:       int64(math.RoundToEven(float64(qualityOpt.Height)/2) * 2),
+					Width:        int64(math.RoundToEven(float64(qualityOpt.Width)/2) * 2),
+					Height:       int64(math.RoundToEven((float64(videoHeight)/(float64(videoWidth)/float64(qualityOpt.Width)))/2) * 2),
 					Crf:          qualityOpt.Crf,
 					AvgFrameRate: qualityFrameRate,
 					Path:         qualityPath,
@@ -281,12 +282,12 @@ func CreateFile(c *fiber.Ctx) error {
 			}
 		} else {
 			//horizontal -> compare width
-			if qualityOpt.Width <= int64(videoWidth) {
+			if qualityOpt.Height <= int64(videoHeight) {
 				if res := inits.DB.Create(&models.Quality{
 					FileID:       dbFile.ID,
 					Name:         qualityOpt.Name,
-					Width:        int64(math.RoundToEven(float64(qualityOpt.Width)/2) * 2),
-					Height:       int64(math.RoundToEven((float64(videoHeight)/(float64(videoWidth)/float64(qualityOpt.Width)))/2) * 2),
+					Width:        int64(math.RoundToEven((float64(videoWidth)/(float64(videoHeight)/float64(qualityOpt.Height)))/2) * 2),
+					Height:       int64(math.RoundToEven(float64(qualityOpt.Height)/2) * 2),
 					Crf:          qualityOpt.Crf,
 					AvgFrameRate: qualityFrameRate,
 					Path:         qualityPath,
