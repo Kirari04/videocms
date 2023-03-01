@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
@@ -91,5 +92,6 @@ func PlayerController(c *fiber.Ctx) error {
 		"Subtitles":   string(rawSubtitles),
 		"EncQualitys": string(rawEncQualitys),
 		"UUID":        requestValidation.UUID,
+		"PROJECTURL":  config.ENV.Project,
 	})
 }

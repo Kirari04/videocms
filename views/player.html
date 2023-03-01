@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html>
-
-<head>
+  <head>
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,65 +8,66 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-        href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap"
-        rel="stylesheet" />
+      href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap"
+      rel="stylesheet"
+    />
     <style>
-        html,
-        body {
-            height: 100vh;
-            width: 100vw;
-            padding: 0;
-            margin: 0;
-            background-color: black;
-            color: white;
-            font-family: "Roboto", sans-serif;
-        }
+      html,
+      body {
+        height: 100vh;
+        width: 100vw;
+        padding: 0;
+        margin: 0;
+        background-color: black;
+        color: white;
+        font-family: "Roboto", sans-serif;
+      }
 
-        #dplayer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
+      #dplayer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+      }
 
-        .dplayer-subtitle{
-            color: #fff !important;
-            text-stroke: 1px black !important;
-            -webkit-text-stroke: 1px black !important;
-            text-shadow: 0px 0px 10px #000;
-        }
-        .dplayer-subtitle p b{
-            background-color: rgba(0, 0, 0, .6);
-        }
+      .dplayer-subtitle {
+        color: #fff !important;
+        text-stroke: 1px black !important;
+        -webkit-text-stroke: 1px black !important;
+        text-shadow: 0px 0px 10px #000;
+      }
+      .dplayer-subtitle p b {
+        background-color: rgba(0, 0, 0, 0.6);
+      }
     </style>
-</head>
+  </head>
 
-<body>
+  <body>
     <div id="dplayer"></div>
     <script src="/js/hls.min.js"></script>
     <script src="/js/player.min.js"></script>
     <script src="/js/sweetalert2.js"></script>
     <script>
-        const Qualitys = JSON.parse(decodeURI("{{.Qualitys}}")).map((el) => {
-            el.file = el.file.replace("./", "/");
-            return el;
-        });
-        const Subtitles = JSON.parse(decodeURI("{{.Subtitles}}"));
-        const EncQualitys = JSON.parse(decodeURI("{{.EncQualitys}}"));
-        const UUID = "{{.UUID}}";
+      const Qualitys = JSON.parse(decodeURI("{{.Qualitys}}")).map((el) => {
+        el.file = el.file.replace("./", "/");
+        return el;
+      });
+      const Subtitles = JSON.parse(decodeURI("{{.Subtitles}}"));
+      const EncQualitys = JSON.parse(decodeURI("{{.EncQualitys}}"));
+      const UUID = "{{.UUID}}";
+      const PROJECTURL = "{{.PROJECTURL}}";
     </script>
     <template id="encoding-template">
-        <swal-title id="popuptitle">
-            This file is still encoding {{.ActiveEncodes}} more quality! <br />
-            Thats why some qualitys may not be available yet. <br />
-            Reload the page to check for new qualitys.
-        </swal-title>
-        <swal-button type="confirm"> Ok </swal-button>
-        <swal-button type="deny" color="#545454"> Reload </swal-button>
-        <swal-param name="allowEscapeKey" value="true" />
+      <swal-title id="popuptitle">
+        This file is still encoding {{.ActiveEncodes}} more quality! <br />
+        Thats why some qualitys may not be available yet. <br />
+        Reload the page to check for new qualitys.
+      </swal-title>
+      <swal-button type="confirm"> Ok </swal-button>
+      <swal-button type="deny" color="#545454"> Reload </swal-button>
+      <swal-param name="allowEscapeKey" value="true" />
     </template>
     <script src="/js/player.js"></script>
-</body>
-
+  </body>
 </html>
