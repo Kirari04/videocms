@@ -5,10 +5,13 @@ function getM3u8String(file, width, height) {
       window.location.origin
     }${file}\n`;
   }
-  function getM3u8Stream(qualitys) {
+  function getM3u8Stream(qualitys, audios=[]) {
     let m3u8 = `#EXTM3U\n#EXT-X-VERSION:6`;
     qualitys.forEach((quality) => {
       m3u8 += getM3u8String(quality.file, quality.width, quality.height);
+    });
+    audios.forEach((audio) => {
+      m3u8 += `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-1",NAME="${audio.label}",LANGUAGE="${audio.lang}",AUTOSELECT=YES,DEFAULT=NO,URI="${audio.url}"\n`;
     });
   
     const blob = new Blob([m3u8], {
@@ -100,7 +103,7 @@ function getM3u8String(file, width, height) {
   // project url to context menu
   document.querySelector(
     ".dplayer-menu"
-  ).innerHTML += `<div class="dplayer-menu-item"><a target="_blank" href="${PROJECTURL}">Host Yourself</a></div>`;
+  ).innerHTML += `<div class="dplayer-menu-item"><a target="_blank" href="${PROJECTURL}">Project Source</a></div>`;
   
   // save position
   setInterval(() => {
