@@ -8,13 +8,13 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 )
 
 var runningEncodes int = 0
@@ -52,7 +52,7 @@ func loadEncodingTasks() {
 			Encoding: false,
 			Ready:    false,
 			Failed:   false,
-		}, "Encoding", "Ready", "Error").
+		}, "Encoding", "Ready", "Failed").
 		Find(&encodingQualitys)
 
 	if len(encodingQualitys) > 0 {
@@ -78,29 +78,31 @@ func runEncode(encodingTask models.Quality) {
 	log.Printf("Start encoding %s %s\n", encodingTask.File.Name, encodingTask.Name)
 
 	totalDuration := encodingTask.File.Duration
-	encFilePath := fmt.Sprintf("%s/%s", encodingTask.Path, encodingTask.OutputFile)
 	os.MkdirAll(encodingTask.Path, 0777)
 
-	ffmpegArgs := ffmpeg_go.KwArgs{}
-	ffmpegArgs["c:v"] = "libx264"
-	ffmpegArgs["c:a"] = "aac"
-	ffmpegArgs["preset"] = "fast"
-	ffmpegArgs["s"] = fmt.Sprintf("%dx%d", encodingTask.Width, encodingTask.Height)
-	ffmpegArgs["crf"] = encodingTask.Crf
+	var frameRateString string
 	if encodingTask.AvgFrameRate > 0 {
-		ffmpegArgs["r"] = fmt.Sprintf("%.4f", encodingTask.AvgFrameRate)
+		frameRateString = fmt.Sprintf("-r %.4f", encodingTask.AvgFrameRate)
 	}
-	ffmpegArgs["start_number"] = 0
-	ffmpegArgs["hls_time"] = 10
-	ffmpegArgs["hls_list_size"] = 0
-	ffmpegArgs["f"] = "hls"
 
-	err := ffmpeg_go.Input(encodingTask.File.Path).
-		Output(encFilePath, ffmpegArgs).
-		GlobalArgs("-progress", "unix://"+TempSock(totalDuration, &encodingTask)).
-		OverWriteOutput().
-		Run()
-	if err != nil {
+	absFileInput, _ := filepath.Abs(encodingTask.File.Path)
+	absFolderOutput, _ := filepath.Abs(encodingTask.Path)
+	encFilePath := fmt.Sprintf("%s/%s", absFolderOutput, encodingTask.OutputFile)
+
+	cmd := exec.Command(
+		"bash",
+		"-c",
+		fmt.Sprintf(
+			"ffmpeg -i %s -map 0:a:0 -map 0:v:0 -c:a aac -c:v libx264 -crf %d %s -f hls -hls_list_size 0 -hls_time 10 -preset fast -s %s -start_number 0 %s -progress %s -y",
+			absFileInput,
+			encodingTask.Crf,
+			frameRateString,
+			fmt.Sprintf("%dx%d", encodingTask.Width, encodingTask.Height),
+			encFilePath,
+			"unix://"+TempSock(totalDuration, &encodingTask),
+		))
+
+	if err := cmd.Run(); err != nil {
 		runningEncodes -= 1
 		encodingTask.Ready = false
 		encodingTask.Encoding = false
