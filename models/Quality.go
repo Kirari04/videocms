@@ -43,14 +43,14 @@ var AvailableQualitys = []AvailableQuality{
 		FolderName: "360p",
 		Height:     360,
 		Width:      640,
-		Crf:        30,
+		Crf:        26,
 	},
 	{
 		Name:       "480p",
 		FolderName: "480p",
 		Height:     480,
 		Width:      854,
-		Crf:        28,
+		Crf:        26,
 	},
 	{
 		Name:       "720p",
