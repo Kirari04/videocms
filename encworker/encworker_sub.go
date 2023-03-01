@@ -52,7 +52,7 @@ func loadEncodingTasks_sub() {
 			Encoding: false,
 			Ready:    false,
 			Failed:   false,
-		}, "Encoding", "Ready", "Error").
+		}, "Encoding", "Ready", "Failed").
 		Find(&encodingSubtitles)
 
 	if len(encodingSubtitles) > 0 {
