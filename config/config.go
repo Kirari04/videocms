@@ -20,7 +20,7 @@ var ENV Config
 
 func Setup() {
 	ENV.AppName = getEnv("AppName", "VideoCMS")
-	ENV.Host = getEnv("Host", "127.0.0.1:3000")
+	ENV.Host = getEnv("Host", ":3000")
 	ENV.Project = "https://hub.docker.com/r/kirari04/videocms"
 
 	ENV.JwtSecretKey = getEnv("JwtSecretKey", "secret")
