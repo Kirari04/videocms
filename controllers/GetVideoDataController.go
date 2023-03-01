@@ -51,7 +51,7 @@ func GetVideoData(c *fiber.Ctx) error {
 		Where(&models.Link{
 			UUID: requestValidation.UUID,
 		}).
-		Find(&dbLink); dbRes.Error != nil {
+		First(&dbLink); dbRes.Error != nil {
 		return c.Status(fiber.StatusNotFound).SendString("Link doesn't exist")
 	}
 
