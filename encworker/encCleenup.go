@@ -34,6 +34,7 @@ func runEncCleenup() {
 		GROUP BY f.id`, 0, 1, 1).
 		Scan(&dbFiles); res.Error != nil {
 		log.Println(res.Error)
+		return
 	}
 
 	for _, dbFile := range dbFiles {
@@ -52,6 +53,4 @@ func runEncCleenup() {
 			inits.DB.Save(&realFile)
 		}
 	}
-
-	log.Printf("Cleen Up Results: %v", dbFiles)
 }
