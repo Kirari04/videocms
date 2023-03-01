@@ -82,10 +82,10 @@ function getM3u8String(file, width, height) {
   }
   
   addRightButton("dplayer-cool", "Forward 10 sec", "/plus.svg", () =>
-    dp.seek(dp.video.currentTime + 10)
+    dp.seek(dp.video.currentTime + 5)
   );
   addRightButton("dplayer-cool", "Rewind 10 sec", "/minus.svg", () =>
-    dp.seek(dp.video.currentTime - 10)
+    dp.seek(dp.video.currentTime - 5)
   );
   addRightButton("dplayer-cool", "Video CMS", "/logo.png", () => {
       window.open(PROJECTURL)
