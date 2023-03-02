@@ -4,7 +4,6 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
-	"log"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -30,7 +29,7 @@ func GetFile(c *fiber.Ctx) error {
 
 	// query all files
 	var link models.Link
-	res := inits.DB.
+	if res := inits.DB.
 		Model(&models.Link{}).
 		Preload("User").
 		Preload("File").
@@ -39,10 +38,8 @@ func GetFile(c *fiber.Ctx) error {
 		Where(&models.Link{
 			UserID: userID,
 		}).
-		Find(&link, fileValidation.FileID)
-	if res.Error != nil {
-		log.Fatalf("Failed to query file: %v", res.Error)
-		return c.SendStatus(fiber.StatusInternalServerError)
+		First(&link, fileValidation.FileID); res.Error != nil {
+		return c.SendStatus(fiber.StatusNotFound)
 	}
 
 	type Response struct {
