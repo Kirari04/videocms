@@ -24,6 +24,8 @@ func main() {
 	go encworker.StartEncode()
 	encworker.ResetEncodingState_sub()
 	go encworker.StartEncode_sub()
+	encworker.ResetEncodingState_audio()
+	go encworker.StartEncode_audio()
 	// start cleenup process
 	go encworker.StartEncCleenup()
 
