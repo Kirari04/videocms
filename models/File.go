@@ -19,6 +19,7 @@ type File struct {
 	UserID       uint
 	Qualitys     []Quality  `json:"-"`
 	Subtitles    []Subtitle `json:"-"`
+	Audios       []Audio    `json:"-"`
 }
 
 type FileCreateValidation struct {
