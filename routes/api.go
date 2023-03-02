@@ -16,20 +16,17 @@ func Api() {
 	auth := inits.Api.Group("/auth")
 	auth.Use(limiter.New(*helpers.LimiterConfig(10, time.Hour))).
 		Post("/login", controllers.AuthLogin)
-
 	auth.Use(limiter.New(*helpers.LimiterConfig(1, time.Second*10))).
 		Get("/check", controllers.AuthCheck)
 	auth.Use(limiter.New(*helpers.LimiterConfig(1, time.Minute))).
 		Get("/refresh", controllers.AuthRefresh)
 
-	folders := inits.Api.Use(middlewares.Auth).Group("/folders")
-	folders.Get("/list", controllers.ListFolders)
-	folders.Post("/create", controllers.CreateFolder)
-	folders.Delete("/delete", controllers.DeleteFolder)
+	protectedApi := inits.Api.Use(middlewares.Auth)
+	protectedApi.Get("/folders", controllers.ListFolders)
+	protectedApi.Post("/folder", controllers.CreateFolder)
+	protectedApi.Delete("/folder", controllers.DeleteFolder)
 
-	files := inits.Api.Use(middlewares.Auth).Group("/files")
-	files.Post("/create", controllers.CreateFile)
-	files.Get("/list", controllers.ListFiles)
-	files.Get("/get", controllers.GetFile)
-
+	protectedApi.Post("/file", controllers.CreateFile)
+	protectedApi.Get("/file", controllers.GetFile)
+	protectedApi.Get("/files", controllers.ListFiles)
 }
