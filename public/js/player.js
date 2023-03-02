@@ -39,15 +39,20 @@ Audios.forEach(Audio => {
 let defaultQuality = dpQualitys.length - 1;
 
 const dp = new DPlayer({
+  title: TITLE,
   container: document.getElementById("dplayer"),
   screenshot: false,
+  airplay: true,
+  chromecast: true,
+  volume: 0.9,
+  logo: '/logo.png',
   contextmenu: [],
   video: {
     defaultQuality: defaultQuality,
     quality: dpQualitys,
   },
   subtitle: {
-    url: !Subtitles ? [] : Subtitles,
+    url: Subtitles,
     defaultSubtitle: 0,
     type: "webvtt",
     fontSize: "4vh",
