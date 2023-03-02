@@ -1,1 +1,140 @@
-const _0x34e198=_0x17d6;function _0x17d6(_0x52ba44,_0x4c2219){const _0x5b80e2=_0x4e88();return _0x17d6=function(_0x4099c5,_0x78f6b9){_0x4099c5=_0x4099c5-0xf8;let _0x9a1ed=_0x5b80e2[_0x4099c5];return _0x9a1ed;},_0x17d6(_0x52ba44,_0x4c2219);}(function(_0x4f1770,_0x146b3d){const _0x3d5a3d=_0x17d6,_0x45ef58=_0x4f1770();while(!![]){try{const _0xb29914=-parseInt(_0x3d5a3d(0x121))/0x1*(-parseInt(_0x3d5a3d(0x143))/0x2)+-parseInt(_0x3d5a3d(0xff))/0x3*(-parseInt(_0x3d5a3d(0x147))/0x4)+parseInt(_0x3d5a3d(0x10b))/0x5+-parseInt(_0x3d5a3d(0x13b))/0x6*(parseInt(_0x3d5a3d(0x111))/0x7)+-parseInt(_0x3d5a3d(0x149))/0x8+-parseInt(_0x3d5a3d(0x144))/0x9+parseInt(_0x3d5a3d(0x142))/0xa*(parseInt(_0x3d5a3d(0x150))/0xb);if(_0xb29914===_0x146b3d)break;else _0x45ef58['push'](_0x45ef58['shift']());}catch(_0x27ba8c){_0x45ef58['push'](_0x45ef58['shift']());}}}(_0x4e88,0xa7553));function getM3u8String(_0x17655a,_0x39156c,_0x17fb6){const _0x21badf=_0x17d6;return _0x21badf(0x11b)+parseInt(_0x39156c)*parseInt(_0x17fb6)*0x14+_0x21badf(0x153)+_0x39156c+'x'+_0x17fb6+_0x21badf(0x109)+window['location'][_0x21badf(0xf8)]+_0x17655a+'\x0a';}function getM3u8Stream(_0x3acbf3){const _0x357255=_0x17d6;let _0x67f571=_0x357255(0x11f);_0x3acbf3['forEach'](_0x1ee72a=>{const _0x45bf1d=_0x357255;_0x67f571+=getM3u8String(_0x1ee72a[_0x45bf1d(0x12e)],_0x1ee72a['width'],_0x1ee72a[_0x45bf1d(0x10f)]);});const _0x126d1b=new Blob([_0x67f571],{'type':_0x357255(0x145)});let _0x494f81=URL[_0x357255(0x140)](_0x126d1b);return _0x494f81;}let dpQualitys=Qualitys[_0x34e198(0x14a)](_0x4b270f=>{const _0x136191=_0x34e198;return{'name':_0x4b270f[_0x136191(0x126)],'url':_0x4b270f['file'],'type':_0x136191(0x101)};});dpQualitys[_0x34e198(0x130)]({'name':_0x34e198(0x151),'url':getM3u8Stream(Qualitys),'type':_0x34e198(0x101)});let defaultQuality=dpQualitys['length']-0x1;const dp=new DPlayer({'container':document[_0x34e198(0x113)](_0x34e198(0x136)),'screenshot':![],'contextmenu':[],'video':{'defaultQuality':defaultQuality,'quality':dpQualitys},'subtitle':{'url':!Subtitles?[]:Subtitles,'defaultSubtitle':0x0,'type':'webvtt','fontSize':_0x34e198(0x123),'bottom':'7%','color':_0x34e198(0x120)}});function _0x4e88(){const _0x3782da=['appendChild','add','366Viovkg','<img\x20src=\x22','currentTime','log','POSITION-','createObjectURL','40px','233710iKNDib','38VzGipi','8174673Vichsp','text/plain','then','118632dbsyvY','dplayer-icon','8805608YYBHuG','map','Video\x20CMS','toString','open','paused','padding','869GetxBC','Auto','seek',',RESOLUTION=','video','inline-block','remove','bind','error','origin','Forward\x2010\x20sec','createElement','/minus.svg','forEach','querySelector','\x22\x20style=\x22height:\x20100%;\x22>','78DycnOq','progress','hls','isConfirmed','button','#fff','relative','search','constructor','table',',CODECS=\x22avc1.640015,mp4a.40.2\x22\x0a','warn','6184015DRcNcB','style','{}.constructor(\x22return\x20this\x22)(\x20)','length','height','0px','152236DqnxXa','div','getElementById','innerHTML','querySelectorAll','getItem','.dplayer-menu','addEventListener','position','.dplayer-menu\x20.dplayer-menu-item','\x0a#EXT-X-STREAM-INF:BANDWIDTH=','setItem','Yes','prepend','#EXTM3U\x0a#EXT-X-VERSION:6','#b7daff','8779uKxCGE','.dplayer-icons.dplayer-icons-right','4vh','__proto__','<div\x20class=\x22dplayer-menu-item\x22><a\x20target=\x22_blank\x22\x20href=\x22','label','trace','\x22>Host\x20Yourself</a></div>','info','notice','/logo.png','100%','The\x20server\x20is\x20still\x20encoding\x20the\x20quality\x20','file','apply','push','dplayer-cool','round','classList','prototype','data-balloon','dplayer','Rewind\x2010\x20sec','console'];_0x4e88=function(){return _0x3782da;};return _0x4e88();}function addRightButton(_0xefc1ff,_0x57b570,_0x576146,_0x5ad955){const _0x17fe49=_0x34e198,_0x47dccb=(function(){let _0x438a07=!![];return function(_0x13d454,_0x254c2c){const _0x469e69=_0x438a07?function(){if(_0x254c2c){const _0x591909=_0x254c2c['apply'](_0x13d454,arguments);return _0x254c2c=null,_0x591909;}}:function(){};return _0x438a07=![],_0x469e69;};}()),_0x56d229=_0x47dccb(this,function(){const _0x9bd22b=_0x17d6;return _0x56d229[_0x9bd22b(0x14c)]()[_0x9bd22b(0x106)]('(((.+)+)+)+$')[_0x9bd22b(0x14c)]()[_0x9bd22b(0x107)](_0x56d229)[_0x9bd22b(0x106)]('(((.+)+)+)+$');});_0x56d229();const _0x133c18=(function(){let _0x32c234=!![];return function(_0x5a6b02,_0x1a9a16){const _0x3a4275=_0x32c234?function(){const _0x29d454=_0x17d6;if(_0x1a9a16){const _0x739ebf=_0x1a9a16[_0x29d454(0x12f)](_0x5a6b02,arguments);return _0x1a9a16=null,_0x739ebf;}}:function(){};return _0x32c234=![],_0x3a4275;};}()),_0x4222b3=_0x133c18(this,function(){const _0x39a6d4=_0x17d6;let _0x932938;try{const _0x106549=Function('return\x20(function()\x20'+_0x39a6d4(0x10d)+');');_0x932938=_0x106549();}catch(_0x598656){_0x932938=window;}const _0x160d33=_0x932938['console']=_0x932938[_0x39a6d4(0x138)]||{},_0x2ec651=[_0x39a6d4(0x13e),_0x39a6d4(0x10a),_0x39a6d4(0x129),_0x39a6d4(0x158),'exception',_0x39a6d4(0x108),_0x39a6d4(0x127)];for(let _0x3f92f5=0x0;_0x3f92f5<_0x2ec651[_0x39a6d4(0x10e)];_0x3f92f5++){const _0x221af1=_0x133c18[_0x39a6d4(0x107)][_0x39a6d4(0x134)]['bind'](_0x133c18),_0x25d1ea=_0x2ec651[_0x3f92f5],_0x411c8d=_0x160d33[_0x25d1ea]||_0x221af1;_0x221af1[_0x39a6d4(0x124)]=_0x133c18[_0x39a6d4(0x157)](_0x133c18),_0x221af1['toString']=_0x411c8d[_0x39a6d4(0x14c)][_0x39a6d4(0x157)](_0x411c8d),_0x160d33[_0x25d1ea]=_0x221af1;}});_0x4222b3();const _0x36d027=document[_0x17fe49(0xfd)](_0x17fe49(0x122)),_0x5e4c14=document['createElement'](_0x17fe49(0x112));_0x5e4c14[_0x17fe49(0x118)]('click',_0x5ad955),_0x5e4c14['classList']['add'](_0x17fe49(0x148)),_0x5e4c14[_0x17fe49(0x133)][_0x17fe49(0x13a)](_0xefc1ff),_0x5e4c14[_0x17fe49(0x10c)][_0x17fe49(0x119)]=_0x17fe49(0x105),_0x5e4c14[_0x17fe49(0x10c)]['height']=_0x17fe49(0x141),_0x5e4c14[_0x17fe49(0x10c)][_0x17fe49(0x14f)]=_0x17fe49(0x110);const _0x3aa907=document['createElement'](_0x17fe49(0x103));_0x3aa907[_0x17fe49(0x133)][_0x17fe49(0x13a)](_0x17fe49(0x148)),_0x3aa907['classList']['add']('dplayer-setting-icon'),_0x3aa907['setAttribute'](_0x17fe49(0x135),_0x57b570),_0x3aa907[_0x17fe49(0x10c)][_0x17fe49(0x119)]=_0x17fe49(0x105),_0x3aa907[_0x17fe49(0x10c)][_0x17fe49(0x10f)]=_0x17fe49(0x12c);const _0x586ef0=document[_0x17fe49(0xfa)]('span');_0x586ef0[_0x17fe49(0x10c)][_0x17fe49(0x119)]=_0x17fe49(0x105),_0x586ef0[_0x17fe49(0x10c)][_0x17fe49(0x10f)]=_0x17fe49(0x12c),_0x586ef0[_0x17fe49(0x10c)]['color']=_0x17fe49(0x104),_0x586ef0[_0x17fe49(0x10c)]['display']=_0x17fe49(0x155),_0x586ef0['classList']['add']('dplayer-icon-content'),_0x586ef0[_0x17fe49(0x114)]=_0x17fe49(0x13c)+_0x576146+_0x17fe49(0xfe),_0x3aa907[_0x17fe49(0x139)](_0x586ef0),_0x5e4c14[_0x17fe49(0x139)](_0x3aa907),_0x36d027[_0x17fe49(0x11e)](_0x5e4c14);}addRightButton(_0x34e198(0x131),_0x34e198(0xf9),'/plus.svg',()=>dp['seek'](dp[_0x34e198(0x154)][_0x34e198(0x13d)]+0x5)),addRightButton(_0x34e198(0x131),_0x34e198(0x137),_0x34e198(0xfb),()=>dp[_0x34e198(0x152)](dp[_0x34e198(0x154)][_0x34e198(0x13d)]-0x5)),addRightButton(_0x34e198(0x131),_0x34e198(0x14b),_0x34e198(0x12b),()=>{const _0xc8a31b=_0x34e198;window[_0xc8a31b(0x14d)](PROJECTURL);}),document[_0x34e198(0x115)](_0x34e198(0x11a))[_0x34e198(0xfc)](_0x53a6d1=>{const _0x119074=_0x34e198;_0x53a6d1[_0x119074(0x114)]='',_0x53a6d1[_0x119074(0x156)]();}),document[_0x34e198(0xfd)](_0x34e198(0x117))[_0x34e198(0x114)]+=_0x34e198(0x125)+PROJECTURL+_0x34e198(0x128),setInterval(()=>{const _0x50a5f8=_0x34e198;!dp[_0x50a5f8(0x154)][_0x50a5f8(0x14e)]&&localStorage[_0x50a5f8(0x11c)](_0x50a5f8(0x13f)+UUID,dp[_0x50a5f8(0x154)][_0x50a5f8(0x13d)]);},0x3e8);const oldPosition=parseInt(localStorage[_0x34e198(0x116)](_0x34e198(0x13f)+UUID));oldPosition>0x0&&Swal['fire']({'title':'Do\x20you\x20want\x20to\x20start\x20where\x20you\x20left\x20last\x20time?','showDenyButton':!![],'confirmButtonText':_0x34e198(0x11d),'denyButtonText':'No'})[_0x34e198(0x146)](_0x2f6b48=>{const _0x125ae1=_0x34e198;_0x2f6b48[_0x125ae1(0x102)]&&dp[_0x125ae1(0x152)](oldPosition);});EncQualitys&&EncQualitys[_0x34e198(0xfc)](_0x3d1d3=>{const _0x493d90=_0x34e198;dp[_0x493d90(0x12a)](_0x493d90(0x12d)+_0x3d1d3['label']+'\x20('+Math[_0x493d90(0x132)](parseFloat(_0x3d1d3[_0x493d90(0x100)])*0x64)+'%)',0x2710,0.8);});
+function getM3u8String(file, width, height) {
+  return `\n#EXT-X-STREAM-INF:BANDWIDTH=${parseInt(width) * parseInt(height) * 20
+    },RESOLUTION=${width}x${height},CODECS="avc1.640015,mp4a.40.2"\n${window.location.origin
+    }${file}\n`;
+}
+function getM3u8Stream(qualitys, audio) {
+  let m3u8 = `#EXTM3U\n`;
+  m3u8 += `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="AAC",NAME="Subtitle",LANGUAGE="${audio.lang}",URI="${window.location.origin}${audio.url}"\n`
+  m3u8 += `\n`
+  qualitys.forEach((quality) => {
+    m3u8 += `#EXT-X-STREAM-INF:BANDWIDTH=${parseInt(quality.width) * parseInt(quality.height) * 20
+      },AUDIO="AAC",RESOLUTION=${quality.width}x${quality.height},CODECS="avc1.640015,mp4a.40.2"\n${window.location.origin
+      }${quality.file}\n`;
+  });
+
+  const blob = new Blob([m3u8], {
+    type: "text/plain",
+  });
+  let url = URL.createObjectURL(blob);
+  return url;
+}
+
+let dpQualitys = []
+Audios.forEach(Audio => {
+  Qualitys.forEach((Quality) => {
+    dpQualitys.push({
+      name: (Audios.length) > 1 ? `${Quality.label} (${Audio.lang})` : `${Quality.label}`,
+      url: getM3u8Stream([Quality], Audio), // single m3u8 stream
+      type: "hls",
+    });
+  });
+  dpQualitys.push({
+    name: (Audios.length) > 1 ? `Auto (${Audio.lang})` : `Auto`,
+    url: getM3u8Stream(Qualitys, Audio),
+    type: "hls",
+  });
+});
+
+let defaultQuality = dpQualitys.length - 1;
+
+const dp = new DPlayer({
+  container: document.getElementById("dplayer"),
+  screenshot: false,
+  contextmenu: [],
+  video: {
+    defaultQuality: defaultQuality,
+    quality: dpQualitys,
+  },
+  subtitle: {
+    url: !Subtitles ? [] : Subtitles,
+    defaultSubtitle: 0,
+    type: "webvtt",
+    fontSize: "4vh",
+    bottom: "7%",
+    color: "#b7daff",
+  },
+});
+
+// custom buttons
+function addRightButton(className, label, img, callback) {
+  const rightControls = document.querySelector(
+    ".dplayer-icons.dplayer-icons-right"
+  );
+  const div = document.createElement("div");
+  div.addEventListener("click", callback);
+  div.classList.add("dplayer-icon");
+  div.classList.add(className);
+  div.style.position = "relative";
+  div.style.height = "40px";
+  div.style.padding = "0px";
+  const button = document.createElement("button");
+  button.classList.add("dplayer-icon");
+  button.classList.add("dplayer-setting-icon");
+  button.setAttribute("data-balloon", label);
+  button.style.position = "relative";
+  button.style.height = "100%";
+  const span = document.createElement("span");
+  span.style.position = "relative";
+  span.style.height = "100%";
+  span.style.color = "#fff";
+  span.style.display = "inline-block";
+  span.classList.add("dplayer-icon-content");
+  span.innerHTML = `<img src="${img}" style="height: 100%;">`;
+
+  button.appendChild(span);
+  div.appendChild(button);
+  rightControls.prepend(div);
+}
+
+addRightButton("dplayer-cool", "Forward 10 sec", "/plus.svg", () =>
+  dp.seek(dp.video.currentTime + 5)
+);
+addRightButton("dplayer-cool", "Rewind 10 sec", "/minus.svg", () =>
+  dp.seek(dp.video.currentTime - 5)
+);
+addRightButton("dplayer-cool", "Video CMS", "/logo.png", () => {
+  window.open(PROJECTURL)
+});
+
+//  delete context menu
+document.querySelectorAll(".dplayer-menu .dplayer-menu-item").forEach((el) => {
+  el.innerHTML = "";
+  el.remove();
+});
+
+// project url to context menu
+document.querySelector(
+  ".dplayer-menu"
+).innerHTML += `<div class="dplayer-menu-item"><a target="_blank" href="${PROJECTURL}">Project Source</a></div>`;
+
+// save position
+setInterval(() => {
+  if (!dp.video.paused) {
+    localStorage.setItem(`POSITION-${UUID}`, dp.video.currentTime);
+  }
+}, 1000);
+
+const oldPosition = parseInt(localStorage.getItem(`POSITION-${UUID}`));
+if (oldPosition > 0) {
+  Swal.fire({
+    title: "Do you want to start where you left last time?",
+    showDenyButton: true,
+    confirmButtonText: "Yes",
+    denyButtonText: "No",
+  }).then((result) => {
+    if (result.isConfirmed) {
+      dp.seek(oldPosition);
+    }
+  });
+}
+if (EncQualitys) {
+  EncQualitys.forEach((EncQuality) => {
+    dp.notice(
+      `The server is still encoding the quality ${EncQuality.label
+      } (${Math.round(parseFloat(EncQuality.progress) * 100)}%)`,
+      10000,
+      0.8
+    );
+  });
+}
