@@ -89,18 +89,23 @@ func runEncode(encodingTask models.Quality) {
 	absFolderOutput, _ := filepath.Abs(encodingTask.Path)
 	encFilePath := fmt.Sprintf("%s/%s", absFolderOutput, encodingTask.OutputFile)
 
+	ffmpegCommand := "ffmpeg " +
+		fmt.Sprintf("-i %s ", absFileInput) + // input file
+		"-an " + // disable audio
+		"-sn " + // disable subtitle
+		"-map 0:v:0 " + // mapping first video stream
+		"-c:v libx264 " + // setting video codec
+		fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
+		fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
+		fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
+		"-f hls -hls_list_size 0 -hls_time 10 -start_number 0 " + // hls playlist
+		fmt.Sprintf("%s ", encFilePath) + // output file
+		fmt.Sprintf("-progress unix://%s -y", TempSock(totalDuration, &encodingTask)) // progress tracking
+
 	cmd := exec.Command(
 		"bash",
 		"-c",
-		fmt.Sprintf(
-			"ffmpeg -i %s -map 0:a:0 -map 0:v:0 -c:a aac -c:v libx264 -crf %d %s -f hls -hls_list_size 0 -hls_time 10 -preset fast -s %s -start_number 0 %s -progress %s -y",
-			absFileInput,
-			encodingTask.Crf,
-			frameRateString,
-			fmt.Sprintf("%dx%d", encodingTask.Width, encodingTask.Height),
-			encFilePath,
-			"unix://"+TempSock(totalDuration, &encodingTask),
-		))
+		ffmpegCommand)
 
 	if err := cmd.Run(); err != nil {
 		runningEncodes -= 1
