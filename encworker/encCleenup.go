@@ -33,11 +33,13 @@ func runEncCleenup() {
 			COUNT(s.id) as 'encoded_subtitle_count' FROM files f
 		INNER JOIN qualities q ON q.file_id = f.id
 		INNER JOIN subtitles s ON s.file_id = f.id
+		INNER JOIN audios a ON a.file_id = f.id
 		WHERE 	q.encoding = ? AND
 				(q.ready = ? OR q.failed = ?) AND
 				(s.ready = ? OR s.failed = ?) AND
+				(a.ready = ? OR a.failed = ?) AND
 				f.path != ""
-		GROUP BY f.id`, 0, 1, 1, 1, 1).
+		GROUP BY f.id`, 0, 1, 1, 1, 1, 1, 1).
 		Scan(&dbFiles); res.Error != nil {
 		log.Printf("Failed to get PossibleDeleteTargets: %v", res.Error)
 		return
