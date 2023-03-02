@@ -118,6 +118,7 @@ func CreateFile(c *fiber.Ctx) error {
 	// declare needed informations
 	var videoStream ffprobe.Stream
 	var subtitleStreams []ffprobe.Stream
+	var audioStreams []ffprobe.Stream
 	var avgFramerate float64
 	videoDuration := data.Format.Duration().Seconds()
 	hasVideoStream := false
@@ -135,6 +136,10 @@ func CreateFile(c *fiber.Ctx) error {
 
 		if streamInfo.CodecType == "subtitle" && streamInfo.CodecName != "hdmv_pgs_subtitle" {
 			subtitleStreams = append(subtitleStreams, streamInfo)
+		}
+
+		if streamInfo.CodecType == "audio" {
+			audioStreams = append(audioStreams, streamInfo)
 		}
 	}
 
@@ -233,6 +238,45 @@ func CreateFile(c *fiber.Ctx) error {
 		}
 		if res := inits.DB.Create(&dbSubtitle); res.Error != nil {
 			log.Printf("Error saving Subtitle in database: %v", res.Error)
+			os.Remove(filePath)
+			return c.SendStatus(fiber.StatusInternalServerError)
+		}
+	}
+
+	// save audio data to database so they can be converted later
+	for index, audioStream := range audioStreams {
+		// generate  audio name
+		var audioName = fmt.Sprintf("Audio %v", index+1)
+		if autoName, err := audioStream.TagList.GetString("title"); err == nil && autoName != "" {
+			audioName = autoName
+		}
+		// detect  audio language
+		var audioLang = "en"
+		if autoLang, err := audioStream.TagList.GetString("language"); err == nil && autoLang != "" && len(autoLang) < 10 {
+			audioLang = autoLang
+		}
+
+		log.Printf(" audioName: %s /  audioLang: %s", audioName, audioLang)
+
+		// generate unique identifier for  audio
+		audioId := uuid.NewString()
+
+		// save  audio data to database
+		dbAudio := models.Audio{
+			UUID:          audioId,
+			Name:          audioName,
+			Lang:          audioLang,
+			Index:         index,
+			FileID:        dbFile.ID,
+			Path:          fmt.Sprintf("./videos/qualitys/%s/%s", dbFile.UUID, audioId),
+			OriginalCodec: audioStream.CodecName,
+			Encoding:      false,
+			Failed:        false,
+			Ready:         false,
+			Error:         "",
+		}
+		if res := inits.DB.Create(&dbAudio); res.Error != nil {
+			log.Printf("Error saving Audio in database: %v", res.Error)
 			os.Remove(filePath)
 			return c.SendStatus(fiber.StatusInternalServerError)
 		}
