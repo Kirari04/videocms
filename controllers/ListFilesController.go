@@ -52,7 +52,7 @@ func ListFiles(c *fiber.Ctx) error {
 		}, "ParentFolderID", "UserID").
 		Find(&links)
 	if res.Error != nil {
-		log.Fatalf("Failed to query file list: %v", res.Error)
+		log.Printf("Failed to query file list: %v", res.Error)
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 
