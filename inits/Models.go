@@ -9,4 +9,5 @@ func Models() {
 	DB.AutoMigrate(&models.Link{})
 	DB.AutoMigrate(&models.Quality{})
 	DB.AutoMigrate(&models.Subtitle{})
+	DB.AutoMigrate(&models.Audio{})
 }
