@@ -50,7 +50,7 @@ func runEncCleenup() {
 		if res := inits.DB.
 			Preload("Qualitys").
 			Preload("Subtitles").
-			Find(&realFile, dbFile.ID); res.Error != nil {
+			First(&realFile, dbFile.ID); res.Error != nil {
 			log.Printf("Couldn't find real file (delete candidate): Searcher ID %d inside database. Error: %v", dbFile.ID, res.Error)
 			continue
 		}
