@@ -37,9 +37,9 @@ func runEncCleenup() {
 				(q.ready = ? OR q.failed = ?) AND
 				(s.ready = ? OR s.failed = ?) AND
 				f.path != ""
-		GROUP BY f.id`, 0, 1, 1).
+		GROUP BY f.id`, 0, 1, 1, 1, 1).
 		Scan(&dbFiles); res.Error != nil {
-		log.Println(res.Error)
+		log.Printf("Failed to get PossibleDeleteTargets: %v", res.Error)
 		return
 	}
 
