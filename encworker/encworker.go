@@ -18,7 +18,7 @@ import (
 )
 
 var runningEncodes int = 0
-var maxRunningEncodes int = 2
+var maxRunningEncodes int = 1
 
 func StartEncode() {
 	for true {
@@ -91,8 +91,8 @@ func runEncode(encodingTask models.Quality) {
 
 	ffmpegCommand := "ffmpeg " +
 		fmt.Sprintf("-i %s ", absFileInput) + // input file
-		"-an " + // disable audio
 		"-sn " + // disable subtitle
+		"-an " + // disable audio
 		"-map 0:v:0 " + // mapping first video stream
 		"-c:v libx264 " + // setting video codec
 		fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
@@ -101,7 +101,7 @@ func runEncode(encodingTask models.Quality) {
 		"-f hls -hls_list_size 0 -hls_time 10 -start_number 0 " + // hls playlist
 		fmt.Sprintf("%s ", encFilePath) + // output file
 		fmt.Sprintf("-progress unix://%s -y", TempSock(totalDuration, &encodingTask)) // progress tracking
-
+	log.Println(ffmpegCommand)
 	cmd := exec.Command(
 		"bash",
 		"-c",
