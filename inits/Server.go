@@ -35,7 +35,7 @@ func Server() {
 	})
 
 	// recovering from panics
-	app.Use(recover.New())
+	app.Use(recover.New(recover.Config{}))
 
 	// Compression middleware
 	app.Use(compress.New(compress.Config{
@@ -72,6 +72,7 @@ func Server() {
 			"cs=${error}\n",
 		Output: file,
 	}))
+
 	App = app
 	Api = app.Group("/api")
 }
