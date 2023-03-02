@@ -33,6 +33,7 @@ func PlayerController(c *fiber.Ctx) error {
 		Preload("File").
 		Preload("File.Qualitys").
 		Preload("File.Subtitles").
+		Preload("File.Audios").
 		Where(&models.Link{
 			UUID: requestValidation.UUID,
 		}).
@@ -86,10 +87,23 @@ func PlayerController(c *fiber.Ctx) error {
 	}
 	rawSubtitles, _ := json.Marshal(jsonSubtitles)
 
+	var jsonAudios []map[string]string
+	for _, subItem := range dbLink.File.Audios {
+		if subItem.Ready {
+			jsonAudios = append(jsonAudios, map[string]string{
+				"url":  fmt.Sprintf("/videos/qualitys/%s/%s/audio/audio.m3u8", dbLink.UUID, subItem.UUID),
+				"name": subItem.Name,
+				"lang": subItem.Lang,
+			})
+		}
+	}
+	rawAudios, _ := json.Marshal(jsonAudios)
+
 	return c.Render("player", fiber.Map{
 		"Title":       dbLink.File.Name,
 		"Qualitys":    string(rawQuality),
 		"Subtitles":   string(rawSubtitles),
+		"Audios":      string(rawAudios),
 		"EncQualitys": string(rawEncQualitys),
 		"UUID":        requestValidation.UUID,
 		"PROJECTURL":  config.ENV.Project,
