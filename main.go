@@ -37,8 +37,8 @@ func WebServer() {
 	inits.Server()
 
 	// for loading the webservers routes
-	routes.Web()
 	routes.Api()
+	routes.Web()
 
 	// for starting the webserver
 	inits.ServerStart()
