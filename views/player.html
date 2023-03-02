@@ -49,12 +49,13 @@
     <script src="/js/player.min.js"></script>
     <script src="/js/sweetalert2.js"></script>
     <script>
-      const Qualitys = JSON.parse(decodeURI("{{.Qualitys}}")).map((el) => {
+      let Qualitys = JSON.parse(decodeURI("{{.Qualitys}}")).map((el) => {
         el.file = el.file.replace("./", "/");
         return el;
-      });
-      const Subtitles = JSON.parse(decodeURI("{{.Subtitles}}"));
-      const EncQualitys = JSON.parse(decodeURI("{{.EncQualitys}}"));
+      });if (Qualitys == null) Qualitys = []
+      let Subtitles = JSON.parse(decodeURI("{{.Subtitles}}")); if (Subtitles == null) Subtitles = []
+      let Audios = JSON.parse(decodeURI("{{.Audios}}")); if (Audios == null) Audios = []
+      let EncQualitys = JSON.parse(decodeURI("{{.EncQualitys}}")); if (EncQualitys == null) EncQualitys = []
       const UUID = "{{.UUID}}";
       const PROJECTURL = "{{.PROJECTURL}}";
     </script>
