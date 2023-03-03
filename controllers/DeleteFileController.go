@@ -31,7 +31,7 @@ func DeleteFileController(c *fiber.Ctx) error {
 			{
 				FailedField: "FileID",
 				Tag:         "exists",
-				Value:       "Parent file doesn't exist",
+				Value:       "File doesn't exist",
 			},
 		})
 	}
