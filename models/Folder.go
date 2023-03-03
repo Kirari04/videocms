@@ -25,3 +25,9 @@ type FolderListValidation struct {
 type FolderDeleteValidation struct {
 	FolderID uint `validate:"required,number"`
 }
+
+type FolderUpdateValidation struct {
+	Name           string `validate:"required,min=1,max=120"`
+	FolderID       uint   `validate:"required,number"`
+	ParentFolderID uint   `validate:"number"`
+}

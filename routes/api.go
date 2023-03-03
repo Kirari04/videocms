@@ -28,6 +28,7 @@ func Api() {
 
 	protectedApi.Post("/file", controllers.CreateFile)
 	protectedApi.Get("/file", controllers.GetFile)
+	protectedApi.Put("/file", controllers.UpdateFolder)
 	protectedApi.Delete("/file", controllers.DeleteFileController)
 	protectedApi.Get("/files", controllers.ListFiles)
 	protectedApi.Delete("/files", controllers.DeleteFilesController)
