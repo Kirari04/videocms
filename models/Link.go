@@ -22,6 +22,9 @@ type LinkListValidation struct {
 type LinkDeleteValidation struct {
 	LinkID uint `validate:"required,number"`
 }
+type LinksDeleteValidation struct {
+	LinkIDs []LinkDeleteValidation `validate:"required"`
+}
 
 type LinkGetValidation struct {
 	LinkID uint `validate:"required,number"`
