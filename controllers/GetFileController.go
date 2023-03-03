@@ -10,7 +10,7 @@ import (
 
 func GetFile(c *fiber.Ctx) error {
 	// parse & validate request
-	var fileValidation models.FileGetValidation
+	var fileValidation models.LinkGetValidation
 	if err := c.QueryParser(&fileValidation); err != nil {
 		return c.Status(400).JSON([]helpers.ValidationError{
 			{
@@ -38,7 +38,7 @@ func GetFile(c *fiber.Ctx) error {
 		Where(&models.Link{
 			UserID: userID,
 		}).
-		First(&link, fileValidation.FileID); res.Error != nil {
+		First(&link, fileValidation.LinkID); res.Error != nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
 
