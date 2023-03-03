@@ -14,3 +14,15 @@ type Link struct {
 	ParentFolder   *Folder `json:"-"`
 	ParentFolderID uint
 }
+
+type LinkListValidation struct {
+	ParentFolderID uint `validate:"number"`
+}
+
+type LinkDeleteValidation struct {
+	LinkID uint `validate:"required,number"`
+}
+
+type LinkGetValidation struct {
+	LinkID uint `validate:"required,number"`
+}

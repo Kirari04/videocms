@@ -26,15 +26,3 @@ type FileCreateValidation struct {
 	Name           string `validate:"required,min=1,max=120"`
 	ParentFolderID uint   `validate:"number"`
 }
-
-type FileListValidation struct {
-	ParentFolderID uint `validate:"number"`
-}
-
-type FileDeleteValidation struct {
-	FileID uint `validate:"required,number"`
-}
-
-type FileGetValidation struct {
-	FileID uint `validate:"required,number"`
-}
