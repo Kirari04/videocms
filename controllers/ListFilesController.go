@@ -11,7 +11,7 @@ import (
 
 func ListFiles(c *fiber.Ctx) error {
 	// parse & validate request
-	var fileValidation models.FileListValidation
+	var fileValidation models.LinkListValidation
 	if err := c.QueryParser(&fileValidation); err != nil {
 		return c.Status(400).JSON([]helpers.ValidationError{
 			{
