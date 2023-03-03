@@ -3,6 +3,7 @@ package main
 import (
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/encworker"
+	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/routes"
 )
@@ -18,6 +19,8 @@ func main() {
 	inits.Database()
 	// for migrating all the models
 	inits.Models()
+	// sync UserRequestAsync
+	helpers.UserRequestAsyncObj.Sync(true)
 
 	// start encoding process
 	encworker.ResetEncodingState()
