@@ -59,9 +59,26 @@ func UpdateFolder(c *fiber.Ctx) error {
 				},
 			})
 		}
+
+		// if the new parent folder is inside the current folder we return an
+		// error so the folders wont be in an infinite loop
+		containsFolder, err := helpers.FolderContainsFolder(dbFolder.ID, dbFolder.ParentFolderID)
+		if err != nil {
+			log.Printf("While running FolderContainsFolder the database returned an error: %v", err)
+			return c.SendStatus(fiber.StatusInternalServerError)
+		}
+		if containsFolder {
+			return c.Status(400).JSON([]helpers.ValidationError{
+				{
+					FailedField: "ParentFolderID",
+					Tag:         "parent",
+					Value:       "Parent folder aint a parent folder in relation to new  exist",
+				},
+			})
+		}
 	}
 
-	//update folder
+	//update folder data
 	dbFolder.Name = folderValidation.Name
 	dbFolder.ParentFolderID = folderValidation.ParentFolderID
 	if res := inits.DB.Save(&dbFolder); res.Error != nil {
