@@ -1,1 +1,0 @@
-docker push kirari04/videocms:alpha-1
