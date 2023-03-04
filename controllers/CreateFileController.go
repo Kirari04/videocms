@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
@@ -21,8 +22,11 @@ import (
 )
 
 func CreateFile(c *fiber.Ctx) error {
-	// parse & validate request
+	if config.ENV.UploadEnabled == "false" {
+		return c.Status(fiber.StatusServiceUnavailable).SendString("Upload has been desabled")
+	}
 
+	// parse & validate request
 	var fileValidation models.FileCreateValidation
 	if err := c.BodyParser(&fileValidation); err != nil {
 		return c.Status(400).JSON([]helpers.ValidationError{

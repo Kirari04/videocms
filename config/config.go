@@ -7,11 +7,14 @@ import (
 )
 
 type Config struct {
-	AppName string
-	Host    string
-	Project string
+	AppName string `validate:"required,min=1,max=120"`
+	Host    string `validate:"required,min=1,max=120"`
+	Project string `validate:"required,min=1,max=120"`
 
-	JwtSecretKey string
+	JwtSecretKey string `validate:"required,min=8,max=512"`
+
+	EncodingEnabled string `validate:"required,boolean"`
+	UploadEnabled   string `validate:"required,boolean"`
 }
 
 type ConfigMap map[string]string
@@ -23,7 +26,10 @@ func Setup() {
 	ENV.Host = getEnv("Host", ":3000")
 	ENV.Project = "/"
 
-	ENV.JwtSecretKey = getEnv("JwtSecretKey", "secret")
+	ENV.JwtSecretKey = getEnv("JwtSecretKey", "secretkey")
+
+	ENV.EncodingEnabled = getEnv("EncodingEnabled", "false")
+	ENV.UploadEnabled = getEnv("UploadEnabled", "false")
 }
 
 func (conv Config) String() string {

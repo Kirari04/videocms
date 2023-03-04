@@ -6,6 +6,7 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/routes"
+	"log"
 )
 
 func main() {
@@ -15,6 +16,14 @@ func main() {
 	inits.Dotenv()
 	// for setting up configuration file from env
 	config.Setup()
+	// checking env
+	if errors := helpers.ValidateStruct(config.ENV); len(errors) > 0 {
+		log.Println("Invalid Env configuration;")
+		for _, err := range errors {
+			log.Printf("%v", err)
+		}
+		log.Panic("")
+	}
 	// for setting up the database connection
 	inits.Database()
 	// for migrating all the models
@@ -23,14 +32,16 @@ func main() {
 	helpers.UserRequestAsyncObj.Sync(true)
 
 	// start encoding process
-	encworker.ResetEncodingState()
-	go encworker.StartEncode()
-	encworker.ResetEncodingState_sub()
-	go encworker.StartEncode_sub()
-	encworker.ResetEncodingState_audio()
-	go encworker.StartEncode_audio()
-	// start cleenup process
-	go encworker.StartEncCleenup()
+	if config.ENV.EncodingEnabled == "true" {
+		encworker.ResetEncodingState()
+		go encworker.StartEncode()
+		encworker.ResetEncodingState_sub()
+		go encworker.StartEncode_sub()
+		encworker.ResetEncodingState_audio()
+		go encworker.StartEncode_audio()
+		// start cleenup process
+		go encworker.StartEncCleenup()
+	}
 
 	WebServer()
 }
