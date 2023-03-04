@@ -8,6 +8,7 @@ import (
 func Web() {
 
 	inits.App.Static("/", "./public")
+	inits.App.Get("/", controllers.ViewIndex)
 
 	inits.App.Get("/:UUID", controllers.PlayerController)
 
