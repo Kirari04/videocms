@@ -29,6 +29,9 @@ WORKDIR /app
 
 RUN apt update && apt upgrade -y
 RUN apt install ffmpeg -y
+
+COPY --from=build_base_node /usr/src/app/dist ./public/
+
 COPY --from=build_base /tmp/app/main.bin ./
 COPY --from=build_base /tmp/app/console.bin ./
 COPY --from=build_base /tmp/app/views ./views/
