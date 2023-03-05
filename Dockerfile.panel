@@ -48,6 +48,8 @@ ENV EncodingEnabled=true
 ENV UploadEnabled=true
 ENV RatelimitEnabled=true
 
+RUN ./console.bin database:fresh seed:adminuser
+
 EXPOSE 3000
 
 CMD ["./main.bin"]
