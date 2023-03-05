@@ -1,8 +1,8 @@
 FROM golang:latest AS build_base
 
 WORKDIR /tmp/app
-ENV GOOS=linux
-ENV GOARCH=arm64
+ARG GOOS=linux
+ARG GOARCH=arm64
 
 COPY go.mod .
 COPY go.sum .
