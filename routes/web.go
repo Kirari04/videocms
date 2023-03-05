@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/controllers"
 	"ch/kirari04/videocms/inits"
 )
@@ -8,7 +9,9 @@ import (
 func Web() {
 
 	inits.App.Static("/", "./public")
-	inits.App.Get("/", controllers.ViewIndex)
+	if config.ENV.PanelEnabled == "false" {
+		inits.App.Get("/", controllers.ViewIndex)
+	}
 
 	inits.App.Get("/:UUID", controllers.PlayerController)
 
