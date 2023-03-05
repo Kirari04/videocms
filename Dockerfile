@@ -17,12 +17,6 @@ FROM debian
 
 WORKDIR /app
 
-ENV AppName=VideoCMS
-ENV Host=127.0.0.1:3000
-ENV JwtSecretKey=secretkey
-ENV EncodingEnabled=true
-ENV UploadEnabled=true
-
 RUN apt update && apt upgrade -y
 RUN apt install ffmpeg -y
 COPY --from=build_base /tmp/app/main.bin ./
@@ -30,9 +24,14 @@ COPY --from=build_base /tmp/app/console.bin ./
 COPY --from=build_base /tmp/app/views ./views/
 COPY --from=build_base /tmp/app/public ./public/
 
+ENV AppName=VideoCMS
+ENV Host=127.0.0.1:3000
+ENV JwtSecretKey=secretkey
+ENV EncodingEnabled=true
+ENV UploadEnabled=true
+
 RUN ./console.bin database:fresh seed:adminuser
 
-# RUN cd /app && ./console database:fresh seed:adminuser
 EXPOSE 3000
 
 CMD ["./main.bin"]
