@@ -9,6 +9,6 @@ import (
 func Dotenv() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Panicf("Error loading .env file: %s", err.Error())
+		log.Printf("No .env file was found. The application will use the default env cofiguration.")
 	}
 }
