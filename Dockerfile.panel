@@ -1,0 +1,53 @@
+FROM golang:latest AS build_base
+
+WORKDIR /tmp/app
+
+COPY go.mod .
+COPY go.sum .
+
+RUN go mod download
+
+COPY . .
+
+RUN go build -o /tmp/app/main.bin ./main.go
+RUN go build -o /tmp/app/console.bin ./console/console.go
+
+FROM node:16.18.1 AS build_base_node
+
+WORKDIR /usr/src/app
+RUN apt update
+RUN apt install git -y
+RUN git clone https://github.com/02Gqbriel/videocms-svelte.git .
+RUN npm install
+RUN npm run build
+
+# Start fresh from a smaller image
+FROM debian
+
+WORKDIR /app
+
+RUN apt update && apt upgrade -y
+RUN apt install ffmpeg -y
+
+COPY --from=build_base_node /usr/src/app/dist ./public/
+
+COPY --from=build_base /tmp/app/main.bin ./
+COPY --from=build_base /tmp/app/console.bin ./
+COPY --from=build_base /tmp/app/views ./views/
+COPY --from=build_base /tmp/app/public ./public/
+
+# Copy Database and video too
+COPY --from=build_base /tmp/app/database ./database
+COPY --from=build_base /tmp/app/videos ./videos
+
+ENV AppName=VideoCMS
+ENV Host=:3000
+ENV PanelEnabled=true
+ENV JwtSecretKey=secretkey
+ENV EncodingEnabled=true
+ENV UploadEnabled=true
+ENV RatelimitEnabled=true
+
+EXPOSE 3000
+
+CMD ["./main.bin"]
