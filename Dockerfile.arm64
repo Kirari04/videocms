@@ -27,7 +27,7 @@ COPY --from=build_base /tmp/app/views ./views/
 COPY --from=build_base /tmp/app/public ./public/
 
 ENV AppName=VideoCMS
-ENV Host=127.0.0.1:3000
+ENV Host=:3000
 ENV JwtSecretKey=secretkey
 ENV EncodingEnabled=true
 ENV UploadEnabled=true
