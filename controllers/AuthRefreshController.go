@@ -14,9 +14,13 @@ func AuthRefresh(c *fiber.Ctx) error {
 	}
 	bearerHeader := strings.Split(bearer, " ")
 	tokenString := bearerHeader[len(bearerHeader)-1]
-	newTokenString, err := auth.RefreshJWT(tokenString)
+	newTokenString, expirationTime, err := auth.RefreshJWT(tokenString)
 	if err != nil {
 		return c.Status(fiber.StatusForbidden).SendString(err.Error())
 	}
-	return c.SendString(newTokenString)
+
+	return c.JSON(fiber.Map{
+		"exp":   expirationTime,
+		"token": newTokenString,
+	})
 }

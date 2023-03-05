@@ -19,7 +19,7 @@ type Claims struct {
 
 var jwtKey []byte
 
-func GenerateJWT(user models.User) (string, error) {
+func GenerateJWT(user models.User) (string, time.Time, error) {
 	jwtKey = []byte(config.ENV.JwtSecretKey)
 	// Declare the expiration time of the token
 	// here, we have kept it as 5 minutes
@@ -40,9 +40,9 @@ func GenerateJWT(user models.User) (string, error) {
 	// Create the JWT string
 	tokenString, err := token.SignedString(jwtKey)
 	if err != nil {
-		return "", err
+		return "", time.Now(), err
 	}
-	return tokenString, nil
+	return tokenString, expirationTime, nil
 }
 
 func VerifyJWT(tknStr string) (*jwt.Token, *Claims, error) {
@@ -62,34 +62,34 @@ func VerifyJWT(tknStr string) (*jwt.Token, *Claims, error) {
 	return tkn, claims, nil
 }
 
-func RefreshJWT(tknStr string) (string, error) {
+func RefreshJWT(tknStr string) (string, time.Time, error) {
 	jwtKey = []byte(config.ENV.JwtSecretKey)
 	claims := &Claims{}
 	tkn, err := jwt.ParseWithClaims(tknStr, claims, func(token *jwt.Token) (interface{}, error) {
 		return jwtKey, nil
 	})
 	if err != nil {
-		return "", err
+		return "", time.Now(), err
 	}
 	if !tkn.Valid {
-		return "", errors.New("Invalid jwt key")
+		return "", time.Now(), errors.New("Invalid jwt key")
 	}
 
 	// We ensure that a new token is not issued until enough time has elapsed
 	// In this case, a new token will only be issued if the old token is within
 	// 30 seconds of expiry. Otherwise, return a bad request status
 	if time.Until(claims.ExpiresAt.Time) > 30*time.Second {
-		return "", errors.New(fmt.Sprintf("Wait until time to expire: %v", claims.ExpiresAt.Time.String()))
+		return "", time.Now(), errors.New(fmt.Sprintf("Wait until time to expire: %v", claims.ExpiresAt.Time.String()))
 	}
 
-	// Now, create a new token for the current use, with a renewed expiration time
+	// Now, create a n ew token for the current use, with a renewed expiration time
 	expirationTime := time.Now().Add(5 * time.Minute)
 	claims.ExpiresAt = jwt.NewNumericDate(expirationTime)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(jwtKey)
 	if err != nil {
-		return "", err
+		return "", time.Now(), err
 	}
 
-	return tokenString, nil
+	return tokenString, expirationTime, nil
 }

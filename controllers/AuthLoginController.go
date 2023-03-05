@@ -50,12 +50,15 @@ func AuthLogin(c *fiber.Ctx) error {
 		})
 	}
 
-	tokenString, err := auth.GenerateJWT(user)
+	tokenString, expirationTime, err := auth.GenerateJWT(user)
 	if err != nil {
 		log.Printf("Failed to generate jwt for user %s\n", user.Username)
 		log.Println(err.Error())
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 
-	return c.SendString(tokenString)
+	return c.JSON(fiber.Map{
+		"exp":   expirationTime,
+		"token": tokenString,
+	})
 }
