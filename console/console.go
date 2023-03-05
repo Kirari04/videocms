@@ -1,6 +1,7 @@
 package main
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
@@ -13,6 +14,8 @@ func main() {
 	inits.Folders()
 	// for loading the .env file into the application
 	inits.Dotenv()
+	// loaing default config
+	config.Setup()
 	// for setting up the database connection
 	inits.Database()
 
@@ -52,6 +55,7 @@ func main() {
 			// migrate
 			inits.Folders()
 			inits.Dotenv()
+			config.Setup()
 			inits.Database()
 			inits.Models()
 		default:
