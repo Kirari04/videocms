@@ -1,2 +1,4 @@
-resources/* linguist-vendored
+resources/hls.min.js linguist-vendored
+resources/player.min.js linguist-vendored
+resources/sweetalert2.js linguist-vendored
 public/js/* linguist-vendored
