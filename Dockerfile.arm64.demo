@@ -18,6 +18,11 @@ RUN go build -o /tmp/app/console.bin ./console/console.go
 FROM debian
 
 WORKDIR /app
+ENV AppName=VideoCMS
+ENV Host=127.0.0.1:3000
+ENV JwtSecretKey=secretkey
+ENV EncodingEnabled=false
+ENV UploadEnabled=false
 
 RUN apt update && apt upgrade -y
 RUN apt install ffmpeg -y
