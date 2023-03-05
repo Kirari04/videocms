@@ -13,8 +13,9 @@ type Config struct {
 
 	JwtSecretKey string `validate:"required,min=8,max=512"`
 
-	EncodingEnabled string `validate:"required,boolean"`
-	UploadEnabled   string `validate:"required,boolean"`
+	EncodingEnabled  string `validate:"required,boolean"`
+	UploadEnabled    string `validate:"required,boolean"`
+	RatelimitEnabled string `validate:"required,boolean"`
 }
 
 type ConfigMap map[string]string
@@ -30,6 +31,7 @@ func Setup() {
 
 	ENV.EncodingEnabled = getEnv("EncodingEnabled", "false")
 	ENV.UploadEnabled = getEnv("UploadEnabled", "false")
+	ENV.RatelimitEnabled = getEnv("RatelimitEnabled", "true")
 }
 
 func (conv Config) String() string {

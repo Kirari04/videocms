@@ -29,6 +29,7 @@ ENV Host=127.0.0.1:3000
 ENV JwtSecretKey=secretkey
 ENV EncodingEnabled=true
 ENV UploadEnabled=true
+ENV RatelimitEnabled=true
 
 RUN ./console.bin database:fresh seed:adminuser
 
