@@ -1,0 +1,44 @@
+
+FROM golang:latest AS build_base
+
+WORKDIR /tmp/app
+ARG GOOS=linux
+ARG GOARCH=arm64
+
+COPY go.mod .
+COPY go.sum .
+
+RUN go mod download
+
+COPY . .
+
+RUN go build -o /tmp/app/main.bin ./main.go
+RUN go build -o /tmp/app/console.bin ./console/console.go
+
+# Start fresh from a smaller image
+FROM debian
+
+WORKDIR /app
+
+RUN apt update && apt upgrade -y
+RUN apt install ffmpeg -y
+COPY --from=build_base /tmp/app/main.bin ./
+COPY --from=build_base /tmp/app/console.bin ./
+COPY --from=build_base /tmp/app/views ./views/
+COPY --from=build_base /tmp/app/public ./public/
+
+# Copy Database and video too
+COPY --from=build_base /tmp/app/database ./database
+COPY --from=build_base /tmp/app/videos ./videos
+
+ENV AppName=VideoCMS
+ENV Host=:3000
+ENV PanelEnabled=true
+ENV JwtSecretKey=secretkey
+ENV EncodingEnabled=false
+ENV UploadEnabled=false
+ENV RatelimitEnabled=true
+
+EXPOSE 3000
+
+CMD ["./main.bin"]
