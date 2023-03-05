@@ -18,24 +18,17 @@ func Folders() {
 		}
 	}
 
-	// create env
-	if fileInfo, err := os.Stat(".env"); err != nil || fileInfo.IsDir() {
-		data, err := os.ReadFile(".env.example")
+	// create .env.example
+	if fileInfo, err := os.Stat(".env.example"); err != nil || fileInfo.IsDir() {
 		if err != nil {
-			log.Println("No .env.example or .env file")
-			log.Println("Using Go defual env data")
+			log.Println("No existing .env.example file")
+			log.Println("Using Go default env data to populate .env.example")
 			config.Setup()
-			data = []byte(config.ENV.String())
+			data := []byte(config.ENV.String())
 			// generate env example file
 			if err := os.WriteFile(".env.example", data, 0777); err != nil {
 				log.Panic("Failed to generate .env.example file")
 			}
 		}
-		// generate .env any way
-		if err := os.WriteFile(".env", data, 0777); err != nil {
-			log.Panic("Failed to generate .env file")
-		}
-
-		log.Println("Generated .env file from .env.example")
 	}
 }
