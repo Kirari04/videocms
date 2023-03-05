@@ -1,1 +1,0 @@
-go run console/console.go database:fresh seed:adminuser
