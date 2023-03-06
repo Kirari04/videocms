@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"reflect"
+	"strconv"
 )
 
 type Config struct {
@@ -13,10 +15,12 @@ type Config struct {
 
 	JwtSecretKey string `validate:"required,min=8,max=512"`
 
-	PanelEnabled     string `validate:"required,boolean"`
-	EncodingEnabled  string `validate:"required,boolean"`
-	UploadEnabled    string `validate:"required,boolean"`
-	RatelimitEnabled string `validate:"required,boolean"`
+	PanelEnabled     *bool `validate:"required,boolean"`
+	EncodingEnabled  *bool `validate:"required,boolean"`
+	UploadEnabled    *bool `validate:"required,boolean"`
+	RatelimitEnabled *bool `validate:"required,boolean"`
+
+	MaxItemsMultiDelete int64 `validate:"required,number,min=1"`
 }
 
 type ConfigMap map[string]string
@@ -30,10 +34,12 @@ func Setup() {
 
 	ENV.JwtSecretKey = getEnv("JwtSecretKey", "secretkey")
 
-	ENV.PanelEnabled = getEnv("PanelEnabled", "false")
-	ENV.EncodingEnabled = getEnv("EncodingEnabled", "false")
-	ENV.UploadEnabled = getEnv("UploadEnabled", "false")
-	ENV.RatelimitEnabled = getEnv("RatelimitEnabled", "true")
+	ENV.PanelEnabled = getEnv_bool("PanelEnabled", boolPtr(false))
+	ENV.EncodingEnabled = getEnv_bool("EncodingEnabled", boolPtr(false))
+	ENV.UploadEnabled = getEnv_bool("UploadEnabled", boolPtr(false))
+	ENV.RatelimitEnabled = getEnv_bool("RatelimitEnabled", boolPtr(true))
+
+	ENV.MaxItemsMultiDelete = getEnv_int64("MaxItemsMultiDelete", 1000)
 }
 
 func (conv Config) String() string {
@@ -54,4 +60,39 @@ func getEnv(key string, defaultValue string) string {
 	}
 
 	return defaultValue
+}
+
+func getEnv_bool(key string, defaultValue *bool) *bool {
+	if value := os.Getenv(key); value != "" {
+		switch value {
+		case "true":
+			return boolPtr(true)
+		case "1":
+			return boolPtr(true)
+		case "false":
+			return boolPtr(false)
+		case "0":
+			return boolPtr(false)
+		default:
+			log.Panicf("Failed to get bool from value: %v", value)
+		}
+	}
+
+	return defaultValue
+}
+
+func getEnv_int64(key string, defaultValue int64) int64 {
+	if value := os.Getenv(key); value != "" {
+		res, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			log.Panicf("Failed to parse int from value %v", value)
+		}
+		return res
+	}
+
+	return defaultValue
+}
+
+func boolPtr(boolean bool) *bool {
+	return &boolean
 }

@@ -12,7 +12,7 @@ var LimiterWhitelistIps = map[string]bool{
 
 func LimiterWhitelistNext(c *fiber.Ctx) bool {
 	// disable ratelimit by env
-	if config.ENV.RatelimitEnabled == "false" {
+	if *config.ENV.RatelimitEnabled == false {
 		return true
 	}
 	// disable ratelimit by ip

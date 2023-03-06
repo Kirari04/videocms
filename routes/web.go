@@ -9,7 +9,7 @@ import (
 func Web() {
 
 	inits.App.Static("/", "./public")
-	if config.ENV.PanelEnabled == "false" {
+	if *config.ENV.PanelEnabled == false {
 		inits.App.Get("/", controllers.ViewIndex)
 	}
 
