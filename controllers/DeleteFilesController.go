@@ -44,6 +44,7 @@ func DeleteFilesController(c *fiber.Ctx) error {
 	}
 
 	//check if requested files exists
+	linkIdDeleteMap := make(map[uint]bool, len(fileValidation.LinkIDs))
 	linkIdDeleteList := []uint{}
 	for _, LinkValidation := range fileValidation.LinkIDs {
 		if res := inits.DB.First(&models.Link{
@@ -57,7 +58,20 @@ func DeleteFilesController(c *fiber.Ctx) error {
 				},
 			})
 		}
+		if linkIdDeleteMap[LinkValidation.LinkID] {
+			return c.Status(400).JSON([]helpers.ValidationError{
+				{
+					FailedField: "FileID",
+					Tag:         "distinct",
+					Value: fmt.Sprintf(
+						"The files have to be distinct. File %d is dublicate",
+						LinkValidation.LinkID,
+					),
+				},
+			})
+		}
 		linkIdDeleteList = append(linkIdDeleteList, LinkValidation.LinkID)
+		linkIdDeleteMap[LinkValidation.LinkID] = true
 	}
 
 	// delete files
