@@ -21,7 +21,7 @@ RUN apt update
 RUN apt install git -y
 RUN git clone https://github.com/02Gqbriel/videocms-svelte.git .
 RUN npm install
-RUN echo "API_URL=" > ./.env
+# RUN echo "VITE_API_URL=" > ./.env
 RUN npm run build
 
 # Start fresh from a smaller image
