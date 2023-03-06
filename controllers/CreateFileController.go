@@ -22,7 +22,7 @@ import (
 )
 
 func CreateFile(c *fiber.Ctx) error {
-	if *config.ENV.UploadEnabled == false {
+	if !*config.ENV.UploadEnabled {
 		return c.Status(fiber.StatusServiceUnavailable).SendString("Upload has been desabled")
 	}
 

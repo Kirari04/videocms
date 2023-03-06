@@ -32,7 +32,7 @@ func main() {
 	helpers.UserRequestAsyncObj.Sync(true)
 
 	// start encoding process
-	if *config.ENV.EncodingEnabled == true {
+	if *config.ENV.EncodingEnabled {
 		encworker.ResetEncodingState()
 		go encworker.StartEncode()
 		encworker.ResetEncodingState_sub()
