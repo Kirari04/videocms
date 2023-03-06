@@ -1,7 +1,7 @@
 echo RUNNING DOCKER BUILD AMD64 DEMO
-docker build . --platform linux/amd64 -f Dockerfile.demo -t kirari04/videocms:demo --push
+docker build . --platform linux/amd64 -f Dockerfile.demo -t kirari04/videocms:demo --push --no-cache
 echo RUNNING DOCKER BUILD ARM64 DEMO
-docker build . --platform linux/arm64 -f Dockerfile.demo.arm64 -t kirari04/videocms:demo_arm64 --push
+docker build . --platform linux/arm64 -f Dockerfile.demo.arm64 -t kirari04/videocms:demo_arm64 --push --no-cache
 
 echo "===================================="
 echo "================DONE================"
