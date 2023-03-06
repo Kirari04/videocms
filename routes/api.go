@@ -22,9 +22,10 @@ func Api() {
 		Get("/refresh", controllers.AuthRefresh)
 
 	protectedApi := inits.Api.Use(middlewares.Auth)
-	protectedApi.Get("/folders", controllers.ListFolders)
 	protectedApi.Post("/folder", controllers.CreateFolder)
 	protectedApi.Delete("/folder", controllers.DeleteFolder)
+	protectedApi.Get("/folders", controllers.ListFolders)
+	protectedApi.Delete("/folders", controllers.DeleteFolders)
 
 	protectedApi.Post("/file", controllers.CreateFile)
 	protectedApi.Get("/file", controllers.GetFile)
