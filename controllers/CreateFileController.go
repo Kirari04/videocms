@@ -80,6 +80,7 @@ func CreateFile(c *fiber.Ctx) error {
 	}
 	defer f.Close()
 
+	// obtain hash from file
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		log.Printf("Failed to copy file: %v", err)
@@ -87,17 +88,22 @@ func CreateFile(c *fiber.Ctx) error {
 	}
 	FileHash := fmt.Sprintf("%x", h.Sum(nil))
 
+	// check file hash with database
 	var existingFile models.File
 	if res := inits.DB.
 		Where(&models.File{
 			Hash: FileHash,
 		}).First(&existingFile); res.Error == nil {
-		// file exists
+		// file is dublicate and can be linked
+		// delete uploaded file
+		os.Remove(filePath)
+		// link old uploaded file to new link
 		dbLink := models.Link{
 			UUID:           uuid.NewString(),
 			ParentFolderID: fileValidation.ParentFolderID,
 			UserID:         c.Locals("UserID").(uint),
 			FileID:         existingFile.ID,
+			Name:           fileValidation.Name,
 		}
 		if res := inits.DB.Create(&dbLink); res.Error != nil {
 			log.Printf("Error saving link in database: %v", res.Error)
@@ -114,6 +120,7 @@ func CreateFile(c *fiber.Ctx) error {
 	data, err := ffprobe.ProbeURL(ctx, filePath)
 	if err != nil {
 		log.Printf("Error getting data: %v", err)
+		os.Remove(filePath)
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 	// proobe type
@@ -128,6 +135,7 @@ func CreateFile(c *fiber.Ctx) error {
 	hasVideoStream := false
 
 	if videoDuration == 0 || videoDuration > 60*60*10 {
+		os.Remove(filePath)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid video duration")
 	}
 
