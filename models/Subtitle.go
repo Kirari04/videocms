@@ -11,11 +11,11 @@ type Subtitle struct {
 	Lang          string `gorm:"size:10;"`
 	Path          string `gorm:"size:120;" json:"-"`
 	OriginalCodec string `json:"-"`
-	Index         int
+	Index         int    `json:"-"`
 	Encoding      bool
 	Progress      float64
 	Failed        bool
-	Ready         bool   `json:"-"`
+	Ready         bool
 	Error         string `json:"-"`
 	File          File   `json:"-"`
 	FileID        uint
