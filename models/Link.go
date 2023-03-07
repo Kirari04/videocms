@@ -7,11 +7,11 @@ import (
 type Link struct {
 	gorm.Model
 	UUID           string
-	Name           string `gorm:"size:128;"`
-	File           File   `json:"-"`
-	FileID         uint   `json:"-"`
-	User           User   `json:"-"`
-	UserID         uint
+	Name           string  `gorm:"size:128;"`
+	File           File    `json:"-"`
+	FileID         uint    `json:"-"`
+	User           User    `json:"-"`
+	UserID         uint    `json:"-"`
 	ParentFolder   *Folder `json:"-"`
 	ParentFolderID uint
 }
