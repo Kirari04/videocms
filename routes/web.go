@@ -8,10 +8,11 @@ import (
 
 func Web() {
 
-	inits.App.Static("/", "./public")
 	if !*config.ENV.PanelEnabled {
 		inits.App.Get("/", controllers.ViewIndex)
 	}
+
+	inits.App.Static("/", "./public")
 
 	inits.App.Get("/:UUID", controllers.PlayerController)
 
