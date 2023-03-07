@@ -21,7 +21,7 @@ var runningEncodes_audio int = 0
 var maxRunningEncodes_audio int = 1
 
 func StartEncode_audio() {
-	for true {
+	for {
 		loadEncodingTasks_audio()
 		time.Sleep(time.Second * 10)
 	}
@@ -75,7 +75,7 @@ func runEncode_audio(encodingTask models.Audio) {
 		time.Sleep(time.Second * 10)
 	}
 	runningEncodes_audio += 1
-	log.Printf("Start encoding %s %s\n", encodingTask.File.Name, encodingTask.Name)
+	log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 
 	totalDuration := encodingTask.File.Duration
 	os.MkdirAll(encodingTask.Path, 0777)
@@ -113,7 +113,7 @@ func runEncode_audio(encodingTask models.Audio) {
 	encodingTask.Encoding = false
 	encodingTask.Ready = true
 	inits.DB.Save(&encodingTask)
-	log.Printf("Finish encoding %s %s\n", encodingTask.File.Name, encodingTask.Name)
+	log.Printf("Finish encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 	runningEncodes_audio -= 1
 }
 
@@ -161,7 +161,7 @@ func TempSock_audio(totalDuration float64, encodingTask *models.Audio) string {
 				}
 				if floatProg != 0 {
 
-					*&encodingTask.Progress = floatProg
+					encodingTask.Progress = floatProg
 				}
 				inits.DB.Save(encodingTask)
 			}

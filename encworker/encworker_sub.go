@@ -21,7 +21,7 @@ var runningEncodes_sub int = 0
 var maxrunningEncodes_sub int = 2
 
 func StartEncode_sub() {
-	for true {
+	for {
 		loadEncodingTasks_sub()
 		time.Sleep(time.Second * 10)
 	}
@@ -75,7 +75,7 @@ func runEncode_sub(encodingTask models.Subtitle) {
 		time.Sleep(time.Second * 10)
 	}
 	runningEncodes_sub += 1
-	log.Printf("Start encoding %s %s\n", encodingTask.File.Name, encodingTask.Name)
+	log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 
 	totalDuration := encodingTask.File.Duration
 	encFilePath := fmt.Sprintf("%s/out.vtt", encodingTask.Path)
@@ -101,7 +101,7 @@ func runEncode_sub(encodingTask models.Subtitle) {
 	encodingTask.Encoding = false
 	encodingTask.Ready = true
 	inits.DB.Save(&encodingTask)
-	log.Printf("Finish encoding %s %s\n", encodingTask.File.Name, encodingTask.Name)
+	log.Printf("Finish encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 	runningEncodes_sub -= 1
 }
 
@@ -149,7 +149,7 @@ func TempSock_sub(totalDuration float64, encodingTask *models.Subtitle) string {
 				}
 				if floatProg != 0 {
 
-					*&encodingTask.Progress = floatProg
+					encodingTask.Progress = floatProg
 				}
 				inits.DB.Save(encodingTask)
 			}

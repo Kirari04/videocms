@@ -21,7 +21,7 @@ var runningEncodes int = 0
 var maxRunningEncodes int = 1
 
 func StartEncode() {
-	for true {
+	for {
 		loadEncodingTasks()
 		time.Sleep(time.Second * 10)
 	}
@@ -75,7 +75,7 @@ func runEncode(encodingTask models.Quality) {
 		time.Sleep(time.Second * 10)
 	}
 	runningEncodes += 1
-	log.Printf("Start encoding %s %s\n", encodingTask.File.Name, encodingTask.Name)
+	log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 
 	totalDuration := encodingTask.File.Duration
 	os.MkdirAll(encodingTask.Path, 0777)
@@ -120,7 +120,7 @@ func runEncode(encodingTask models.Quality) {
 	encodingTask.Encoding = false
 	encodingTask.Ready = true
 	inits.DB.Save(&encodingTask)
-	log.Printf("Finish encoding %s %s\n", encodingTask.File.Name, encodingTask.Name)
+	log.Printf("Finish encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 	runningEncodes -= 1
 }
 
@@ -168,7 +168,7 @@ func TempSock(totalDuration float64, encodingTask *models.Quality) string {
 				}
 				if floatProg != 0 {
 
-					*&encodingTask.Progress = floatProg
+					encodingTask.Progress = floatProg
 				}
 				inits.DB.Save(encodingTask)
 			}
