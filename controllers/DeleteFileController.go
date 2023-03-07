@@ -29,7 +29,7 @@ func DeleteFileController(c *fiber.Ctx) error {
 	if res := inits.DB.First(&models.Link{}, fileValidation.LinkID); res.Error != nil {
 		return c.Status(400).JSON([]helpers.ValidationError{
 			{
-				FailedField: "FileID",
+				FailedField: "LinkID",
 				Tag:         "exists",
 				Value:       "File doesn't exist",
 			},

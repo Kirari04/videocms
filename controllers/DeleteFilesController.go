@@ -36,7 +36,7 @@ func DeleteFilesController(c *fiber.Ctx) error {
 	if len(fileValidation.LinkIDs) == 0 {
 		return c.Status(400).JSON([]helpers.ValidationError{
 			{
-				FailedField: "FileIDs",
+				FailedField: "LinkIDs",
 				Tag:         "none",
 				Value:       "Array is empty",
 			},
@@ -52,16 +52,16 @@ func DeleteFilesController(c *fiber.Ctx) error {
 		}, LinkValidation.LinkID); res.Error != nil {
 			return c.Status(400).JSON([]helpers.ValidationError{
 				{
-					FailedField: "FileID",
+					FailedField: "LinkID",
 					Tag:         "exists",
-					Value:       fmt.Sprintf("FileID (%d) doesn't exist", LinkValidation.LinkID),
+					Value:       fmt.Sprintf("LinkID (%d) doesn't exist", LinkValidation.LinkID),
 				},
 			})
 		}
 		if linkIdDeleteMap[LinkValidation.LinkID] {
 			return c.Status(400).JSON([]helpers.ValidationError{
 				{
-					FailedField: "FileID",
+					FailedField: "LinkID",
 					Tag:         "distinct",
 					Value: fmt.Sprintf(
 						"The files have to be distinct. File %d is dublicate",
