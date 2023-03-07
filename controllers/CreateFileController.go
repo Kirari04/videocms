@@ -191,7 +191,6 @@ func CreateFile(c *fiber.Ctx) error {
 
 	// save file data to database
 	dbFile := models.File{
-		Name:         fileValidation.Name,
 		UUID:         fileId,
 		Hash:         FileHash,
 		Path:         filePath,
@@ -289,6 +288,7 @@ func CreateFile(c *fiber.Ctx) error {
 	// save link data to database
 	dbLink := models.Link{
 		UUID:           uuid.NewString(),
+		Name:           fileValidation.Name,
 		ParentFolderID: fileValidation.ParentFolderID,
 		UserID:         c.Locals("UserID").(uint),
 		FileID:         dbFile.ID,

@@ -68,7 +68,7 @@ func PlayerController(c *fiber.Ctx) error {
 	}
 	if len(jsonQualitys) == 0 {
 		return c.Render("encoding", fiber.Map{
-			"Title":    dbLink.File.Name,
+			"Title":    dbLink.Name,
 			"Qualitys": dbLink.File.Qualitys,
 		})
 	}
@@ -100,7 +100,7 @@ func PlayerController(c *fiber.Ctx) error {
 	rawAudios, _ := json.Marshal(jsonAudios)
 
 	return c.Render("player", fiber.Map{
-		"Title":       dbLink.File.Name,
+		"Title":       dbLink.Name,
 		"Qualitys":    string(rawQuality),
 		"Subtitles":   string(rawSubtitles),
 		"Audios":      string(rawAudios),
