@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"log"
 	"os"
 	"strconv"
@@ -41,7 +42,9 @@ func Setup() {
 
 	ENV.MaxItemsMultiDelete = getEnv_int64("MaxItemsMultiDelete", 1000)
 
-	log.Println(ENV)
+	if jsonString, err := json.Marshal(ENV); err == nil {
+		log.Println(string(jsonString))
+	}
 }
 
 func getEnv(key string, defaultValue string) string {
