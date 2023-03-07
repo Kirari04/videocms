@@ -9,6 +9,9 @@ type User struct {
 	Username string `gorm:"unique;size:32;"`
 	Hash     string `gorm:"size:250;" json:"-"`
 	Admin    bool
+	Email    string
+	Balance  float64
+	Storage  int64
 	Folders  []Folder `json:"-"`
 }
 
