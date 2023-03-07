@@ -34,6 +34,7 @@ ENV JwtSecretKey=secretkey
 ENV EncodingEnabled=false
 ENV UploadEnabled=false
 ENV RatelimitEnabled=true
+ENV CloudflareEnabled=false
 
 EXPOSE 3000
 

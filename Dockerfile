@@ -30,6 +30,7 @@ ENV JwtSecretKey=secretkey
 ENV EncodingEnabled=true
 ENV UploadEnabled=true
 ENV RatelimitEnabled=true
+ENV CloudflareEnabled=false
 
 RUN ./console.bin database:fresh seed:adminuser
 
