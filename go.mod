@@ -14,6 +14,7 @@ require (
 	github.com/gofiber/template v1.7.5 // indirect
 	github.com/golang-jwt/jwt/v5 v5.0.0-rc.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/u2takey/ffmpeg-go v0.4.1 // indirect
 	github.com/u2takey/go-utils v0.3.1 // indirect
 	gopkg.in/vansante/go-ffprobe.v2 v2.1.1 // indirect
