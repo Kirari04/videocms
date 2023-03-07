@@ -1,10 +1,8 @@
 package config
 
 import (
-	"fmt"
 	"log"
 	"os"
-	"reflect"
 	"strconv"
 )
 
@@ -15,10 +13,11 @@ type Config struct {
 
 	JwtSecretKey string `validate:"required,min=8,max=512"`
 
-	PanelEnabled     *bool `validate:"required,boolean"`
-	EncodingEnabled  *bool `validate:"required,boolean"`
-	UploadEnabled    *bool `validate:"required,boolean"`
-	RatelimitEnabled *bool `validate:"required,boolean"`
+	PanelEnabled      *bool `validate:"required,boolean"`
+	EncodingEnabled   *bool `validate:"required,boolean"`
+	UploadEnabled     *bool `validate:"required,boolean"`
+	RatelimitEnabled  *bool `validate:"required,boolean"`
+	CloudflareEnabled *bool `validate:"required,boolean"`
 
 	MaxItemsMultiDelete int64 `validate:"required,number,min=1"`
 }
@@ -38,20 +37,11 @@ func Setup() {
 	ENV.EncodingEnabled = getEnv_bool("EncodingEnabled", boolPtr(false))
 	ENV.UploadEnabled = getEnv_bool("UploadEnabled", boolPtr(false))
 	ENV.RatelimitEnabled = getEnv_bool("RatelimitEnabled", boolPtr(true))
+	ENV.CloudflareEnabled = getEnv_bool("CloudflareEnabled", boolPtr(false))
 
 	ENV.MaxItemsMultiDelete = getEnv_int64("MaxItemsMultiDelete", 1000)
-}
 
-func (conv Config) String() string {
-	var envFile string
-	v := reflect.ValueOf(conv)
-	t := v.Type()
-	for i := 0; i < t.NumField(); i++ {
-		name := t.Field(i).Name
-		value := v.Field(i).Interface()
-		envFile += fmt.Sprintf("%s=%v\n", name, value)
-	}
-	return envFile
+	log.Println(ENV)
 }
 
 func getEnv(key string, defaultValue string) string {
