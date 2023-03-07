@@ -8,7 +8,6 @@ type File struct {
 	gorm.Model
 	UUID         string
 	Hash         string `gorm:"size:128;" json:"-"`
-	Name         string `gorm:"size:128;"`
 	Size         int64
 	Duration     float64
 	AvgFrameRate float64
