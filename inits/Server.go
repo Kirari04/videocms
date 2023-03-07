@@ -32,6 +32,10 @@ func Server() {
 		WriteTimeout:  time.Minute * 10,
 		BodyLimit:     5 * 1024 * 1024 * 1024, //5gb
 		Views:         engine,
+		ErrorHandler: func(c *fiber.Ctx, err error) error {
+			log.Printf("Internal server error happend: %v", err)
+			return c.SendStatus(fiber.StatusInternalServerError)
+		},
 	})
 
 	// recovering from panics
