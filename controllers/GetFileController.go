@@ -4,6 +4,7 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -41,18 +42,62 @@ func GetFile(c *fiber.Ctx) error {
 		First(&link, fileValidation.LinkID); res.Error != nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
-
-	type Response struct {
-		Link      models.Link
-		File      models.File
-		Qualitys  []models.Quality
-		Subtitles []models.Subtitle
+	type RespQuali struct {
+		Name         string
+		Height       int64
+		Width        int64
+		AvgFrameRate float64
+		Ready        bool
 	}
-	response := Response{
-		Link:      link,
-		File:      link.File,
-		Qualitys:  link.File.Qualitys,
-		Subtitles: link.File.Subtitles,
+	type RespSub struct {
+		Name  string
+		Lang  string
+		Ready bool
+	}
+	type Resp struct {
+		CreatedAt      time.Time
+		UpdatedAt      time.Time
+		UUID           string
+		Name           string
+		ParentFolderID uint
+		Size           int64
+		Duration       float64
+		Qualitys       []RespQuali
+		Subtitles      []RespSub
+	}
+	var Qualitys []RespQuali
+	for _, Quality := range link.File.Qualitys {
+		avgFps := Quality.AvgFrameRate
+		if avgFps == 0 {
+			avgFps = link.File.AvgFrameRate
+		}
+		Qualitys = append(Qualitys, RespQuali{
+			Name:         Quality.Name,
+			Height:       Quality.Height,
+			Width:        Quality.Width,
+			AvgFrameRate: avgFps,
+			Ready:        Quality.Ready,
+		})
+	}
+
+	var Subtitles []RespSub
+	for _, Subtitle := range link.File.Subtitles {
+		Subtitles = append(Subtitles, RespSub{
+			Name:  Subtitle.Name,
+			Lang:  Subtitle.Lang,
+			Ready: Subtitle.Ready,
+		})
+	}
+	response := Resp{
+		CreatedAt:      link.CreatedAt,
+		UpdatedAt:      link.UpdatedAt,
+		UUID:           link.UUID,
+		Name:           link.Name,
+		ParentFolderID: link.ParentFolderID,
+		Size:           link.File.Size,
+		Duration:       link.File.Duration,
+		Qualitys:       Qualitys,
+		Subtitles:      Subtitles,
 	}
 	// return value
 	return c.JSON(response)
