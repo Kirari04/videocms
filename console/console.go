@@ -12,8 +12,6 @@ import (
 func main() {
 	//loading folders
 	inits.Folders()
-	// for loading the .env file into the application
-	inits.Dotenv()
 	// loaing default config
 	config.Setup()
 	// for setting up the database connection
@@ -54,7 +52,6 @@ func main() {
 
 			// migrate
 			inits.Folders()
-			inits.Dotenv()
 			config.Setup()
 			inits.Database()
 			inits.Models()

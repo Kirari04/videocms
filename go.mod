@@ -4,20 +4,19 @@ go 1.20
 
 require (
 	github.com/go-playground/validator/v10 v10.11.2
-	github.com/joho/godotenv v1.5.1
+	github.com/gofiber/template v1.7.5
+	github.com/golang-jwt/jwt/v5 v5.0.0-rc.1
+	github.com/patrickmn/go-cache v2.1.0+incompatible
+	github.com/u2takey/ffmpeg-go v0.4.1
+	gopkg.in/vansante/go-ffprobe.v2 v2.1.1
 	gorm.io/driver/sqlite v1.4.4
 	gorm.io/gorm v1.24.5
 )
 
 require (
 	github.com/aws/aws-sdk-go v1.38.20 // indirect
-	github.com/gofiber/template v1.7.5 // indirect
-	github.com/golang-jwt/jwt/v5 v5.0.0-rc.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
-	github.com/u2takey/ffmpeg-go v0.4.1 // indirect
 	github.com/u2takey/go-utils v0.3.1 // indirect
-	gopkg.in/vansante/go-ffprobe.v2 v2.1.1 // indirect
 )
 
 require (
@@ -25,7 +24,7 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/gofiber/fiber/v2 v2.42.0
-	github.com/google/uuid v1.3.0 // indirect
+	github.com/google/uuid v1.3.0
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/compress v1.15.9 // indirect
@@ -42,7 +41,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.44.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
-	golang.org/x/crypto v0.6.0 // indirect
+	golang.org/x/crypto v0.6.0
 	golang.org/x/sys v0.5.0 // indirect
 	golang.org/x/text v0.7.0 // indirect
 )
