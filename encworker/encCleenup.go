@@ -19,49 +19,66 @@ func StartEncCleenup() {
 This function deletes the originally uploaded file after all qualitys and subtitles were encoded
 */
 func runEncCleenup() {
-	type PossibleDeleteTargets struct {
-		ID                   int
-		EncodedQualityCount  int
-		EncodedSubtitleCount int
-	}
-	var dbFiles []PossibleDeleteTargets
+	var dbReadyFiles []models.File
 	if res := inits.DB.
-		Raw(`
-		SELECT
-			f.id,
-			COUNT(q.id) as 'encoded_quality_count',
-			COUNT(s.id) as 'encoded_subtitle_count' FROM files f
-		INNER JOIN qualities q ON q.file_id = f.id
-		INNER JOIN subtitles s ON s.file_id = f.id
-		INNER JOIN audios a ON a.file_id = f.id
-		WHERE 	q.encoding = ? AND
-				(q.ready = ? OR q.failed = ?) AND
-				(s.ready = ? OR s.failed = ?) AND
-				(a.ready = ? OR a.failed = ?) AND
-				f.path != ""
-		GROUP BY f.id`, 0, 1, 1, 1, 1, 1, 1).
-		Scan(&dbFiles); res.Error != nil {
+		Preload("Qualitys").
+		Preload("Subtitles").
+		Preload("Audios").
+		Not(&models.File{
+			Path: "",
+		}, "Path").
+		Find(&dbReadyFiles); res.Error != nil {
 		log.Printf("Failed to get PossibleDeleteTargets: %v", res.Error)
 		return
 	}
 
-	for _, dbFile := range dbFiles {
-		var realFile models.File
+	for _, dbReadyFile := range dbReadyFiles {
+		var qualityAmount int64
 		if res := inits.DB.
-			Preload("Qualitys").
-			Preload("Subtitles").
-			First(&realFile, dbFile.ID); res.Error != nil {
-			log.Printf("Couldn't find real file (delete candidate): Searcher ID %d inside database. Error: %v", dbFile.ID, res.Error)
+			Model(&models.Quality{}).
+			Where(&models.Quality{
+				FileID: dbReadyFile.ID,
+				Ready:  true,
+			}).
+			Count(&qualityAmount); res.Error != nil {
+			log.Printf("Failed to count quality by (delete candidate): Searcher ID %d inside database. Error: %v", dbReadyFile.ID, res.Error)
 			continue
 		}
+
+		var subtitleAmount int64
+		if res := inits.DB.
+			Model(&models.Subtitle{}).
+			Where(&models.Subtitle{
+				FileID: dbReadyFile.ID,
+				Ready:  true,
+			}).
+			Count(&subtitleAmount); res.Error != nil {
+			log.Printf("Failed to count subtitle by (delete candidate): Searcher ID %d inside database. Error: %v", dbReadyFile.ID, res.Error)
+			continue
+		}
+
+		var audioAmount int64
+		if res := inits.DB.
+			Model(&models.Audio{}).
+			Where(&models.Audio{
+				FileID: dbReadyFile.ID,
+				Ready:  true,
+			}).
+			Count(&audioAmount); res.Error != nil {
+			log.Printf("Failed to count audio by (delete candidate): Searcher ID %d inside database. Error: %v", dbReadyFile.ID, res.Error)
+			continue
+		}
+
 		// in case all qualitys are encoded or failed the original file can be deleted
-		if len(realFile.Qualitys) == dbFile.EncodedQualityCount && len(realFile.Subtitles) == dbFile.EncodedSubtitleCount {
-			if err := os.Remove(realFile.Path); err != nil {
-				log.Printf("Failed to delete file from path (%v): %v", realFile.Path, err)
+		if qualityAmount == int64(len(dbReadyFile.Qualitys)) &&
+			subtitleAmount == int64(len(dbReadyFile.Subtitles)) &&
+			audioAmount == int64(len(dbReadyFile.Audios)) {
+			if err := os.Remove(dbReadyFile.Path); err != nil {
+				log.Printf("Failed to delete file from path (%v): %v", dbReadyFile.Path, err)
 				continue
 			}
-			realFile.Path = ""
-			inits.DB.Save(&realFile)
+			dbReadyFile.Path = ""
+			inits.DB.Save(&dbReadyFile)
 		}
 	}
 }
