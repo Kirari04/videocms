@@ -22,8 +22,9 @@ var logFile *os.File
 func Server() {
 	engine := html.New("./views", ".html")
 	trustedProxies := []string{}
-
+	trustedProxiesEnabled := false
 	if *config.ENV.CloudflareEnabled {
+		trustedProxiesEnabled = true
 		trustedProxies = append(trustedProxies, []string{
 			"173.245.48.0/20",
 			"103.21.244.0/22",
@@ -65,7 +66,8 @@ func Server() {
 			log.Printf("Internal server error happend: %v", err)
 			return c.SendStatus(fiber.StatusInternalServerError)
 		},
-		TrustedProxies: trustedProxies,
+		TrustedProxies:          trustedProxies,
+		EnableTrustedProxyCheck: trustedProxiesEnabled,
 	})
 
 	// recovering from panics
