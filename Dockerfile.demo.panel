@@ -50,6 +50,8 @@ ENV UploadEnabled=false
 ENV RatelimitEnabled=true
 ENV CloudflareEnabled=false
 
+RUN ./console.bin database:fresh seed:adminuser seed:video
+
 EXPOSE 3000
 
 CMD ["./main.bin"]
