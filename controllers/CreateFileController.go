@@ -175,7 +175,7 @@ func CreateFile(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid video framerate")
 	}
 
-	// check video stream data
+	// check video stream data (resolution)
 	if videoStream.Height == 0 || videoStream.Width == 0 {
 		log.Printf(
 			"Error getting valid videoStream data: type: %v size: %vx%v",
@@ -185,6 +185,14 @@ func CreateFile(c *fiber.Ctx) error {
 		)
 		os.Remove(filePath)
 		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
+	// check if resolution is in scope of supported sizes
+	if videoStream.Height > 8000 || videoStream.Width > 8000 {
+		return c.Status(fiber.StatusBadRequest).SendString("Video resolution is too high")
+	}
+	if videoStream.Height < 50 || videoStream.Width < 50 {
+		return c.Status(fiber.StatusBadRequest).SendString("Video resolution is too low")
 	}
 
 	// declare required variables for database insert
@@ -315,14 +323,14 @@ func CreateFile(c *fiber.Ctx) error {
 			qualityFrameRate = 30
 		}
 
-		if videoHeight > videoWidth {
-			// vertical -> compare height
+		if float64(videoWidth/videoHeight) > float64(16/9) {
+			// smaller than 16:9 ratio should be fixed by height
 			if qualityOpt.Width <= int64(videoWidth) {
 				if res := inits.DB.Create(&models.Quality{
 					FileID:       dbFile.ID,
 					Name:         qualityOpt.Name,
-					Width:        int64(math.RoundToEven(float64(qualityOpt.Width)/2) * 2),
-					Height:       int64(math.RoundToEven((float64(videoHeight)/(float64(videoWidth)/float64(qualityOpt.Width)))/2) * 2),
+					Width:        int64(math.RoundToEven((float64(videoWidth)/(float64(videoHeight)/float64(qualityOpt.Height)))/2) * 2),
+					Height:       int64(math.RoundToEven(float64(qualityOpt.Height)/2) * 2),
 					Crf:          qualityOpt.Crf,
 					AvgFrameRate: qualityFrameRate,
 					Path:         qualityPath,
@@ -337,13 +345,13 @@ func CreateFile(c *fiber.Ctx) error {
 				}
 			}
 		} else {
-			//horizontal -> compare width
+			// bigger than 16:9 ratio should be fixed by width
 			if qualityOpt.Height <= int64(videoHeight) {
 				if res := inits.DB.Create(&models.Quality{
 					FileID:       dbFile.ID,
 					Name:         qualityOpt.Name,
-					Width:        int64(math.RoundToEven((float64(videoWidth)/(float64(videoHeight)/float64(qualityOpt.Height)))/2) * 2),
-					Height:       int64(math.RoundToEven(float64(qualityOpt.Height)/2) * 2),
+					Width:        int64(math.RoundToEven(float64(qualityOpt.Width)/2) * 2),
+					Height:       int64(math.RoundToEven((float64(videoHeight)/(float64(videoWidth)/float64(qualityOpt.Width)))/2) * 2),
 					Crf:          qualityOpt.Crf,
 					AvgFrameRate: qualityFrameRate,
 					Path:         qualityPath,
