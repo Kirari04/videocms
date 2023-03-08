@@ -40,6 +40,7 @@ COPY --from=build_base /tmp/app/public ./public/
 # Copy Database and video too
 COPY --from=build_base /tmp/app/database ./database
 COPY --from=build_base /tmp/app/videos ./videos
+COPY --from=build_base /tmp/app/test ./test
 
 ENV AppName=VideoCMS
 ENV Host=:3000
