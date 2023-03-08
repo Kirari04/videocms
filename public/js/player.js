@@ -1,16 +1,22 @@
 function getM3u8String(file, width, height) {
-  return `\n#EXT-X-STREAM-INF:BANDWIDTH=${parseInt(width) * parseInt(height) * 20
-    },RESOLUTION=${width}x${height},CODECS="avc1.640015,mp4a.40.2"\n${window.location.origin
-    }${file}\n`;
+  return `\n#EXT-X-STREAM-INF:BANDWIDTH=${
+    parseInt(width) * parseInt(height) * 20
+  },RESOLUTION=${width}x${height},CODECS="avc1.640015,mp4a.40.2"\n${
+    window.location.origin
+  }${file}\n`;
 }
 function getM3u8Stream(qualitys, audio) {
   let m3u8 = `#EXTM3U\n`;
-  m3u8 += `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="AAC",NAME="Subtitle",LANGUAGE="${audio.lang}",URI="${window.location.origin}${audio.url}"\n`
-  m3u8 += `\n`
+  m3u8 += `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="AAC",NAME="Subtitle",LANGUAGE="${audio.lang}",URI="${window.location.origin}${audio.url}"\n`;
+  m3u8 += `\n`;
   qualitys.forEach((quality) => {
-    m3u8 += `#EXT-X-STREAM-INF:BANDWIDTH=${parseInt(quality.width) * parseInt(quality.height) * 20
-      },AUDIO="AAC",RESOLUTION=${quality.width}x${quality.height},CODECS="avc1.640015,mp4a.40.2"\n${window.location.origin
-      }${quality.file}\n`;
+    m3u8 += `#EXT-X-STREAM-INF:BANDWIDTH=${
+      parseInt(quality.width) * parseInt(quality.height) * 20
+    },AUDIO="AAC",RESOLUTION=${quality.width}x${
+      quality.height
+    },CODECS="avc1.640015,mp4a.40.2"\n${window.location.origin}${
+      quality.file
+    }\n`;
   });
 
   const blob = new Blob([m3u8], {
@@ -20,17 +26,20 @@ function getM3u8Stream(qualitys, audio) {
   return url;
 }
 
-let dpQualitys = []
-Audios.forEach(Audio => {
+let dpQualitys = [];
+Audios.forEach((Audio) => {
   Qualitys.forEach((Quality) => {
     dpQualitys.push({
-      name: (Audios.length) > 1 ? `${Quality.label} (${Audio.lang})` : `${Quality.label}`,
+      name:
+        Audios.length > 1
+          ? `${Quality.label} (${Audio.lang})`
+          : `${Quality.label}`,
       url: getM3u8Stream([Quality], Audio), // single m3u8 stream
       type: "hls",
     });
   });
   dpQualitys.push({
-    name: (Audios.length) > 1 ? `Auto (${Audio.lang})` : `Auto`,
+    name: Audios.length > 1 ? `Auto (${Audio.lang})` : `Auto`,
     url: getM3u8Stream(Qualitys, Audio),
     type: "hls",
   });
@@ -45,11 +54,18 @@ const dp = new DPlayer({
   airplay: true,
   chromecast: true,
   volume: 0.9,
-  logo: '/logo.png',
+  logo: "/logo.png",
   contextmenu: [],
   video: {
     defaultQuality: defaultQuality,
     quality: dpQualitys,
+    customType: {
+      customHls: function (video, player) {
+        const hls = new Hls();
+        hls.loadSource(video.src);
+        hls.attachMedia(video);
+      },
+    },
   },
   subtitle: {
     url: Subtitles,
@@ -99,7 +115,7 @@ addRightButton("dplayer-cool", "Rewind 10 sec", "/minus.svg", () =>
   dp.seek(dp.video.currentTime - 5)
 );
 addRightButton("dplayer-cool", "Video CMS", "/logo.png", () => {
-  window.open(PROJECTURL)
+  window.open(PROJECTURL);
 });
 
 //  delete context menu
@@ -136,7 +152,8 @@ if (oldPosition > 0) {
 if (EncQualitys) {
   EncQualitys.forEach((EncQuality) => {
     dp.notice(
-      `The server is still encoding the quality ${EncQuality.label
+      `The server is still encoding the quality ${
+        EncQuality.label
       } (${Math.round(parseFloat(EncQuality.progress) * 100)}%)`,
       10000,
       0.8
