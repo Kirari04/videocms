@@ -27,6 +27,10 @@ func StartEncode_sub() {
 	}
 }
 
+func ConsoleEncode_sub() {
+	loadEncodingTasks_sub()
+}
+
 func ResetEncodingState_sub() {
 	var encodingSubtitles []models.Subtitle
 	inits.DB.

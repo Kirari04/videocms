@@ -27,6 +27,10 @@ func StartEncode() {
 	}
 }
 
+func ConsoleEncode() {
+	loadEncodingTasks()
+}
+
 func ResetEncodingState() {
 	var encodingQualitys []models.Quality
 	inits.DB.

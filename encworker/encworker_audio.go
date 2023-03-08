@@ -27,6 +27,10 @@ func StartEncode_audio() {
 	}
 }
 
+func ConsoleEncode_audio() {
+	loadEncodingTasks_audio()
+}
+
 func ResetEncodingState_audio() {
 	var encodingAudios []models.Audio
 	inits.DB.

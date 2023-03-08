@@ -2,6 +2,7 @@ package main
 
 import (
 	"ch/kirari04/videocms/config"
+	"ch/kirari04/videocms/consolehelpers"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
@@ -55,6 +56,8 @@ func main() {
 			config.Setup()
 			inits.Database()
 			inits.Models()
+		case "seed:video":
+			consolehelpers.SeedFile()
 		default:
 			log.Fatal("Bad arguments passed")
 			functions()
@@ -67,4 +70,5 @@ func functions() {
 	log.Println("Available commands:")
 	log.Println("seed:adminuser")
 	log.Println("database:fresh")
+	log.Println("seed:video")
 }
