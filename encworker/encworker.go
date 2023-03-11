@@ -98,7 +98,7 @@ func runEncode(encodingTask models.Quality) {
 		"-sn " + // disable subtitle
 		"-an " + // disable audio
 		"-map 0:v:0 " + // mapping first video stream
-		"-c:v libx264 " + // setting video codec
+		"-c:v libaom-av1 " + // setting video codec libx264 | libaom-av1
 		fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
 		fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
 		fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
