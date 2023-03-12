@@ -21,9 +21,10 @@ WORKDIR /usr/src/app
 RUN apt update
 RUN apt install git -y
 RUN git clone https://github.com/02Gqbriel/videocms-svelte.git .
-RUN npm install
+RUN npm i -g pnpm
+RUN pnpm i
 RUN echo "VITE_API_URL=" > ./.env
-RUN npm run build
+RUN pnpm run build
 
 # Start fresh from a smaller image
 FROM debian
