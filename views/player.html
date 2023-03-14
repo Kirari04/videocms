@@ -15,9 +15,19 @@
         padding: 0;
         margin: 0;
         background: #1a1927;
+        position: relative;
       }
       .plyr {
         height: 100%;
+      }
+      .subtitle_container {
+        pointer-events: none;
+        height: 100%;
+        width: 100%;
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 10;
       }
       .plyr__controls {
         justify-content: flex-start;
@@ -36,6 +46,9 @@
   </head>
   <body>
     <div class="container">
+      <div class="subtitle_container">
+        <div class="subs"></div>
+      </div>
       <video
         controls
         crossorigin
@@ -56,23 +69,26 @@
     </script>
     <script src="https://cdn.plyr.io/3.7.7/plyr.js"></script>
     <script src="https://cdn.rawgit.com/video-dev/hls.js/18bb552/dist/hls.min.js"></script>
-    <script src="https://unpkg.com/sweetalert2@11.7.3/dist/sweetalert2.all.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2/dist/sweetalert2.all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/assjs/dist/ass.min.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
-        const source = `/videos/qualitys/${UUID}/${Audios[0].uuid}/stream/master.m3u8`;
+        const source = `/videos/qualitys/${UUID}/${
+          Audios.find((Audio) => Audio.type == "hls").uuid
+        }/stream/master.m3u8`;
         const video = document.querySelector("video");
+        if (Subtitles.length > 0) {
+          const ass = new ASS(atob(Subtitles[0].data), video, {
+            resampling: "video_width",
+            container: document.querySelector(".subs"),
+          });
+          ass.show();
+          window.onresize = () => ass.resize();
+          window.ass = ass;
+        }
 
         const defaultOptions = {
           keyboard: { focused: false, global: true },
-          captions: { active: false, language: "auto", update: true },
-          tracks: Subtitles.map((Subtitle, i) => {
-            return {
-              kind: "captions",
-              label: Subtitle.name,
-              srclang: Subtitle.lang,
-              src: Subtitle.url,
-            };
-          }),
           controls: () => {
             let controls = [
               "progress", // The progress bar and scrubber for playback and buffering
@@ -85,7 +101,6 @@
               "duration", // The full duration of the media
               "mute", // Toggle mute
               "volume", // Volume control
-              "captions", // Toggle captions
               "settings", // Settings menu
               "pip", // Picture-in-picture (currently Safari only)
               "airplay", // Airplay (currently Safari only)
