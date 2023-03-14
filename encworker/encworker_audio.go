@@ -98,7 +98,7 @@ func runEncode_audio(encodingTask models.Audio) {
 		"-f hls -hls_list_size 0 -hls_time 10 -start_number 0 " + // hls playlist
 		fmt.Sprintf("%s ", encFilePath) + // output file
 		fmt.Sprintf("-progress unix://%s -y", TempSock_audio(totalDuration, &encodingTask)) // progress tracking
-	log.Println(ffmpegCommand)
+
 	cmd := exec.Command(
 		"bash",
 		"-c",
@@ -111,6 +111,7 @@ func runEncode_audio(encodingTask models.Audio) {
 		encodingTask.Failed = true
 		inits.DB.Save(&encodingTask)
 		log.Printf("Error happend while encoding: %v", err.Error())
+		log.Println(ffmpegCommand)
 		return
 	}
 
