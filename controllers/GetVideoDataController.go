@@ -5,7 +5,6 @@ import (
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"fmt"
-	"os"
 	"regexp"
 
 	"github.com/gofiber/fiber/v2"
@@ -33,7 +32,7 @@ func GetVideoData(c *fiber.Ctx) error {
 	}
 
 	reQUALITY := regexp.MustCompile("^[0-9]{3,4}[p]$")
-	reFILE := regexp.MustCompile(`^out[0-9]{0,4}\.(m3u8|ts)$`)
+	reFILE := regexp.MustCompile(`^out[0-9]{0,4}\.(m3u8|ts|webm|mp4)$`)
 
 	if !reQUALITY.MatchString(requestValidation.QUALITY) {
 		return c.Status(400).SendString("Bad quality format")
@@ -57,9 +56,5 @@ func GetVideoData(c *fiber.Ctx) error {
 
 	filePath := fmt.Sprintf("./videos/qualitys/%s/%s/%s", dbLink.File.UUID, requestValidation.QUALITY, requestValidation.FILE)
 
-	file, err := os.Open(filePath)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).SendString("File not found - lol")
-	}
-	return c.SendStream(file)
+	return c.SendFile(filePath)
 }
