@@ -1,92 +1,193 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.7/plyr.css" />
+    <style>
+      html,
+      body,
+      .container {
+        height: 100vh;
+        width: 100vw;
+        padding: 0;
+        margin: 0;
+        background: #1a1927;
+      }
+      .plyr {
+        height: 100%;
+      }
+      .plyr__controls {
+        justify-content: flex-start;
+      }
+      .plyr__controls .plyr__progress__container {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: calc(var(--plyr-control-spacing, 10px) * 0.7) !important;
+      }
+      .plyr__controls__item.plyr__time.plyr__time--current {
+        margin-left: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <video
+        controls
+        crossorigin
+        playsinline
+        poster="https://bitdash-a.akamaihd.net/content/sintel/poster.png"
+      ></video>
+    </div>
+    <script>
+      let Qualitys = JSON.parse(decodeURI("{{.Qualitys}}"));
+      if (Qualitys == null) Qualitys = [];
+      let Subtitles = JSON.parse(decodeURI("{{.Subtitles}}"));
+      if (Subtitles == null) Subtitles = [];
+      let Audios = JSON.parse(decodeURI("{{.Audios}}"));
+      if (Audios == null) Audios = [];
+      const UUID = "{{.UUID}}";
+      const PROJECTURL = "{{.PROJECTURL}}";
+      const TITLE = "{{.Title}}";
+    </script>
+    <script src="https://cdn.plyr.io/3.7.7/plyr.js"></script>
+    <script src="https://cdn.rawgit.com/video-dev/hls.js/18bb552/dist/hls.min.js"></script>
+    <script src="https://unpkg.com/sweetalert2@11.7.3/dist/sweetalert2.all.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const source = `/videos/qualitys/${UUID}/${Audios[0].uuid}/stream/master.m3u8`;
+        const video = document.querySelector("video");
 
-<head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Watch {{.Title}}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap"
-    rel="stylesheet" />
-  <style>
-    html,
-    body {
-      height: 100vh;
-      width: 100vw;
-      padding: 0;
-      margin: 0;
-      background-color: black;
-      color: white;
-      font-family: "Roboto", sans-serif;
-    }
+        const defaultOptions = {
+          keyboard: { focused: false, global: true },
+          captions: { active: false, language: "auto", update: true },
+          tracks: Subtitles.map((Subtitle, i) => {
+            return {
+              kind: "captions",
+              label: Subtitle.name,
+              srclang: Subtitle.lang,
+              src: Subtitle.url,
+            };
+          }),
+          controls: () => {
+            let controls = [
+              "progress", // The progress bar and scrubber for playback and buffering
+              "play-large", // The large play button in the center
+              "rewind", // Rewind by the seek time (default 10 seconds)
+              "play", // Play/pause playback
+              "fast-forward", // Fast forward by the seek time (default 10 seconds)
+              "restart", // Restart playback
+              "current-time", // The current time of playback
+              "duration", // The full duration of the media
+              "mute", // Toggle mute
+              "volume", // Volume control
+              "captions", // Toggle captions
+              "settings", // Settings menu
+              "pip", // Picture-in-picture (currently Safari only)
+              "airplay", // Airplay (currently Safari only)
+            ];
 
-    #dplayer {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-    }
+            if (Qualitys.length > 0) {
+              controls.push("download");
+            }
+            controls.push("fullscreen");
+            return controls;
+          },
+        };
 
-    .dplayer-subtitle {
-      color: #fff !important;
-      text-stroke: 1px black !important;
-      -webkit-text-stroke: 1px black !important;
-      text-shadow: 0px 0px 10px #000;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
+        if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.src = source;
+          var player = new Plyr(video, defaultOptions);
+          window.player = player;
+          window.player.download =
+            Qualitys.length > 0 ? Qualitys[0].url : "/404";
+        } else if (Hls.isSupported()) {
+          const hls = new Hls();
+          hls.loadSource(source);
+          hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
+            const availableQualities = hls.levels.map((l) => l.height);
+            availableQualities.unshift(0); //prepend 0 to quality array
 
-    .dplayer-subtitle p {
-      background-color: #00000060;
-    }
+            // Add new qualities to option
+            defaultOptions.quality = {
+              default: 0, //Default - AUTO
+              options: availableQualities,
+              forced: true,
+              onChange: (e) => updateQuality(e),
+            };
+            // Add Auto Label
+            defaultOptions.i18n = {
+              qualityLabel: {
+                0: "Auto",
+              },
+            };
 
-    .dplayer-subtitle p,
-    .dplayer-subtitle p b {
-      font-weight: 900;
-    }
-    .dplayer-logo{
-      max-width: 100px !important;
-      max-height: 100px !important;
-      width: 100% !important;
-      transition: .3s ease;
-      opacity: 1;
-    }
-    .dplayer-playing .dplayer-logo{
-      opacity: 0;
-    }
-  </style>
-</head>
+            hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
+              var span = document.querySelector(
+                ".plyr__menu__container [data-plyr='quality'][value='0'] span"
+              );
+              if (hls.autoLevelEnabled) {
+                span.innerHTML = `AUTO (${hls.levels[data.level].height}p)`;
+              } else {
+                span.innerHTML = `AUTO`;
+              }
+            });
 
-<body>
-  <div id="dplayer"></div>
-  <script src="/js/hls.min.js"></script>
-  <script src="/js/player.min.js"></script>
-  <script src="/js/sweetalert2.js"></script>
-  <script>
-    let Qualitys = JSON.parse(decodeURI("{{.Qualitys}}")); if (Qualitys == null) Qualitys = []
-    let Subtitles = JSON.parse(decodeURI("{{.Subtitles}}")); if (Subtitles == null) Subtitles = []
-    let Audios = JSON.parse(decodeURI("{{.Audios}}")); if (Audios == null) Audios = []
-    let EncQualitys = JSON.parse(decodeURI("{{.EncQualitys}}")); if (EncQualitys == null) EncQualitys = []
-    const UUID = "{{.UUID}}";
-    const PROJECTURL = "{{.PROJECTURL}}";
-    const TITLE = "{{.Title}}";
-  </script>
-  <template id="encoding-template">
-    <swal-title id="popuptitle">
-      This file is still encoding {{.ActiveEncodes}} more quality! <br />
-      Thats why some qualitys may not be available yet. <br />
-      Reload the page to check for new qualitys.
-    </swal-title>
-    <swal-button type="confirm"> Ok </swal-button>
-    <swal-button type="deny" color="#545454"> Reload </swal-button>
-    <swal-param name="allowEscapeKey" value="true" />
-  </template>
-  <script src="/js/player.js"></script>
-</body>
+            var player = new Plyr(video, defaultOptions);
+            window.player = player;
+            window.player.download =
+              Qualitys.length > 0 ? Qualitys[0].url : "/404";
+          });
 
+          hls.attachMedia(video);
+          window.hls = hls;
+        } else {
+          // use fallback url / download url
+          video.src = Qualitys[0].url;
+          var player = new Plyr(video, defaultOptions);
+          window.player = player;
+          window.player.download =
+            Qualitys.length > 0 ? Qualitys[0].url : "/404";
+        }
+
+        function updateQuality(newQuality) {
+          if (newQuality === 0) {
+            window.hls.currentLevel = -1; //Enable AUTO quality if option.value = 0
+          } else {
+            window.hls.levels.forEach((level, levelIndex) => {
+              if (level.height === newQuality) {
+                console.log("Found quality match with " + newQuality);
+                window.hls.currentLevel = levelIndex;
+              }
+            });
+          }
+        }
+
+        // save position
+        setInterval(() => {
+          if (!window.player.paused) {
+            localStorage.setItem(`POSITION-${UUID}`, window.player.currentTime);
+          }
+        }, 1000);
+
+        const oldPosition = parseInt(localStorage.getItem(`POSITION-${UUID}`));
+        if (oldPosition > 0) {
+          Swal.fire({
+            title: "Do you want to start where you left last time?",
+            showDenyButton: true,
+            confirmButtonText: "Yes",
+            denyButtonText: "No",
+          }).then((result) => {
+            if (result.isConfirmed) {
+              window.player.currentTime = oldPosition;
+            }
+          });
+        }
+      });
+    </script>
+  </body>
 </html>
