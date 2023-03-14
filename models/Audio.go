@@ -25,7 +25,7 @@ type Audio struct {
 }
 
 type AvailableAudio struct {
-	Type       string // hls | opus
+	Type       string // hls | ogg | mp3
 	Codec      string
 	OutputFile string
 }
@@ -36,9 +36,14 @@ var AvailableAudios = []AvailableAudio{
 		Codec:      "aac",
 		OutputFile: "audio.m3u8",
 	},
+	// {
+	// 	Type:       "ogg",
+	// 	Codec:      "libopus",
+	// 	OutputFile: "audio.ogg",
+	// },
 	{
-		Type:       "opus",
-		Codec:      "libopus",
-		OutputFile: "audio.wav",
+		Type:       "mp3",
+		Codec:      "libmp3lame",
+		OutputFile: "audio.mp3",
 	},
 }
