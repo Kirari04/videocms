@@ -100,7 +100,17 @@ func runEncode_audio(encodingTask models.Audio) {
 			"-f hls -hls_list_size 0 -hls_time 10 -start_number 0 " + // hls playlist
 			fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
 			fmt.Sprintf("-progress unix://%s -y", TempSock_audio(totalDuration, &encodingTask)) // progress tracking
-	case "opus":
+	case "ogg":
+		ffmpegCommand = "ffmpeg " +
+			fmt.Sprintf("-i %s ", absFileInput) + // input file
+			"-sn " + // disable subtitle
+			"-vn " + // disable video stream
+			fmt.Sprintf("-map 0:a:%d ", encodingTask.Index) + // mapping first audio stream
+			`-af aformat=channel_layouts="7.1|5.1|stereo" ` +
+			fmt.Sprintf("-c:a %s ", encodingTask.Codec) + // setting audio codec
+			fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
+			fmt.Sprintf("-progress unix://%s -y", TempSock_audio(totalDuration, &encodingTask)) // progress tracking
+	case "mp3":
 		ffmpegCommand = "ffmpeg " +
 			fmt.Sprintf("-i %s ", absFileInput) + // input file
 			"-sn " + // disable subtitle
