@@ -8,13 +8,12 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"os/exec"
 	"path"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 )
 
 var runningEncodes_sub int = 0
@@ -82,23 +81,29 @@ func runEncode_sub(encodingTask models.Subtitle) {
 	log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 
 	totalDuration := encodingTask.File.Duration
-	encFilePath := fmt.Sprintf("%s/out.vtt", encodingTask.Path)
 	os.MkdirAll(encodingTask.Path, 0777)
 
-	err := ffmpeg_go.Input(encodingTask.File.Path).
-		Output(encFilePath, ffmpeg_go.KwArgs{
-			"map": fmt.Sprintf("0:s:%d", encodingTask.Index),
-		}).
-		GlobalArgs("-progress", "unix://"+TempSock_sub(totalDuration, &encodingTask)).
-		OverWriteOutput().
-		Run()
-	if err != nil {
+	ffmpegCommand := "ffmpeg " +
+		fmt.Sprintf("-i %s ", encodingTask.File.Path) + // input file
+		"-an " + // disable audio
+		"-vn " + // disable video stream
+		fmt.Sprintf("-map 0:s:%d ", encodingTask.Index) + // mapping first audio stream
+		fmt.Sprintf("%s/out.ass ", encodingTask.Path) + // output file
+		fmt.Sprintf("-progress unix://%s -y", TempSock_sub(totalDuration, &encodingTask)) // progress tracking
+
+	cmd := exec.Command(
+		"bash",
+		"-c",
+		ffmpegCommand)
+
+	if err := cmd.Run(); err != nil {
 		runningEncodes_sub -= 1
 		encodingTask.Ready = false
 		encodingTask.Encoding = false
 		encodingTask.Failed = true
 		inits.DB.Save(&encodingTask)
 		log.Printf("Error happend while encoding: %v", err.Error())
+		log.Println(ffmpegCommand)
 		return
 	}
 
