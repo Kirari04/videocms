@@ -110,8 +110,10 @@ func runEncode_sub(encodingTask models.Subtitle) {
 }
 
 func TempSock_sub(totalDuration float64, encodingTask *models.Subtitle) string {
-	rand.Seed(time.Now().Unix())
-	sockFileName := path.Join(os.TempDir(), fmt.Sprintf("%s_subtitle_%d_sock", encodingTask.UUID, rand.Int()))
+	s1 := rand.NewSource(time.Now().UnixNano())
+	r1 := rand.New(s1)
+
+	sockFileName := path.Join(os.TempDir(), fmt.Sprintf("%s_subtitle_%d_sock", encodingTask.UUID, r1.Intn(10000)))
 	l, err := net.Listen("unix", sockFileName)
 	if err != nil {
 		panic(err)

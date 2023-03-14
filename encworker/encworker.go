@@ -178,8 +178,10 @@ func runEncode(encodingTask models.Quality) {
 }
 
 func TempSock(totalDuration float64, encodingTask *models.Quality) string {
-	rand.Seed(time.Now().Unix())
-	sockFileName := path.Join(os.TempDir(), fmt.Sprintf("%s_%vx%v_%d_sock", encodingTask.File.UUID, encodingTask.Width, encodingTask.Height, rand.Int()))
+	s1 := rand.NewSource(time.Now().UnixNano())
+	r1 := rand.New(s1)
+
+	sockFileName := path.Join(os.TempDir(), fmt.Sprintf("%s_%vx%v_%d_sock", encodingTask.File.UUID, encodingTask.Width, encodingTask.Height, r1.Intn(10000)))
 	l, err := net.Listen("unix", sockFileName)
 	if err != nil {
 		panic(err)
