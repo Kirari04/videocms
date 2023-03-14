@@ -89,12 +89,8 @@
               "settings", // Settings menu
               "pip", // Picture-in-picture (currently Safari only)
               "airplay", // Airplay (currently Safari only)
+              "fullscreen",
             ];
-
-            if (Qualitys.length > 0) {
-              controls.push("download");
-            }
-            controls.push("fullscreen");
             return controls;
           },
         };
@@ -103,8 +99,6 @@
           video.src = source;
           var player = new Plyr(video, defaultOptions);
           window.player = player;
-          window.player.download =
-            Qualitys.length > 0 ? Qualitys[0].url : "/404";
         } else if (Hls.isSupported()) {
           const hls = new Hls();
           hls.loadSource(source);
@@ -139,8 +133,6 @@
 
             var player = new Plyr(video, defaultOptions);
             window.player = player;
-            window.player.download =
-              Qualitys.length > 0 ? Qualitys[0].url : "/404";
           });
 
           hls.attachMedia(video);
@@ -150,8 +142,6 @@
           video.src = Qualitys[0].url;
           var player = new Plyr(video, defaultOptions);
           window.player = player;
-          window.player.download =
-            Qualitys.length > 0 ? Qualitys[0].url : "/404";
         }
 
         function updateQuality(newQuality) {
