@@ -5,7 +5,6 @@ import (
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"fmt"
-	"os"
 	"regexp"
 
 	"github.com/gofiber/fiber/v2"
@@ -32,7 +31,7 @@ func GetSubtitleData(c *fiber.Ctx) error {
 		return c.Status(400).JSON(errors)
 	}
 
-	reFILE := regexp.MustCompile(`^out\.(vtt)$`)
+	reFILE := regexp.MustCompile(`^out\.(ass)$`)
 
 	if !reFILE.MatchString(requestValidation.FILE) {
 		return c.Status(400).SendString("Bad file format")
@@ -66,9 +65,8 @@ func GetSubtitleData(c *fiber.Ctx) error {
 
 	filePath := fmt.Sprintf("./videos/qualitys/%s/%s/%s", dbLink.File.UUID, requestValidation.SUBUUID, requestValidation.FILE)
 
-	file, err := os.Open(filePath)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).SendString("File not found - lol")
+	if err := c.SendFile(filePath); err != nil {
+		return c.Status(fiber.StatusNotFound).SendString("Subtitle doesn't exist")
 	}
-	return c.SendStream(file)
+	return nil
 }
