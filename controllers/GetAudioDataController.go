@@ -32,7 +32,7 @@ func GetAudioData(c *fiber.Ctx) error {
 		return c.Status(400).JSON(errors)
 	}
 
-	reFILE := regexp.MustCompile(`^audio[0-9]{0,4}\.(m3u8|ts)$`)
+	reFILE := regexp.MustCompile(`^audio[0-9]{0,4}\.(m3u8|ts|wav|mp3)$`)
 
 	if !reFILE.MatchString(requestValidation.FILE) {
 		return c.Status(400).SendString("Bad file format")

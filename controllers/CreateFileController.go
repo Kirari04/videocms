@@ -277,27 +277,32 @@ func CreateFile(c *fiber.Ctx) error {
 
 		log.Printf(" audioName: %s /  audioLang: %s", audioName, audioLang)
 
-		// generate unique identifier for  audio
-		audioId := uuid.NewString()
+		for _, audioOpt := range models.AvailableAudios {
+			// generate unique identifier for  audio
+			audioId := uuid.NewString()
 
-		// save  audio data to database
-		dbAudio := models.Audio{
-			UUID:          audioId,
-			Name:          audioName,
-			Lang:          audioLang,
-			Index:         index,
-			FileID:        dbFile.ID,
-			Path:          fmt.Sprintf("./videos/qualitys/%s/%s", dbFile.UUID, audioId),
-			OriginalCodec: audioStream.CodecName,
-			Encoding:      false,
-			Failed:        false,
-			Ready:         false,
-			Error:         "",
-		}
-		if res := inits.DB.Create(&dbAudio); res.Error != nil {
-			log.Printf("Error saving Audio in database: %v", res.Error)
-			os.Remove(filePath)
-			return c.SendStatus(fiber.StatusInternalServerError)
+			// save  audio data to database
+			dbAudio := models.Audio{
+				UUID:          audioId,
+				Name:          audioName,
+				Lang:          audioLang,
+				Index:         index,
+				Codec:         audioOpt.Codec,
+				Type:          audioOpt.Type,
+				OutputFile:    audioOpt.OutputFile,
+				FileID:        dbFile.ID,
+				Path:          fmt.Sprintf("./videos/qualitys/%s/%s", dbFile.UUID, audioId),
+				OriginalCodec: audioStream.CodecName,
+				Encoding:      false,
+				Failed:        false,
+				Ready:         false,
+				Error:         "",
+			}
+			if res := inits.DB.Create(&dbAudio); res.Error != nil {
+				log.Printf("Error saving Audio in database: %v", res.Error)
+				os.Remove(filePath)
+				return c.SendStatus(fiber.StatusInternalServerError)
+			}
 		}
 	}
 

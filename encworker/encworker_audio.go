@@ -86,18 +86,31 @@ func runEncode_audio(encodingTask models.Audio) {
 
 	absFileInput, _ := filepath.Abs(encodingTask.File.Path)
 	absFolderOutput, _ := filepath.Abs(encodingTask.Path)
-	encFilePath := fmt.Sprintf("%s/audio.m3u8", absFolderOutput)
 
-	ffmpegCommand := "ffmpeg " +
-		fmt.Sprintf("-i %s ", absFileInput) + // input file
-		"-sn " + // disable subtitle
-		"-vn " + // disable video stream
-		"-map 0 " + // mapping first audio stream
-		`-af aformat=channel_layouts="7.1|5.1|stereo" ` +
-		"-c:a aac " + // disable audio
-		"-f hls -hls_list_size 0 -hls_time 10 -start_number 0 " + // hls playlist
-		fmt.Sprintf("%s ", encFilePath) + // output file
-		fmt.Sprintf("-progress unix://%s -y", TempSock_audio(totalDuration, &encodingTask)) // progress tracking
+	var ffmpegCommand string = "echo Audioencoding type didnt match && exit 1"
+	switch encodingTask.Type {
+	case "hls":
+		ffmpegCommand = "ffmpeg " +
+			fmt.Sprintf("-i %s ", absFileInput) + // input file
+			"-sn " + // disable subtitle
+			"-vn " + // disable video stream
+			fmt.Sprintf("-map 0:a:%d ", encodingTask.Index) + // mapping first audio stream
+			`-af aformat=channel_layouts="7.1|5.1|stereo" ` +
+			fmt.Sprintf("-c:a %s ", encodingTask.Codec) + // setting audio codec
+			"-f hls -hls_list_size 0 -hls_time 10 -start_number 0 " + // hls playlist
+			fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
+			fmt.Sprintf("-progress unix://%s -y", TempSock_audio(totalDuration, &encodingTask)) // progress tracking
+	case "opus":
+		ffmpegCommand = "ffmpeg " +
+			fmt.Sprintf("-i %s ", absFileInput) + // input file
+			"-sn " + // disable subtitle
+			"-vn " + // disable video stream
+			fmt.Sprintf("-map 0:a:%d ", encodingTask.Index) + // mapping first audio stream
+			`-af aformat=channel_layouts="7.1|5.1|stereo" ` +
+			fmt.Sprintf("-c:a %s ", encodingTask.Codec) + // setting audio codec
+			fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
+			fmt.Sprintf("-progress unix://%s -y", TempSock_audio(totalDuration, &encodingTask)) // progress tracking
+	}
 
 	cmd := exec.Command(
 		"bash",
