@@ -282,7 +282,7 @@ func CreateFile(c *fiber.Ctx) error {
 			audioId := uuid.NewString()
 
 			// save  audio data to database
-			dbAudio := models.Audio{
+			if res := inits.DB.Create(&models.Audio{
 				UUID:          audioId,
 				Name:          audioName,
 				Lang:          audioLang,
@@ -297,8 +297,7 @@ func CreateFile(c *fiber.Ctx) error {
 				Failed:        false,
 				Ready:         false,
 				Error:         "",
-			}
-			if res := inits.DB.Create(&dbAudio); res.Error != nil {
+			}); res.Error != nil {
 				log.Printf("Error saving Audio in database: %v", res.Error)
 				os.Remove(filePath)
 				return c.SendStatus(fiber.StatusInternalServerError)
