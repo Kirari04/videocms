@@ -36,7 +36,6 @@ func GetM3u8Data(c *fiber.Ctx) error {
 		Model(&models.Link{}).
 		Preload("File").
 		Preload("File.Qualitys").
-		Preload("File.Subtitles").
 		Preload("File.Audios").
 		Where(&models.Link{
 			UUID: requestValidation.UUID,
@@ -49,8 +48,11 @@ func GetM3u8Data(c *fiber.Ctx) error {
 	var dbAudioPtr *models.Audio
 	if requestValidation.AUDIOUUID != nil {
 		for _, audio := range dbLink.File.Audios {
-			if audio.UUID == *requestValidation.AUDIOUUID {
+			if audio.Ready &&
+				audio.UUID == *requestValidation.AUDIOUUID &&
+				audio.Type == "hls" {
 				dbAudioPtr = &audio
+				break
 			}
 		}
 	}
@@ -64,7 +66,7 @@ func getM3u8Stream(dbLink *models.Link, qualitys *[]models.Quality, audio *model
 		m3u8 += fmt.Sprintf(
 			"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"AAC\",NAME=\"Subtitle\",LANGUAGE=\"%s\",URI=\"%s\"",
 			audio.Lang,
-			fmt.Sprintf("/videos/qualitys/%s/%s/audio/audio.m3u8", dbLink.UUID, audio.UUID),
+			fmt.Sprintf("/videos/qualitys/%s/%s/audio/%s", dbLink.UUID, audio.UUID, audio.OutputFile),
 		)
 	}
 	for _, quality := range *qualitys {
