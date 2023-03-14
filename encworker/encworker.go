@@ -18,7 +18,7 @@ import (
 )
 
 var runningEncodes int = 0
-var maxRunningEncodes int = 1
+var maxRunningEncodes int = 2
 
 func StartEncode() {
 	for {
@@ -93,19 +93,67 @@ func runEncode(encodingTask models.Quality) {
 	absFolderOutput, _ := filepath.Abs(encodingTask.Path)
 	encFilePath := fmt.Sprintf("%s/%s", absFolderOutput, encodingTask.OutputFile)
 
-	ffmpegCommand := "ffmpeg " +
-		fmt.Sprintf("-i %s ", absFileInput) + // input file
-		"-sn " + // disable subtitle
-		"-an " + // disable audio
-		"-map 0:v:0 " + // mapping first video stream
-		"-c:v libx264 " + // setting video codec libx264 | libaom-av1
-		fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
-		fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
-		fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
-		"-f hls -hls_list_size 0 -hls_time 10 -start_number 0 " + // hls playlist
-		fmt.Sprintf("%s ", encFilePath) + // output file
-		fmt.Sprintf("-progress unix://%s -y", TempSock(totalDuration, &encodingTask)) // progress tracking
-	log.Println(ffmpegCommand)
+	var ffmpegCommand string = "echo Encoding type didnt match && exit 1"
+	switch encodingTask.Type {
+	case "hls":
+		ffmpegCommand = "ffmpeg " +
+			fmt.Sprintf("-i %s ", absFileInput) + // input file
+			"-sn " + // disable subtitle
+			"-an " + // disable audio
+			"-map 0:v:0 " + // mapping first video stream
+			"-c:v libx264 " + // setting video codec libx264 | libaom-av1
+			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
+			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
+			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
+			"-f hls -hls_list_size 0 -hls_time 10 -start_number 0 " + // hls playlist
+			fmt.Sprintf("%s ", encFilePath) + // output file
+			fmt.Sprintf("-progress unix://%s -y", TempSock(totalDuration, &encodingTask)) // progress tracking
+	case "vp9":
+		ffmpegCommand = "ffmpeg " + // starting pass 1
+			fmt.Sprintf("-i %s ", absFileInput) + // input file
+			" -c:v libvpx-vp9 " +
+			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
+			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
+			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
+			" -pass 1 -an -f null /dev/null && " + // pass 1 flags
+			"ffmpeg " + // starting pass 2
+			fmt.Sprintf("-i %s ", absFileInput) + // input file
+			"-sn " + // disable subtitle
+			"-map 0:v:0 " + // mapping first video stream
+			"-map 0:a:0 " + // mapping first audio stream
+			`-af aformat=channel_layouts="7.1|5.1|stereo" ` + // audio channel layouts
+			"-c:v libvpx-vp9 " + // setting video codec libx264 | libaom-av1
+			"-c:a libopus " + // setting audio codec
+			"-pass 2 " + // setting pass 2 flag
+			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
+			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
+			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
+			fmt.Sprintf("%s ", encFilePath) + // output file
+			fmt.Sprintf("-progress unix://%s -y", TempSock(totalDuration, &encodingTask)) // progress tracking
+	case "av1":
+		ffmpegCommand = "ffmpeg " + // starting pass 1
+			fmt.Sprintf("-i %s ", absFileInput) + // input file
+			" -c:v libaom-av1 " +
+			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
+			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
+			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
+			" -pass 1 -an -f null /dev/null && " + // pass 1 flags
+			"ffmpeg " + // starting pass 2
+			fmt.Sprintf("-i %s ", absFileInput) + // input file
+			"-sn " + // disable subtitle
+			"-map 0:v:0 " + // mapping first video stream
+			"-map 0:a:0 " + // mapping first audio stream
+			`-af aformat=channel_layouts="7.1|5.1|stereo" ` + // audio channel layouts
+			"-c:v libaom-av1 " + // setting video codec libx264 | libaom-av1
+			"-c:a libopus " + // setting audio codec
+			"-pass 2 " + // setting pass 2 flag
+			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
+			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
+			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
+			fmt.Sprintf("%s ", encFilePath) + // output file
+			fmt.Sprintf("-progress unix://%s -y", TempSock(totalDuration, &encodingTask)) // progress tracking
+	}
+
 	cmd := exec.Command(
 		"bash",
 		"-c",
@@ -118,6 +166,7 @@ func runEncode(encodingTask models.Quality) {
 		encodingTask.Failed = true
 		inits.DB.Save(&encodingTask)
 		log.Printf("Error happend while encoding: %v", err.Error())
+		log.Println(ffmpegCommand)
 		return
 	}
 
