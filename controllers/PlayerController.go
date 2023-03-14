@@ -7,7 +7,6 @@ import (
 	"ch/kirari04/videocms/models"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -39,7 +38,6 @@ func PlayerController(c *fiber.Ctx) error {
 		}).
 		First(&dbLink)
 	if res.Error != nil {
-		log.Print(res.Error)
 		return c.Status(fiber.StatusNotFound).Render("404", fiber.Map{})
 	}
 
