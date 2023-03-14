@@ -10,6 +10,7 @@ type Quality struct {
 	Height       int64
 	Width        int64
 	Crf          int `json:"-"`
+	Type         string
 	AvgFrameRate float64
 	Path         string `gorm:"size:120;" json:"-"`
 	OutputFile   string
@@ -28,6 +29,8 @@ type AvailableQuality struct {
 	Height     int64
 	Width      int64
 	Crf        int
+	Type       string // hls | vp9 | av1
+	OutputFile string
 }
 
 var AvailableQualitys = []AvailableQuality{
@@ -37,6 +40,8 @@ var AvailableQualitys = []AvailableQuality{
 		Height:     240,
 		Width:      426,
 		Crf:        30,
+		Type:       "hls",
+		OutputFile: "out.m3u8",
 	},
 	{
 		Name:       "360p",
@@ -44,6 +49,8 @@ var AvailableQualitys = []AvailableQuality{
 		Height:     360,
 		Width:      640,
 		Crf:        26,
+		Type:       "hls",
+		OutputFile: "out.m3u8",
 	},
 	{
 		Name:       "480p",
@@ -51,6 +58,8 @@ var AvailableQualitys = []AvailableQuality{
 		Height:     480,
 		Width:      854,
 		Crf:        26,
+		Type:       "hls",
+		OutputFile: "out.m3u8",
 	},
 	{
 		Name:       "720p",
@@ -58,6 +67,8 @@ var AvailableQualitys = []AvailableQuality{
 		Height:     720,
 		Width:      1280,
 		Crf:        26,
+		Type:       "hls",
+		OutputFile: "out.m3u8",
 	},
 	{
 		Name:       "1080p",
@@ -65,6 +76,8 @@ var AvailableQualitys = []AvailableQuality{
 		Height:     1080,
 		Width:      1920,
 		Crf:        24,
+		Type:       "hls",
+		OutputFile: "out.m3u8",
 	},
 	{
 		Name:       "1440p",
@@ -72,6 +85,8 @@ var AvailableQualitys = []AvailableQuality{
 		Height:     1440,
 		Width:      2560,
 		Crf:        24,
+		Type:       "hls",
+		OutputFile: "out.m3u8",
 	},
 	{
 		Name:       "2160p",
@@ -79,13 +94,16 @@ var AvailableQualitys = []AvailableQuality{
 		Height:     2160,
 		Width:      3840,
 		Crf:        24,
+		Type:       "hls",
+		OutputFile: "out.m3u8",
 	},
-	// removed 8k from list
-	// {
-	// 	Name:       "4320p",
-	// 	FolderName: "4320p",
-	// 	Height:     4320,
-	// 	Width:      7680,
-	// 	Crf:        24,
-	// },
+	{
+		Name:       "480p",
+		FolderName: "480p",
+		Height:     480,
+		Width:      854,
+		Crf:        30,
+		Type:       "av1",
+		OutputFile: "out.mp4",
+	},
 }
