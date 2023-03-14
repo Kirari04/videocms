@@ -13,9 +13,9 @@ import (
 
 func GetAudioData(c *fiber.Ctx) error {
 	type Request struct {
-		UUID    string `validate:"required,uuid_rfc4122"`
-		SUBUUID string `validate:"required,uuid_rfc4122"`
-		FILE    string `validate:"required"`
+		UUID      string `validate:"required,uuid_rfc4122"`
+		AUDIOUUID string `validate:"required,uuid_rfc4122"`
+		FILE      string `validate:"required"`
 	}
 	var requestValidation Request
 	if err := c.ParamsParser(&requestValidation); err != nil {
@@ -51,7 +51,7 @@ func GetAudioData(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).SendString("Link doesn't exist")
 	}
 
-	filePath := fmt.Sprintf("./videos/qualitys/%s/%s/%s", dbLink.File.UUID, requestValidation.SUBUUID, requestValidation.FILE)
+	filePath := fmt.Sprintf("./videos/qualitys/%s/%s/%s", dbLink.File.UUID, requestValidation.AUDIOUUID, requestValidation.FILE)
 
 	file, err := os.Open(filePath)
 	if err != nil {
