@@ -5,7 +5,6 @@ import (
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"fmt"
-	"os"
 	"regexp"
 
 	"github.com/gofiber/fiber/v2"
@@ -32,7 +31,7 @@ func GetAudioData(c *fiber.Ctx) error {
 		return c.Status(400).JSON(errors)
 	}
 
-	reFILE := regexp.MustCompile(`^audio[0-9]{0,4}\.(m3u8|ts|wav|mp3)$`)
+	reFILE := regexp.MustCompile(`^audio[0-9]{0,4}\.(m3u8|ts|wav|mp3|ogg)$`)
 
 	if !reFILE.MatchString(requestValidation.FILE) {
 		return c.Status(400).SendString("Bad file format")
@@ -44,18 +43,30 @@ func GetAudioData(c *fiber.Ctx) error {
 	if dbRes := inits.DB.
 		Model(&models.Link{}).
 		Preload("File").
+		Preload("File.Audios").
 		Where(&models.Link{
 			UUID: requestValidation.UUID,
 		}).
 		First(&dbLink); dbRes.Error != nil {
-		return c.Status(fiber.StatusNotFound).SendString("Link doesn't exist")
+		return c.Status(fiber.StatusNotFound).SendString("Audio doesn't exist")
+	}
+
+	//check if audio uuid exists
+	audioExists := false
+	for _, audio := range dbLink.File.Audios {
+		if audio.Ready &&
+			audio.UUID == requestValidation.AUDIOUUID {
+			audioExists = true
+		}
+	}
+	if !audioExists {
+		return c.Status(fiber.StatusNotFound).SendString("Audio doesn't exist")
 	}
 
 	filePath := fmt.Sprintf("./videos/qualitys/%s/%s/%s", dbLink.File.UUID, requestValidation.AUDIOUUID, requestValidation.FILE)
 
-	file, err := os.Open(filePath)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).SendString("File not found - lol")
+	if err := c.SendFile(filePath); err != nil {
+		return c.Status(fiber.StatusNotFound).SendString("Audio doesn't exist")
 	}
-	return c.SendStream(file)
+	return nil
 }
