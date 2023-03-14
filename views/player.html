@@ -139,9 +139,11 @@
           window.hls = hls;
         } else {
           // use fallback url / download url
-          video.src = Qualitys[0].url;
-          var player = new Plyr(video, defaultOptions);
-          window.player = player;
+          if (Qualitys.length === 1) {
+            video.src = Qualitys[0].url;
+            var player = new Plyr(video, defaultOptions);
+            window.player = player;
+          }
         }
 
         function updateQuality(newQuality) {
