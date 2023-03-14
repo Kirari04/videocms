@@ -48,9 +48,9 @@ func PlayerController(c *fiber.Ctx) error {
 	var jsonQualitys []map[string]string
 	var jsonEncQualitys []map[string]string
 	for _, qualiItem := range dbLink.File.Qualitys {
-		if qualiItem.Ready {
+		if qualiItem.Ready && qualiItem.Type != "hls" {
 			jsonQualitys = append(jsonQualitys, map[string]string{
-				"file":   fmt.Sprintf("/videos/qualitys/%s/%s/%s", dbLink.UUID, qualiItem.Name, qualiItem.OutputFile),
+				"url":    fmt.Sprintf("/videos/qualitys/%s/%s/%s", dbLink.UUID, qualiItem.Name, qualiItem.OutputFile),
 				"label":  qualiItem.Name,
 				"height": strconv.Itoa(int(qualiItem.Height)),
 				"width":  strconv.Itoa(int(qualiItem.Width)),
@@ -66,12 +66,7 @@ func PlayerController(c *fiber.Ctx) error {
 		}
 
 	}
-	if len(jsonQualitys) == 0 {
-		return c.Render("encoding", fiber.Map{
-			"Title":    dbLink.Name,
-			"Qualitys": dbLink.File.Qualitys,
-		})
-	}
+
 	rawQuality, _ := json.Marshal(jsonQualitys)
 	rawEncQualitys, _ := json.Marshal(jsonEncQualitys)
 
@@ -88,12 +83,12 @@ func PlayerController(c *fiber.Ctx) error {
 	rawSubtitles, _ := json.Marshal(jsonSubtitles)
 
 	var jsonAudios []map[string]string
-	for _, subItem := range dbLink.File.Audios {
-		if subItem.Ready {
+	for _, audioItem := range dbLink.File.Audios {
+		if audioItem.Ready {
 			jsonAudios = append(jsonAudios, map[string]string{
-				"url":  fmt.Sprintf("/videos/qualitys/%s/%s/audio/audio.m3u8", dbLink.UUID, subItem.UUID),
-				"name": subItem.Name,
-				"lang": subItem.Lang,
+				"uuid": audioItem.UUID,
+				"name": audioItem.Name,
+				"lang": audioItem.Lang,
 			})
 		}
 	}
