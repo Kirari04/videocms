@@ -5,8 +5,10 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -71,11 +73,14 @@ func PlayerController(c *fiber.Ctx) error {
 	var jsonSubtitles []map[string]string
 	for _, subItem := range dbLink.File.Subtitles {
 		if subItem.Ready {
-			jsonSubtitles = append(jsonSubtitles, map[string]string{
-				"url":  fmt.Sprintf("/videos/qualitys/%s/%s/subtitle/out.vtt", dbLink.UUID, subItem.UUID),
-				"name": subItem.Name,
-				"lang": subItem.Lang,
-			})
+			subPath := fmt.Sprintf("./videos/qualitys/%s/%s/out.ass", dbLink.File.UUID, subItem.UUID)
+			if subContent, err := ioutil.ReadFile(subPath); err == nil {
+				jsonSubtitles = append(jsonSubtitles, map[string]string{
+					"data": base64.StdEncoding.EncodeToString(subContent),
+					"name": subItem.Name,
+					"lang": subItem.Lang,
+				})
+			}
 		}
 	}
 	rawSubtitles, _ := json.Marshal(jsonSubtitles)
@@ -85,6 +90,7 @@ func PlayerController(c *fiber.Ctx) error {
 		if audioItem.Ready {
 			jsonAudios = append(jsonAudios, map[string]string{
 				"uuid": audioItem.UUID,
+				"type": audioItem.Type,
 				"name": audioItem.Name,
 				"lang": audioItem.Lang,
 			})
