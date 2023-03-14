@@ -106,13 +106,13 @@ var AvailableQualitys = []AvailableQuality{
 	// 	Type:       "av1",
 	// 	OutputFile: "out.mp4",
 	// },
-	{
-		Name:       "480p",
-		FolderName: "480p",
-		Height:     480,
-		Width:      854,
-		Crf:        30,
-		Type:       "vp9",
-		OutputFile: "out.webm",
-	},
+	// {
+	// 	Name:       "480p",
+	// 	FolderName: "480p",
+	// 	Height:     480,
+	// 	Width:      854,
+	// 	Crf:        30,
+	// 	Type:       "vp9",
+	// 	OutputFile: "out.webm",
+	// },
 }
