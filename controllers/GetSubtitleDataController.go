@@ -44,11 +44,24 @@ func GetSubtitleData(c *fiber.Ctx) error {
 	if dbRes := inits.DB.
 		Model(&models.Link{}).
 		Preload("File").
+		Preload("File.Subtitles").
 		Where(&models.Link{
 			UUID: requestValidation.UUID,
 		}).
 		First(&dbLink); dbRes.Error != nil {
-		return c.Status(fiber.StatusNotFound).SendString("Link doesn't exist")
+		return c.Status(fiber.StatusNotFound).SendString("Subtitle doesn't exist")
+	}
+
+	//check if subtitle uuid exists
+	subExists := false
+	for _, sub := range dbLink.File.Subtitles {
+		if sub.Ready &&
+			sub.UUID == requestValidation.SUBUUID {
+			subExists = true
+		}
+	}
+	if !subExists {
+		return c.Status(fiber.StatusNotFound).SendString("Subtitle doesn't exist")
 	}
 
 	filePath := fmt.Sprintf("./videos/qualitys/%s/%s/%s", dbLink.File.UUID, requestValidation.SUBUUID, requestValidation.FILE)
