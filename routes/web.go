@@ -19,5 +19,6 @@ func Web() {
 	videoData := inits.App.Group("/videos/qualitys")
 	videoData.Get("/:UUID/:QUALITY/:FILE", controllers.GetVideoData)
 	videoData.Get("/:UUID/:SUBUUID/subtitle/:FILE", controllers.GetSubtitleData)
-	videoData.Get("/:UUID/:SUBUUID/audio/:FILE", controllers.GetAudioData)
+	videoData.Get("/:UUID/:AUDIOUUID/audio/:FILE", controllers.GetAudioData)
+	videoData.Get("/:UUID/:AUDIOUUID/stream/master.m3u8", controllers.GetM3u8Data)
 }
