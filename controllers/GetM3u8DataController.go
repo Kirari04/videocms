@@ -73,7 +73,7 @@ func getM3u8Stream(dbLink *models.Link, qualitys *[]models.Quality, audio *model
 		if quality.Type == "hls" && quality.Ready {
 			m3u8 += fmt.Sprintf(
 				"\n#EXT-X-STREAM-INF:BANDWIDTH=%d,AUDIO=\"AAC\",RESOLUTION=%s,CODECS=\"avc1.640015,mp4a.40.2\"\n%s",
-				int64(quality.Height*quality.Width*20),
+				int64(quality.Height*quality.Width*2),
 				fmt.Sprintf("%dx%d", quality.Height, quality.Height),
 				fmt.Sprintf("/videos/qualitys/%s/%s/%s", dbLink.UUID, quality.Name, quality.OutputFile),
 			)
