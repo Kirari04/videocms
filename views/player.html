@@ -72,21 +72,29 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2/dist/sweetalert2.all.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/assjs/dist/ass.min.js"></script>
     <script>
-      document.addEventListener("DOMContentLoaded", () => {
-        const source = `/videos/qualitys/${UUID}/${
-          Audios.find((Audio) => Audio.type == "hls").uuid
-        }/stream/master.m3u8`;
-        const video = document.querySelector("video");
-        if (Subtitles.length > 0) {
-          const ass = new ASS(atob(Subtitles[0].data), video, {
-            resampling: "video_width",
-            container: document.querySelector(".subs"),
-          });
-          ass.show();
-          window.onresize = () => ass.resize();
-          window.ass = ass;
-        }
+      const source = `/videos/qualitys/${UUID}/${
+        Audios.find((Audio) => Audio.type == "hls").uuid
+      }/stream/master.m3u8`;
+      const video = document.querySelector("video");
 
+      function PlayerInit(options) {
+        var player = new Plyr(video, options);
+        window.player = player;
+        if (Subtitles.length > 0) {
+          SubtitleInit(0);
+        }
+      }
+      function SubtitleInit(index) {
+        const ass = new ASS(atob(Subtitles[index].data), video, {
+          resampling: "video_width",
+          container: document.querySelector(".subs"),
+        });
+        ass.show();
+        window.onresize = () => ass.resize();
+        window.ass = ass;
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
         const defaultOptions = {
           keyboard: { focused: false, global: true },
           controls: () => {
@@ -112,8 +120,7 @@
 
         if (video.canPlayType("application/vnd.apple.mpegurl")) {
           video.src = source;
-          var player = new Plyr(video, defaultOptions);
-          window.player = player;
+          PlayerInit(defaultOptions);
         } else if (Hls.isSupported()) {
           const hls = new Hls();
           hls.loadSource(source);
@@ -145,9 +152,7 @@
                 span.innerHTML = `AUTO`;
               }
             });
-
-            var player = new Plyr(video, defaultOptions);
-            window.player = player;
+            PlayerInit(defaultOptions);
           });
 
           hls.attachMedia(video);
@@ -156,8 +161,7 @@
           // use fallback url / download url
           if (Qualitys.length === 1) {
             video.src = Qualitys[0].url;
-            var player = new Plyr(video, defaultOptions);
-            window.player = player;
+            PlayerInit(defaultOptions);
           }
         }
 
