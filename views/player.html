@@ -106,6 +106,13 @@
       timerProgressBar: true,
     })
 
+    setInterval(() => {
+      if (window.ass) {
+        window.ass.resize()
+      }
+    }, 1000)
+
+
     function PlayerInit(options) {
       var player = new Plyr(video, options);
       player.on("ready", (event) => {
