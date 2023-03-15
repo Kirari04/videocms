@@ -17,13 +17,16 @@
     html,
     body,
     .container {
-      height: 100vh;
-      width: 100vw;
+      height: 100%;
+      width: 100%;
       padding: 0;
       margin: 0;
       background: #1a1927;
-      position: relative;
+      position: fixed;
+      left: 0;
+      top: 0;
       font-family: 'Ubuntu', sans-serif;
+      overflow: hidden;
     }
 
     .plyr {
@@ -38,6 +41,7 @@
       left: 0;
       top: 0;
       z-index: 10;
+      overflow: hidden;
     }
 
     .plyr__controls {
