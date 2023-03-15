@@ -108,6 +108,27 @@
 
     function PlayerInit(options) {
       var player = new Plyr(video, options);
+      player.on("ready", (event) => {
+        if (window.ass) {
+          setTimeout(() => {
+            window.ass.resize()
+          }, 1000)
+        }
+      })
+      player.on("enterfullscreen", (event) => {
+        if (window.ass) {
+          setTimeout(() => {
+            window.ass.resize()
+          }, 1000)
+        }
+      })
+      player.on("exitfullscreen", (event) => {
+        if (window.ass) {
+          setTimeout(() => {
+            window.ass.resize()
+          }, 1000)
+        }
+      })
       window.player = player;
       if (Subtitles.length > 0) {
         SubtitleInit(0);
@@ -139,9 +160,14 @@
         container: document.querySelector(".subs"),
       });
       ass.show();
-      window.onresize = () => ass.resize();
       window.ass = ass;
     }
+
+    window.addEventListener("resize", () => {
+      if (window.ass) {
+        window.ass.resize()
+      }
+    })
 
     document.addEventListener("DOMContentLoaded", () => {
       const defaultOptions = {
