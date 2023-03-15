@@ -8,7 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -74,7 +74,7 @@ func PlayerController(c *fiber.Ctx) error {
 	for _, subItem := range dbLink.File.Subtitles {
 		if subItem.Ready {
 			subPath := fmt.Sprintf("./videos/qualitys/%s/%s/out.ass", dbLink.File.UUID, subItem.UUID)
-			if subContent, err := ioutil.ReadFile(subPath); err == nil {
+			if subContent, err := os.ReadFile(subPath); err == nil {
 				jsonSubtitles = append(jsonSubtitles, map[string]string{
 					"data": base64.StdEncoding.EncodeToString(subContent),
 					"name": subItem.Name,
