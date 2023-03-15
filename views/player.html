@@ -6,8 +6,13 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Document</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://cdn.plyr.io">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://cdn.plyr.io/3.7.7/plyr.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-dark@5/dark.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     html,
     body,
@@ -18,6 +23,7 @@
       margin: 0;
       background: #1a1927;
       position: relative;
+      font-family: 'Ubuntu', sans-serif;
     }
 
     .plyr {
@@ -92,11 +98,39 @@
       }
     })
 
+    const ShortToast = Swal.mixin({
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 1000,
+      timerProgressBar: true,
+    })
+
     function PlayerInit(options) {
       var player = new Plyr(video, options);
       window.player = player;
       if (Subtitles.length > 0) {
         SubtitleInit(0);
+      }
+      // save position
+      setInterval(() => {
+        if (!window.player.paused) {
+          localStorage.setItem(`POSITION-${UUID}`, window.player.currentTime);
+        }
+      }, 1000);
+
+      const oldPosition = parseInt(localStorage.getItem(`POSITION-${UUID}`));
+      if (oldPosition > 0) {
+        Swal.fire({
+          title: "Do you want to start where you left last time?",
+          showDenyButton: true,
+          confirmButtonText: "Yes",
+          denyButtonText: "No",
+        }).then((result) => {
+          if (result.isConfirmed) {
+            window.player.currentTime = oldPosition;
+          }
+        });
       }
     }
     function SubtitleInit(index) {
@@ -112,6 +146,12 @@
     document.addEventListener("DOMContentLoaded", () => {
       const defaultOptions = {
         seekTime: 5,
+        fullscreen: {
+          enabled: true,
+          fallback: true,
+          iosNative: false,
+          container: ".container"
+        },
         iconUrl: "/icons/svgs.svg",
         keyboard: { focused: false, global: true },
         controls: () => {
@@ -198,27 +238,6 @@
             }
           });
         }
-      }
-
-      // save position
-      setInterval(() => {
-        if (!window.player.paused) {
-          localStorage.setItem(`POSITION-${UUID}`, window.player.currentTime);
-        }
-      }, 1000);
-
-      const oldPosition = parseInt(localStorage.getItem(`POSITION-${UUID}`));
-      if (oldPosition > 0) {
-        Swal.fire({
-          title: "Do you want to start where you left last time?",
-          showDenyButton: true,
-          confirmButtonText: "Yes",
-          denyButtonText: "No",
-        }).then((result) => {
-          if (result.isConfirmed) {
-            window.player.currentTime = oldPosition;
-          }
-        });
       }
     });
   </script>
