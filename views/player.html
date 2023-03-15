@@ -111,15 +111,16 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       const defaultOptions = {
+        seekTime: 5,
+        iconUrl: "/icons/svgs.svg",
         keyboard: { focused: false, global: true },
         controls: () => {
           let controls = [
             "progress", // The progress bar and scrubber for playback and buffering
             "play-large", // The large play button in the center
-            "rewind", // Rewind by the seek time (default 10 seconds)
             "play", // Play/pause playback
+            "rewind", // Rewind by the seek time (default 10 seconds)
             "fast-forward", // Fast forward by the seek time (default 10 seconds)
-            "restart", // Restart playback
             "current-time", // The current time of playback
             "duration", // The full duration of the media
             "mute", // Toggle mute
