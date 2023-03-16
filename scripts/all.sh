@@ -7,3 +7,6 @@ sleep 1
 bash ./scripts/demo_build.sh &> ./scripts/log/demo_build.log &
 sleep 1
 bash ./scripts/demo_panel_build.sh &> ./scripts/log/demo_panel_build.log &
+sleep 1
+# watching the slowest build
+tail -F ./scripts/log/demo_panel_build.log
