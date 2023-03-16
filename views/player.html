@@ -284,6 +284,11 @@
 			ass.show();
 			window.ass = ass;
 			localStorage.setItem("lastusedlang", Subtitles[index].lang)
+
+			ShortToast.fire({
+				icon: 'info',
+				title: `Enabled ${Subtitles[index].name} [${Subtitles[index].lang}]`
+			})
 		}
 
 		// subtitle sizing & positioning
