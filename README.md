@@ -1,8 +1,10 @@
 # Video-CMS
 This project is a cms for hosting your videos.
 
-## Api-Doc
+## Questions & Feature Requests
+You can get ask project related stuff on <a href="https://videocms.tawk.help/" target="_blank"> Tawk </a>.
 
+## Api-Doc
 View the latest documentation on <a href="https://documenter.getpostman.com/view/15650779/2s93CPrY2w" target="_blank">Postman</a>
 
 ## Deploy
@@ -25,7 +27,7 @@ Deploy with docker: `docker run -p 3000:3000 kirari04/videocms:demo_panel` <br>
 You can also use the live preview here: <a href="https://videocms.senpai.one/" target="_blank">videocms.senpai.one</a>
 
 
-## Images for Arm CPU's like raspberry pi
+## Images For Arm64 CPU's Like Raspberry Pi
 just use the same images like before just add  `_arm64` to the end of the tag. <br>
 Here some examples
 ```
@@ -34,7 +36,7 @@ docker run -p 3000:3000 kirari04/videocms:panel_arm64
 docker run -p 3000:3000 kirari04/videocms:demo_arm64
 ```
 
-## Authentication / Default admin user
+## Authentication / Default Admin
 Default username & password are `admin` and `12345678`
 
 ## Configuration
@@ -51,7 +53,7 @@ RatelimitEnabled=true
 
 ## Example
 
-### Clone / Hash upload
+### Clone / Hash Upload
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/sjcl/sjcl.min.js"></script>
