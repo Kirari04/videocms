@@ -2,7 +2,7 @@
 This project is a cms for hosting your videos.
 
 ## Questions & Feature Requests
-You can get ask project related stuff on <a href="https://videocms.tawk.help/" target="_blank"> Tawk </a>.
+You can ask project related questions & feature requests on <a href="https://videocms.tawk.help/" target="_blank"> Tawk </a>.
 
 ## Api-Doc
 View the latest documentation on <a href="https://documenter.getpostman.com/view/15650779/2s93CPrY2w" target="_blank">Postman</a>
