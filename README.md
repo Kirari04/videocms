@@ -48,3 +48,16 @@ EncodingEnabled=false
 UploadEnabled=false
 RatelimitEnabled=true
 ```
+
+## Example
+
+### Clone / Hash upload
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/sjcl/sjcl.min.js"></script>
+<script>
+    // Assume 'bigBlobFile' is your big blob file
+    let hash = sjcl.hash.sha256.hash(bigBlobFile);
+    let hexHash = sjcl.codec.hex.fromBits(hash);
+</script>
+```
