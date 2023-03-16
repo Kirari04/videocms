@@ -25,3 +25,9 @@ type FileCreateValidation struct {
 	Name           string `validate:"required,min=1,max=120"`
 	ParentFolderID uint   `validate:"number"`
 }
+
+type FileCloneValidation struct {
+	Name           string `validate:"required,min=1,max=120"`
+	Sha256         string `validate:"required,sha256"`
+	ParentFolderID uint   `validate:"number"`
+}
