@@ -23,6 +23,13 @@ type LinkListValidation struct {
 type LinkDeleteValidation struct {
 	LinkID uint `validate:"required,number"`
 }
+
+type LinkUpdateValidation struct {
+	LinkID         uint   `validate:"required,number"`
+	Name           string `validate:"required,min=1,max=120"`
+	ParentFolderID uint   `validate:"number"`
+}
+
 type LinksDeleteValidation struct {
 	LinkIDs []LinkDeleteValidation `validate:"required"`
 }
