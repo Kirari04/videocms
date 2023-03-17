@@ -23,6 +23,7 @@ func Api() {
 
 	protectedApi := inits.Api.Use(middlewares.Auth)
 	protectedApi.Post("/folder", controllers.CreateFolder)
+	protectedApi.Put("/folder", controllers.UpdateFolder)
 	protectedApi.Delete("/folder", controllers.DeleteFolder)
 	protectedApi.Get("/folders", controllers.ListFolders)
 	protectedApi.Delete("/folders", controllers.DeleteFolders)
@@ -31,7 +32,7 @@ func Api() {
 	protectedApi.Post("/file/clone", controllers.CloneFile)
 
 	protectedApi.Get("/file", controllers.GetFile)
-	protectedApi.Put("/file", controllers.UpdateFolder)
+	protectedApi.Put("/file", controllers.UpdateFile)
 	protectedApi.Delete("/file", controllers.DeleteFileController)
 	protectedApi.Get("/files", controllers.ListFiles)
 	protectedApi.Delete("/files", controllers.DeleteFilesController)
