@@ -111,7 +111,7 @@ func runEncode(encodingTask models.Quality) {
 	case "vp9":
 		ffmpegCommand = "ffmpeg " + // starting pass 1
 			fmt.Sprintf("-i %s ", absFileInput) + // input file
-			" -c:v libvpx-vp9 " +
+			"-c:v libvpx-vp9 " +
 			"-b:v 0 " +
 			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
 			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
@@ -134,7 +134,7 @@ func runEncode(encodingTask models.Quality) {
 	case "av1":
 		ffmpegCommand = "ffmpeg " + // starting pass 1
 			fmt.Sprintf("-i %s ", absFileInput) + // input file
-			" -c:v libaom-av1 " +
+			"-c:v libaom-av1 " +
 			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
 			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
 			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
