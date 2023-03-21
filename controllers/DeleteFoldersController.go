@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
@@ -46,6 +47,16 @@ func DeleteFolders(c *fiber.Ctx) error {
 				FailedField: "FolderIDs",
 				Tag:         "none",
 				Value:       "Array is empty",
+			},
+		})
+	}
+
+	if int64(len(folderValidation.FolderIDs)) > config.ENV.MaxItemsMultiDelete {
+		return c.Status(400).JSON([]helpers.ValidationError{
+			{
+				FailedField: "FolderIDs",
+				Tag:         "none",
+				Value:       "Max requested items exceeded",
 			},
 		})
 	}
