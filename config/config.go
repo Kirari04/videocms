@@ -20,7 +20,10 @@ type Config struct {
 	RatelimitEnabled  *bool `validate:"required,boolean"`
 	CloudflareEnabled *bool `validate:"required,boolean"`
 
-	MaxItemsMultiDelete int64 `validate:"required,number,min=1"`
+	MaxItemsMultiDelete     int64 `validate:"required,number,min=1"`
+	MaxRunningEncodes       int64 `validate:"required,number,min=1"`
+	MaxRunningEncodes_sub   int64 `validate:"required,number,min=1"`
+	MaxRunningEncodes_audio int64 `validate:"required,number,min=1"`
 }
 
 type ConfigMap map[string]string
@@ -41,6 +44,9 @@ func Setup() {
 	ENV.CloudflareEnabled = getEnv_bool("CloudflareEnabled", boolPtr(false))
 
 	ENV.MaxItemsMultiDelete = getEnv_int64("MaxItemsMultiDelete", 1000)
+	ENV.MaxRunningEncodes = getEnv_int64("MaxRunningEncodes", 1)
+	ENV.MaxRunningEncodes_sub = getEnv_int64("MaxRunningEncodes_sub", 1)
+	ENV.MaxRunningEncodes_audio = getEnv_int64("MaxRunningEncodes_audio", 1)
 
 	if jsonString, err := json.Marshal(ENV); err == nil {
 		log.Println(string(jsonString))

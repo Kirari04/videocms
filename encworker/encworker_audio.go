@@ -1,6 +1,7 @@
 package encworker
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"fmt"
@@ -21,6 +22,7 @@ var runningEncodes_audio int = 0
 var maxRunningEncodes_audio int = 1
 
 func StartEncode_audio() {
+	maxRunningEncodes_audio = int(config.ENV.MaxRunningEncodes_audio)
 	for {
 		loadEncodingTasks_audio()
 		time.Sleep(time.Second * 10)

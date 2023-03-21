@@ -1,6 +1,7 @@
 package encworker
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"fmt"
@@ -17,9 +18,10 @@ import (
 )
 
 var runningEncodes_sub int = 0
-var maxrunningEncodes_sub int = 2
+var maxRunningEncodes_sub int = 2
 
 func StartEncode_sub() {
+	maxRunningEncodes_sub = int(config.ENV.MaxRunningEncodes_sub)
 	for {
 		loadEncodingTasks_sub()
 		time.Sleep(time.Second * 10)
@@ -74,7 +76,7 @@ func loadEncodingTasks_sub() {
 }
 
 func runEncode_sub(encodingTask models.Subtitle) {
-	for runningEncodes_sub >= maxrunningEncodes_sub {
+	for runningEncodes_sub >= maxRunningEncodes_sub {
 		time.Sleep(time.Second * 10)
 	}
 	runningEncodes_sub += 1

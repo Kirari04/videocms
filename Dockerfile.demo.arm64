@@ -39,6 +39,10 @@ ENV EncodingEnabled=false
 ENV UploadEnabled=false
 ENV RatelimitEnabled=true
 ENV CloudflareEnabled=false
+ENV MaxItemsMultiDelete=1000
+ENV MaxRunningEncodes=1
+ENV MaxRunningEncodes_sub=1
+ENV MaxRunningEncodes_audio=1
 
 # RUN ./console.bin database:fresh seed:adminuser seed:video
 
