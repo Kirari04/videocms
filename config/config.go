@@ -26,9 +26,11 @@ type Config struct {
 	MaxRunningEncodes_audio int64 `validate:"required,number,min=1"`
 
 	CaptchaEnabled               *bool  `validate:"required,boolean"`
-	CaptchaType                  string `validate:"required,min=1,max=10"`
-	Captcha_Recaptcha_PrivateKey string `validate:"required,min=1,max=40"`
-	Captcha_Recaptcha_PublicKey  string `validate:"required,min=1,max=40"`
+	CaptchaType                  string `validate:"required_if=CaptchaEnabled 1,omitempty,min=1,max=10"`
+	Captcha_Recaptcha_PrivateKey string `validate:"required_if=CaptchaType recaptcha,omitempty,min=1,max=40"`
+	Captcha_Recaptcha_PublicKey  string `validate:"required_if=CaptchaType recaptcha,omitempty,min=1,max=40"`
+	Captcha_Hcaptcha_PrivateKey  string `validate:"required_if=CaptchaType hcaptcha,omitempty,min=1,max=42"`
+	Captcha_Hcaptcha_PublicKey   string `validate:"required_if=CaptchaType hcaptcha,omitempty,uuid_rfc4122"`
 }
 
 type ConfigMap map[string]string
@@ -57,6 +59,8 @@ func Setup() {
 	ENV.CaptchaType = getEnv("CaptchaType", "")
 	ENV.Captcha_Recaptcha_PrivateKey = getEnv("Captcha_Recaptcha_PrivateKey", "")
 	ENV.Captcha_Recaptcha_PublicKey = getEnv("Captcha_Recaptcha_PublicKey", "")
+	ENV.Captcha_Hcaptcha_PrivateKey = getEnv("Captcha_Hcaptcha_PrivateKey", "")
+	ENV.Captcha_Hcaptcha_PublicKey = getEnv("Captcha_Hcaptcha_PublicKey", "")
 
 	if jsonString, err := json.Marshal(ENV); err == nil {
 		log.Println(string(jsonString))

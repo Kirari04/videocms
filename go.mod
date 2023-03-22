@@ -12,7 +12,10 @@ require (
 	gorm.io/gorm v1.24.6
 )
 
-require github.com/dpapathanasiou/go-recaptcha v0.0.0-20190121160230-be5090b17804 // indirect
+require (
+	github.com/dpapathanasiou/go-recaptcha v0.0.0-20190121160230-be5090b17804 // indirect
+	github.com/kirari04/go-hcaptcha v0.0.0-20230322135436-9fe4847aa674 // indirect
+)
 
 require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
