@@ -105,6 +105,7 @@
       const video = document.querySelector("video");
 
       const Toast = Swal.mixin({
+		target: '.container',
         toast: true,
         position: "top-end",
         showConfirmButton: false,
@@ -118,6 +119,7 @@
       });
 
       const ShortToast = Swal.mixin({
+		target: '.container',
         toast: true,
         position: "top-end",
         showConfirmButton: false,
@@ -198,6 +200,7 @@
         const oldPosition = parseInt(localStorage.getItem(`POSITION-${UUID}`));
         if (oldPosition > 0) {
           Swal.fire({
+			target: '.container',
             title: "Do you want to start where you left last time?",
             showDenyButton: true,
             confirmButtonText: "Yes",
@@ -243,6 +246,7 @@
             inputOptions[`${Subtitle.lang}`][`${index}`] = Subtitle.name;
           });
           Swal.fire({
+			target: '.container',
             title: "",
             input: "select",
             inputOptions: inputOptions,
