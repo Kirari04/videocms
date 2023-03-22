@@ -1,404 +1,432 @@
 <!DOCTYPE html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+    <link rel="preconnect" href="https://cdn.plyr.io" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.7/plyr.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-dark@5/dark.min.css"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      html,
+      body,
+      .container {
+        height: 100%;
+        width: 100%;
+        padding: 0;
+        margin: 0;
+        background: #1a1927;
+        position: fixed;
+        left: 0;
+        top: 0;
+        font-family: "Ubuntu", sans-serif;
+        overflow: hidden;
+      }
 
-<head>
-	<meta charset="UTF-8" />
-	<meta http-equiv="X-UA-Compatible" content="IE=edge" />
-	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>Document</title>
-	<link rel="preconnect" href="https://cdn.jsdelivr.net">
-	<link rel="preconnect" href="https://cdn.plyr.io">
-	<link rel="preconnect" href="https://fonts.googleapis.com">
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-	<link rel="stylesheet" href="https://cdn.plyr.io/3.7.7/plyr.css" />
-	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-dark@5/dark.min.css" />
-	<link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap" rel="stylesheet">
-	<style>
-		html,
-		body,
-		.container {
-			height: 100%;
-			width: 100%;
-			padding: 0;
-			margin: 0;
-			background: #1a1927;
-			position: fixed;
-			left: 0;
-			top: 0;
-			font-family: 'Ubuntu', sans-serif;
-			overflow: hidden;
-		}
+      .plyr {
+        height: 100%;
+      }
 
-		.plyr {
-			height: 100%;
-		}
+      .subtitle_container {
+        pointer-events: none;
+        height: 100%;
+        width: 100%;
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 10;
+        overflow: hidden;
+      }
 
-		.subtitle_container {
-			pointer-events: none;
-			height: 100%;
-			width: 100%;
-			position: absolute;
-			left: 0;
-			top: 0;
-			z-index: 10;
-			overflow: hidden;
-		}
+      .plyr__controls {
+        justify-content: flex-start;
+      }
 
-		.plyr__controls {
-			justify-content: flex-start;
-		}
+      .plyr__controls .plyr__progress__container {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: calc(var(--plyr-control-spacing, 10px) * 0.7) !important;
+      }
 
-		.plyr__controls .plyr__progress__container {
-			position: absolute;
-			left: 0;
-			top: 0;
-			width: 100%;
-			padding: calc(var(--plyr-control-spacing, 10px) * 0.7) !important;
-		}
+      .plyr__controls__item.plyr__time.plyr__time--current {
+        margin-left: auto;
+      }
+    </style>
+  </head>
 
-		.plyr__controls__item.plyr__time.plyr__time--current {
-			margin-left: auto;
-		}
-	</style>
-</head>
+  <body>
+    <div class="container">
+      <div class="subtitle_container">
+        <div class="subs"></div>
+      </div>
+      <video
+        controls
+        crossorigin
+        playsinline
+        poster="https://bitdash-a.akamaihd.net/content/sintel/poster.png"
+      ></video>
+    </div>
+    <script>
+      let Qualitys = JSON.parse(decodeURI("{{.Qualitys}}"));
+      if (Qualitys == null) Qualitys = [];
+      let Subtitles = JSON.parse(decodeURI("{{.Subtitles}}"));
+      if (Subtitles == null) Subtitles = [];
+      let Audios = JSON.parse(decodeURI("{{.Audios}}"));
+      if (Audios == null) Audios = [];
+      const UUID = "{{.UUID}}";
+      const PROJECTURL = "{{.PROJECTURL}}";
+      const TITLE = "{{.Title}}";
+    </script>
+    <script src="https://cdn.plyr.io/3.7.7/plyr.js"></script>
+    <script src="https://cdn.rawgit.com/video-dev/hls.js/18bb552/dist/hls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/assjs/dist/ass.min.js"></script>
+    <script>
+      const source =
+        Audios.findIndex((Audio) => Audio.type == "hls") !== -1
+          ? `/videos/qualitys/${UUID}/${
+              Audios.find((Audio) => Audio.type == "hls").uuid
+            }/stream/master.m3u8`
+          : `/videos/qualitys/${UUID}/stream/muted/master.m3u8`;
+      let currentValue = "";
+      const video = document.querySelector("video");
 
-<body>
-	<div class="container">
-		<div class="subtitle_container">
-			<div class="subs"></div>
-		</div>
-		<video controls crossorigin playsinline
-			poster="https://bitdash-a.akamaihd.net/content/sintel/poster.png"></video>
-	</div>
-	<script>
-		let Qualitys = JSON.parse(decodeURI("{{.Qualitys}}"));
-		if (Qualitys == null) Qualitys = [];
-		let Subtitles = JSON.parse(decodeURI("{{.Subtitles}}"));
-		if (Subtitles == null) Subtitles = [];
-		let Audios = JSON.parse(decodeURI("{{.Audios}}"));
-		if (Audios == null) Audios = [];
-		const UUID = "{{.UUID}}";
-		const PROJECTURL = "{{.PROJECTURL}}";
-		const TITLE = "{{.Title}}";
-	</script>
-	<script src="https://cdn.plyr.io/3.7.7/plyr.js"></script>
-	<script src="https://cdn.rawgit.com/video-dev/hls.js/18bb552/dist/hls.min.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/assjs/dist/ass.min.js"></script>
-	<script>
-		const source = `/videos/qualitys/${UUID}/${Audios.find((Audio) => Audio.type == "hls").uuid
-			}/stream/master.m3u8`;
-		let currentValue = ""
-		const video = document.querySelector("video");
+      const Toast = Swal.mixin({
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 10000,
+        timerProgressBar: true,
+        showCloseButton: true,
+        didOpen: (toast) => {
+          toast.addEventListener("mouseenter", Swal.stopTimer);
+          toast.addEventListener("mouseleave", Swal.resumeTimer);
+        },
+      });
 
-		const Toast = Swal.mixin({
-			toast: true,
-			position: 'top-end',
-			showConfirmButton: false,
-			timer: 10000,
-			timerProgressBar: true,
-			showCloseButton: true,
-			didOpen: (toast) => {
-				toast.addEventListener('mouseenter', Swal.stopTimer)
-				toast.addEventListener('mouseleave', Swal.resumeTimer)
-			}
-		})
+      const ShortToast = Swal.mixin({
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 1000,
+        timerProgressBar: true,
+      });
 
-		const ShortToast = Swal.mixin({
-			toast: true,
-			position: 'top-end',
-			showConfirmButton: false,
-			timer: 1000,
-			timerProgressBar: true,
-		})
+      setInterval(() => {
+        if (window.ass) {
+          window.ass.resize();
+        }
+      }, 1000);
 
-		setInterval(() => {
-			if (window.ass) {
-				window.ass.resize()
-			}
-		}, 1000)
+      function addButton(selectorName, iconId, buttonName) {
+        const playerControlsEl = document.querySelector(
+          `.plyr__controls ${selectorName}`
+        );
+        const randomId = Math.floor(Math.random() * 10000);
+        const id = `plyr__control-${randomId}`;
+        let button = document.createElement("button");
+        button.setAttribute("id", id);
+        button.classList.add("plyr__control");
+        button.innerHTML = `<svg role="presentation"><use xlink:href="/icons/svgs.svg#${iconId}"></use></svg>\n<span class="plyr__tooltip" role="tooltip">${buttonName}</span>`;
+        playerControlsEl.insertAdjacentElement("afterend", button);
+        return document.getElementById(id);
+      }
 
-		function addButton(selectorName, iconId, buttonName) {
-			const playerControlsEl = document.querySelector(`.plyr__controls ${selectorName}`)
-			const randomId = Math.floor(Math.random() * 10000)
-			const id = `plyr__control-${randomId}`
-			let button = document.createElement("button")
-			button.setAttribute("id", id)
-			button.classList.add("plyr__control")
-			button.innerHTML = `<svg role="presentation"><use xlink:href="/icons/svgs.svg#${iconId}"></use></svg>\n<span class="plyr__tooltip" role="tooltip">${buttonName}</span>`
-			playerControlsEl.insertAdjacentElement('afterend', button)
-			return document.getElementById(id)
-		}
+      function PlayerInit(options) {
+        // init player
+        var player = new Plyr(video, options);
+        player.on("ready", (event) => {
+          if (window.ass) {
+            setTimeout(() => {
+              window.ass.resize();
+            }, 1000);
+          }
+        });
+        player.on("enterfullscreen", (event) => {
+          if (window.ass) {
+            setTimeout(() => {
+              window.ass.resize();
+            }, 1000);
+          }
+        });
+        player.on("exitfullscreen", (event) => {
+          if (window.ass) {
+            setTimeout(() => {
+              window.ass.resize();
+            }, 1000);
+          }
+        });
+        window.player = player;
 
-		function PlayerInit(options) {
-			// init player
-			var player = new Plyr(video, options);
-			player.on("ready", (event) => {
-				if (window.ass) {
-					setTimeout(() => {
-						window.ass.resize()
-					}, 1000)
-				}
-			})
-			player.on("enterfullscreen", (event) => {
-				if (window.ass) {
-					setTimeout(() => {
-						window.ass.resize()
-					}, 1000)
-				}
-			})
-			player.on("exitfullscreen", (event) => {
-				if (window.ass) {
-					setTimeout(() => {
-						window.ass.resize()
-					}, 1000)
-				}
-			})
-			window.player = player;
+        // preselect subtitles
+        let lastUsedLang = localStorage.getItem("lastusedlang");
+        if (lastUsedLang) {
+          let lastUsedIndex = Subtitles.findIndex(
+            (S) => S.lang === lastUsedLang
+          );
+          if (lastUsedIndex !== -1) {
+            currentValue = lastUsedIndex;
+            SubtitleInit(lastUsedIndex);
+          } else {
+            currentValue = "";
+          }
+        }
 
-			// preselect subtitles
-			let lastUsedLang = localStorage.getItem("lastusedlang")
-			if (lastUsedLang) {
-				let lastUsedIndex = Subtitles.findIndex(S => S.lang === lastUsedLang)
-				if (lastUsedIndex !== -1) {
-					currentValue = lastUsedIndex
-					SubtitleInit(lastUsedIndex)
-				} else {
-					currentValue = ""
-				}
-			}
+        // init captions
+        CaptionInit();
 
-			// init captions
-			CaptionInit()
+        // save position
+        setInterval(() => {
+          if (!window.player.paused) {
+            localStorage.setItem(`POSITION-${UUID}`, window.player.currentTime);
+          }
+        }, 1000);
 
+        const oldPosition = parseInt(localStorage.getItem(`POSITION-${UUID}`));
+        if (oldPosition > 0) {
+          Swal.fire({
+            title: "Do you want to start where you left last time?",
+            showDenyButton: true,
+            confirmButtonText: "Yes",
+            denyButtonText: "No",
+          }).then((result) => {
+            if (result.isConfirmed) {
+              window.player.currentTime = oldPosition;
+            }
+          });
+        }
+      }
 
-			// save position
-			setInterval(() => {
-				if (!window.player.paused) {
-					localStorage.setItem(`POSITION-${UUID}`, window.player.currentTime);
-				}
-			}, 1000);
+      function b64DecodeUnicode(str) {
+        // Going backwards: from bytestream, to percent-encoding, to original string.
+        return decodeURIComponent(
+          atob(str)
+            .split("")
+            .map(function (c) {
+              return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+            })
+            .join("")
+        );
+      }
 
-			const oldPosition = parseInt(localStorage.getItem(`POSITION-${UUID}`));
-			if (oldPosition > 0) {
-				Swal.fire({
-					title: "Do you want to start where you left last time?",
-					showDenyButton: true,
-					confirmButtonText: "Yes",
-					denyButtonText: "No",
-				}).then((result) => {
-					if (result.isConfirmed) {
-						window.player.currentTime = oldPosition;
-					}
-				});
-			}
-		}
+      function CaptionInit() {
+        const plyr_captions_on = addButton(
+          ".plyr__time--duration",
+          "plyr-captions-on",
+          "Captions"
+        );
+        plyr_captions_on.setAttribute("hidden", "");
+        const plyr_captions_off = addButton(
+          ".plyr__time--duration",
+          "plyr-captions-off",
+          "Captions"
+        );
 
-		function b64DecodeUnicode(str) {
-			// Going backwards: from bytestream, to percent-encoding, to original string.
-			return decodeURIComponent(atob(str).split('').map(function (c) {
-				return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-			}).join(''));
-		}
+        const open_caption_settings = (isEmptyCallback) => {
+          let inputOptions = {};
+          Subtitles.forEach((Subtitle, index) => {
+            if (!inputOptions[`${Subtitle.lang}`])
+              inputOptions[`${Subtitle.lang}`] = {};
+            inputOptions[`${Subtitle.lang}`][`${index}`] = Subtitle.name;
+          });
+          Swal.fire({
+            title: "",
+            input: "select",
+            inputOptions: inputOptions,
+            inputPlaceholder: "Select Subtitle",
+            confirmButtonText: "Enable",
+            cancelButtonText: "Disable",
+            inputValue: currentValue,
+            showCancelButton: true,
+            inputValidator: (value) => {
+              currentValue = value;
+              if (!value) {
+                isEmptyCallback(true);
+              } else {
+                isEmptyCallback(false);
+              }
+              if (value) {
+                SubtitleInit(parseInt(value));
+              }
+            },
+          }).then((result) => {
+            if (!result.isConfirmed) {
+              currentValue = "";
+              isEmptyCallback(true);
+            }
+          });
+        };
 
+        const plyr_captions_toggle = (empty) => {
+          if (empty) {
+            // this should disable the subtitles
+            plyr_captions_on.setAttribute("hidden", "");
+            plyr_captions_off.removeAttribute("hidden", "");
+            if (window.ass) {
+              window.ass.destroy();
+              window.ass = undefined;
+            }
+            localStorage.setItem("lastusedlang", "");
+          } else {
+            //this should enable the subs
+            plyr_captions_on.removeAttribute("hidden", "");
+            plyr_captions_off.setAttribute("hidden", "");
+            if (window.ass) {
+              window.ass.show();
+            }
+          }
+        };
 
-		function CaptionInit() {
-			const plyr_captions_on = addButton('.plyr__time--duration', 'plyr-captions-on', 'Captions')
-			plyr_captions_on.setAttribute("hidden", "")
-			const plyr_captions_off = addButton('.plyr__time--duration', 'plyr-captions-off', 'Captions')
+        plyr_captions_on.onclick = () => {
+          open_caption_settings((empty) => plyr_captions_toggle(empty));
+        };
 
-			const open_caption_settings = (isEmptyCallback) => {
-				let inputOptions = {}
-				Subtitles.forEach((Subtitle, index) => {
-					if (!inputOptions[`${Subtitle.lang}`]) inputOptions[`${Subtitle.lang}`] = {}
-					inputOptions[`${Subtitle.lang}`][`${index}`] = Subtitle.name
-				})
-				Swal.fire({
-					title: "",
-					input: 'select',
-					inputOptions: inputOptions,
-					inputPlaceholder: 'Select Subtitle',
-					confirmButtonText: 'Enable',
-					cancelButtonText: 'Disable',
-					inputValue: currentValue,
-					showCancelButton: true,
-					inputValidator: (value) => {
-						currentValue = value;
-						if (!value) {
-							isEmptyCallback(true)
-						} else {
-							isEmptyCallback(false)
-						}
-						if (value) {
-							SubtitleInit(parseInt(value))
-						}
-					}
-				}).then(result => {
-					if (!result.isConfirmed) {
-						currentValue = ""
-						isEmptyCallback(true)
-					}
-				})
-			}
+        plyr_captions_off.onclick = () => {
+          open_caption_settings((empty) => plyr_captions_toggle(empty));
+        };
 
-			const plyr_captions_toggle = empty => {
-				if (empty) {
-					// this should disable the subtitles
-					plyr_captions_on.setAttribute("hidden", "")
-					plyr_captions_off.removeAttribute("hidden", "")
-					if (window.ass) {
-						window.ass.destroy();
-						window.ass = undefined;
-					}
-					localStorage.setItem("lastusedlang", "")
-				} else {
-					//this should enable the subs
-					plyr_captions_on.removeAttribute("hidden", "")
-					plyr_captions_off.setAttribute("hidden", "")
-					if (window.ass) {
-						window.ass.show();
-					}
-				}
-			}
+        plyr_captions_toggle(!currentValue);
+      }
 
-			plyr_captions_on.onclick = () => {
-				open_caption_settings(empty => plyr_captions_toggle(empty))
-			}
+      function SubtitleInit(index) {
+        if (window.ass) {
+          window.ass.destroy();
+          window.ass = undefined;
+        }
+        const ass = new ASS(b64DecodeUnicode(Subtitles[index].data), video, {
+          resampling: "video_width",
+          container: document.querySelector(".subs"),
+        });
+        ass.show();
+        window.ass = ass;
+        localStorage.setItem("lastusedlang", Subtitles[index].lang);
 
-			plyr_captions_off.onclick = () => {
-				open_caption_settings(empty => plyr_captions_toggle(empty))
-			}
+        ShortToast.fire({
+          icon: "info",
+          title: `Enabled ${Subtitles[index].name} [${Subtitles[index].lang}]`,
+        });
+      }
 
-			plyr_captions_toggle(!currentValue)
-		}
+      // subtitle sizing & positioning
+      window.addEventListener("resize", () => {
+        if (window.ass) {
+          window.ass.resize();
+        }
+      });
 
-		function SubtitleInit(index) {
-			if (window.ass) {
-				window.ass.destroy();
-				window.ass = undefined;
-			}
-			const ass = new ASS(b64DecodeUnicode(Subtitles[index].data), video, {
-				resampling: "video_width",
-				container: document.querySelector(".subs"),
-			});
-			ass.show();
-			window.ass = ass;
-			localStorage.setItem("lastusedlang", Subtitles[index].lang)
+      document.addEventListener("DOMContentLoaded", () => {
+        const defaultOptions = {
+          seekTime: 5,
+          fullscreen: {
+            enabled: true,
+            fallback: true,
+            iosNative: false,
+            container: ".container",
+          },
+          iconUrl: "/icons/svgs.svg",
+          keyboard: { focused: false, global: true },
+          controls: () => {
+            let controls = [
+              "progress", // The progress bar and scrubber for playback and buffering
+              "play-large", // The large play button in the center
+              "play", // Play/pause playback
+              "rewind", // Rewind by the seek time (default 10 seconds)
+              "fast-forward", // Fast forward by the seek time (default 10 seconds)
+              "current-time", // The current time of playback
+              "duration", // The full duration of the media
+              "mute", // Toggle mute
+              "volume", // Volume control
+              "settings", // Settings menu
+              "pip", // Picture-in-picture (currently Safari only)
+              "airplay", // Airplay (currently Safari only)
+              "fullscreen",
+            ];
+            return controls;
+          },
+        };
 
-			ShortToast.fire({
-				icon: 'info',
-				title: `Enabled ${Subtitles[index].name} [${Subtitles[index].lang}]`
-			})
-		}
+        // apple native player
+        if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.src = source;
+          PlayerInit(defaultOptions);
 
-		// subtitle sizing & positioning
-		window.addEventListener("resize", () => {
-			if (window.ass) {
-				window.ass.resize()
-			}
-		})
+          // hls.js player
+        } else if (Hls.isSupported()) {
+          const hls = new Hls();
+          hls.loadSource(source);
+          hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
+            const availableQualities = hls.levels.map((l) => l.height);
+            availableQualities.unshift(0); //prepend 0 to quality array
 
-		document.addEventListener("DOMContentLoaded", () => {
-			const defaultOptions = {
-				seekTime: 5,
-				fullscreen: {
-					enabled: true,
-					fallback: true,
-					iosNative: false,
-					container: ".container"
-				},
-				iconUrl: "/icons/svgs.svg",
-				keyboard: { focused: false, global: true },
-				controls: () => {
-					let controls = [
-						"progress", // The progress bar and scrubber for playback and buffering
-						"play-large", // The large play button in the center
-						"play", // Play/pause playback
-						"rewind", // Rewind by the seek time (default 10 seconds)
-						"fast-forward", // Fast forward by the seek time (default 10 seconds)
-						"current-time", // The current time of playback
-						"duration", // The full duration of the media
-						"mute", // Toggle mute
-						"volume", // Volume control
-						"settings", // Settings menu
-						"pip", // Picture-in-picture (currently Safari only)
-						"airplay", // Airplay (currently Safari only)
-						"fullscreen",
-					];
-					return controls;
-				},
-			};
+            // Add new qualities to option
+            defaultOptions.quality = {
+              default: 0, //Default - AUTO
+              options: availableQualities,
+              forced: true,
+              onChange: (e) => updateQuality(e),
+            };
+            // Add Auto Label
+            defaultOptions.i18n = {
+              qualityLabel: {
+                0: "Auto",
+              },
+            };
 
-			// apple native player
-			if (video.canPlayType("application/vnd.apple.mpegurl")) {
-				video.src = source;
-				PlayerInit(defaultOptions);
+            hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
+              var span = document.querySelector(
+                ".plyr__menu__container [data-plyr='quality'][value='0'] span"
+              );
+              if (hls.autoLevelEnabled) {
+                span.innerHTML = `AUTO (${hls.levels[data.level].height}p)`;
+              } else {
+                span.innerHTML = `AUTO`;
+              }
+            });
+            PlayerInit(defaultOptions);
+          });
 
-				// hls.js player
-			} else if (Hls.isSupported()) {
-				const hls = new Hls();
-				hls.loadSource(source);
-				hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
-					const availableQualities = hls.levels.map((l) => l.height);
-					availableQualities.unshift(0); //prepend 0 to quality array
+          hls.attachMedia(video);
+          window.hls = hls;
 
-					// Add new qualities to option
-					defaultOptions.quality = {
-						default: 0, //Default - AUTO
-						options: availableQualities,
-						forced: true,
-						onChange: (e) => updateQuality(e),
-					};
-					// Add Auto Label
-					defaultOptions.i18n = {
-						qualityLabel: {
-							0: "Auto",
-						},
-					};
+          // use fallback url (webm or mp4)
+        } else if (Qualitys.length === 1) {
+          video.src = Qualitys[0].url;
+          PlayerInit(defaultOptions);
+        } else {
+          // show error message
+          PlayerInit(defaultOptions);
+          Toast.fire({
+            icon: "error",
+            title: `Your Browser doesn't support Hls and currently there is no alternativ stream available.`,
+          });
+        }
 
-					hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
-						var span = document.querySelector(
-							".plyr__menu__container [data-plyr='quality'][value='0'] span"
-						);
-						if (hls.autoLevelEnabled) {
-							span.innerHTML = `AUTO (${hls.levels[data.level].height}p)`;
-						} else {
-							span.innerHTML = `AUTO`;
-						}
-					});
-					PlayerInit(defaultOptions);
-				});
-
-				hls.attachMedia(video);
-				window.hls = hls;
-
-				// use fallback url (webm or mp4)
-			} else if (Qualitys.length === 1) {
-				video.src = Qualitys[0].url;
-				PlayerInit(defaultOptions);
-			} else {
-				// show error message
-				PlayerInit(defaultOptions);
-				Toast.fire({
-					icon: 'error',
-					title: `Your Browser doesn't support Hls and currently there is no alternativ stream available.`
-				})
-			}
-
-			function updateQuality(newQuality) {
-				if (newQuality === 0) {
-					window.hls.currentLevel = -1; //Enable AUTO quality if option.value = 0
-				} else {
-					window.hls.levels.forEach((level, levelIndex) => {
-						if (level.height === newQuality) {
-							console.log("Found quality match with " + newQuality);
-							window.hls.currentLevel = levelIndex;
-						}
-					});
-				}
-			}
-		});
-	</script>
-</body>
-
+        function updateQuality(newQuality) {
+          if (newQuality === 0) {
+            window.hls.currentLevel = -1; //Enable AUTO quality if option.value = 0
+          } else {
+            window.hls.levels.forEach((level, levelIndex) => {
+              if (level.height === newQuality) {
+                console.log("Found quality match with " + newQuality);
+                window.hls.currentLevel = levelIndex;
+              }
+            });
+          }
+        }
+      });
+    </script>
+  </body>
 </html>

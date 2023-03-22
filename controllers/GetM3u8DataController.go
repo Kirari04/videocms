@@ -11,23 +11,30 @@ import (
 
 func GetM3u8Data(c *fiber.Ctx) error {
 	type Request struct {
-		UUID      string  `validate:"required,uuid_rfc4122"`
-		AUDIOUUID *string `validate:"required,uuid_rfc4122"`
+		UUID      string `validate:"required,uuid_rfc4122"`
+		AUDIOUUID string `validate:"required,uuid_rfc4122"`
+	}
+
+	type RequestMuted struct {
+		UUID string `validate:"required,uuid_rfc4122"`
 	}
 
 	var requestValidation Request
-	if err := c.ParamsParser(&requestValidation); err != nil {
-		return c.Status(400).JSON([]helpers.ValidationError{
-			{
-				FailedField: "none",
-				Tag:         "none",
-				Value:       "Invalid body request format",
-			},
-		})
-	}
+	var requestValidationMuted RequestMuted
+	requestValidation.UUID = c.Params("UUID")
+	requestValidation.AUDIOUUID = c.Params("AUDIOUUID")
 
-	if errors := helpers.ValidateStruct(requestValidation); len(errors) > 0 {
-		return c.Status(400).JSON(errors)
+	if requestValidation.AUDIOUUID != "" {
+		// validate audio stream
+		if errors := helpers.ValidateStruct(requestValidation); len(errors) > 0 {
+			return c.Status(400).JSON(errors)
+		}
+	} else {
+		// validate muted stream
+		requestValidationMuted.UUID = requestValidation.UUID
+		if errors := helpers.ValidateStruct(requestValidationMuted); len(errors) > 0 {
+			return c.Status(400).JSON(errors)
+		}
 	}
 
 	//translate link id to file id
@@ -46,10 +53,10 @@ func GetM3u8Data(c *fiber.Ctx) error {
 
 	//check if contains audio
 	var dbAudioPtr *models.Audio
-	if requestValidation.AUDIOUUID != nil {
+	if requestValidation.AUDIOUUID != "" {
 		for _, audio := range dbLink.File.Audios {
 			if audio.Ready &&
-				audio.UUID == *requestValidation.AUDIOUUID &&
+				audio.UUID == requestValidation.AUDIOUUID &&
 				audio.Type == "hls" {
 				dbAudioPtr = &audio
 				break
