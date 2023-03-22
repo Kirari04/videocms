@@ -48,6 +48,8 @@ func GetFile(c *fiber.Ctx) error {
 		Width        int64
 		AvgFrameRate float64
 		Ready        bool
+		Failed       bool
+		Progress     float64
 	}
 	type RespSub struct {
 		Name  string
@@ -77,6 +79,8 @@ func GetFile(c *fiber.Ctx) error {
 			Width:        Quality.Width,
 			AvgFrameRate: avgFps,
 			Ready:        Quality.Ready,
+			Progress:     Quality.Progress * 100,
+			Failed:       Quality.Failed,
 		})
 	}
 
