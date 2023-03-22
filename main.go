@@ -22,6 +22,8 @@ func main() {
 		}
 		log.Panic("")
 	}
+	//setup captcha
+	inits.Captcha()
 	// for setting up the database connection
 	inits.Database()
 	// for migrating all the models

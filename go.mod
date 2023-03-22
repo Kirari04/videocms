@@ -12,6 +12,8 @@ require (
 	gorm.io/gorm v1.24.6
 )
 
+require github.com/dpapathanasiou/go-recaptcha v0.0.0-20190121160230-be5090b17804 // indirect
+
 require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
