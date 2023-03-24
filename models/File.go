@@ -14,11 +14,13 @@ type File struct {
 	Height       int64
 	Width        int64
 	Path         string `gorm:"size:120;" json:"-"`
+	Folder       string `gorm:"size:120;" json:"-"`
 	User         User   `json:"-"`
 	UserID       uint
 	Qualitys     []Quality  `json:"-"`
 	Subtitles    []Subtitle `json:"-"`
 	Audios       []Audio    `json:"-"`
+	Links        []Link     `json:"-"`
 }
 
 type FileCreateValidation struct {
