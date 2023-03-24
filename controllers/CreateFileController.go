@@ -210,6 +210,7 @@ func CreateFile(c *fiber.Ctx) error {
 		UUID:         fileId,
 		Hash:         FileHash,
 		Path:         filePath,
+		Folder:       fmt.Sprintf("./videos/qualitys/%s", fileId),
 		UserID:       c.Locals("UserID").(uint),
 		Height:       int64(videoHeight),
 		Width:        int64(videoWidth),
