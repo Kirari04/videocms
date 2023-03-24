@@ -3,6 +3,7 @@ module ch/kirari04/videocms
 go 1.20
 
 require (
+	github.com/dpapathanasiou/go-recaptcha v0.0.0-20190121160230-be5090b17804
 	github.com/go-playground/validator/v10 v10.11.2
 	github.com/gofiber/template v1.7.5
 	github.com/golang-jwt/jwt/v5 v5.0.0-rc.1
@@ -10,11 +11,6 @@ require (
 	gopkg.in/vansante/go-ffprobe.v2 v2.1.1
 	gorm.io/driver/sqlite v1.4.4
 	gorm.io/gorm v1.24.6
-)
-
-require (
-	github.com/dpapathanasiou/go-recaptcha v0.0.0-20190121160230-be5090b17804 // indirect
-	github.com/kirari04/go-hcaptcha v0.0.0-20230322135436-9fe4847aa674 // indirect
 )
 
 require (
