@@ -78,9 +78,30 @@ func loadEncodingTasks() {
 
 func runEncode(encodingTask models.Quality) {
 	for runningEncodes >= maxRunningEncodes {
+		// we check if the original file has been deleted during the waittime
+		if !originalFileExists(encodingTask.FileID) {
+			encodingTask.Ready = false
+			encodingTask.Encoding = false
+			encodingTask.Failed = true
+			encodingTask.Error = "Skipped because waiting for deletion"
+			inits.DB.Save(&encodingTask)
+			return
+		}
 		time.Sleep(time.Second * 10)
 	}
 	runningEncodes += 1
+
+	// we check if the original file has been deleted during the waittime
+	if !originalFileExists(encodingTask.FileID) {
+		runningEncodes -= 1
+		encodingTask.Ready = false
+		encodingTask.Encoding = false
+		encodingTask.Failed = true
+		encodingTask.Error = "Skipped because waiting for deletion"
+		inits.DB.Save(&encodingTask)
+		return
+	}
+
 	log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 
 	totalDuration := encodingTask.File.Duration
@@ -234,4 +255,11 @@ func TempSock(totalDuration float64, encodingTask *models.Quality) string {
 	}()
 
 	return sockFileName
+}
+
+func originalFileExists(fileId uint) bool {
+	if res := inits.DB.First(&models.File{}, fileId); res.Error != nil {
+		return false
+	}
+	return true
 }

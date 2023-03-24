@@ -77,9 +77,30 @@ func loadEncodingTasks_sub() {
 
 func runEncode_sub(encodingTask models.Subtitle) {
 	for runningEncodes_sub >= maxRunningEncodes_sub {
+		// we check if the original file has been deleted during the waittime
+		if !originalFileExists(encodingTask.FileID) {
+			encodingTask.Ready = false
+			encodingTask.Encoding = false
+			encodingTask.Failed = true
+			encodingTask.Error = "Skipped because waiting for deletion"
+			inits.DB.Save(&encodingTask)
+			return
+		}
 		time.Sleep(time.Second * 10)
 	}
 	runningEncodes_sub += 1
+
+	// we check if the original file has been deleted during the waittime
+	if !originalFileExists(encodingTask.FileID) {
+		runningEncodes_sub -= 1
+		encodingTask.Ready = false
+		encodingTask.Encoding = false
+		encodingTask.Failed = true
+		encodingTask.Error = "Skipped because waiting for deletion"
+		inits.DB.Save(&encodingTask)
+		return
+	}
+
 	log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 
 	totalDuration := encodingTask.File.Duration
