@@ -6,6 +6,7 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/routes"
+	"ch/kirari04/videocms/services"
 	"log"
 )
 
@@ -41,6 +42,7 @@ func main() {
 		go encworker.StartEncode_audio()
 		// start cleenup process
 		go encworker.StartEncCleenup()
+		go services.Deleter()
 	}
 
 	WebServer()
