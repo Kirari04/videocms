@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	logic "ch/kirari04/videocms/Logic"
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
@@ -205,10 +206,26 @@ func CreateFile(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 
+	thumbnailFileName := "4x4.webp"
+	if responseStatus, err := logic.CreateThumbnail(
+		4,
+		filePath,
+		1080,
+		thumbnailFileName,
+		fmt.Sprintf("./videos/qualitys/%s", fileId),
+		videoDuration,
+		avgFramerate,
+	); err != nil {
+		log.Printf("Failed to generate thumbnail: %v", err)
+		os.Remove(filePath)
+		return c.SendStatus(responseStatus)
+	}
+
 	// save file data to database
 	dbFile := models.File{
 		UUID:         fileId,
 		Hash:         FileHash,
+		Thumbnail:    thumbnailFileName,
 		Path:         filePath,
 		Folder:       fmt.Sprintf("./videos/qualitys/%s", fileId),
 		UserID:       c.Locals("UserID").(uint),
@@ -237,7 +254,7 @@ func CreateFile(c *fiber.Ctx) error {
 			subtitleLang = autoLang
 		}
 
-		log.Printf("subtitleName: %s / subtitleLang: %s", subtitleName, subtitleLang)
+		// log.Printf("subtitleName: %s / subtitleLang: %s", subtitleName, subtitleLang)
 
 		for _, subOpt := range models.AvailableSubtitles {
 			// generate unique identifier for subtitle
@@ -281,7 +298,7 @@ func CreateFile(c *fiber.Ctx) error {
 			audioLang = autoLang
 		}
 
-		log.Printf(" audioName: %s /  audioLang: %s", audioName, audioLang)
+		// log.Printf(" audioName: %s /  audioLang: %s", audioName, audioLang)
 
 		for _, audioOpt := range models.AvailableAudios {
 			// generate unique identifier for  audio

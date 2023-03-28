@@ -4,6 +4,7 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
+	"fmt"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -69,6 +70,7 @@ func GetFile(c *fiber.Ctx) error {
 		UpdatedAt      time.Time
 		UUID           string
 		Name           string
+		Thumbnail      string
 		ParentFolderID uint
 		Size           int64
 		Duration       float64
@@ -118,6 +120,7 @@ func GetFile(c *fiber.Ctx) error {
 		UpdatedAt:      link.UpdatedAt,
 		UUID:           link.UUID,
 		Name:           link.Name,
+		Thumbnail:      fmt.Sprintf("/videos/qualitys/%s/image/thumb/%s", link.UUID, link.File.Thumbnail),
 		ParentFolderID: link.ParentFolderID,
 		Size:           link.File.Size,
 		Duration:       link.File.Duration,

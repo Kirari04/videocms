@@ -29,61 +29,48 @@ func CreateThumbnail(imageCountAxis int, inputFile string, height int, outputFil
 	imageSingeHeight := int(math.RoundToEven(float64(height/imageCountAxis)/2) * 2)
 	imageFullHeight := imageSingeHeight * imageCountAxis
 
-	ffmpegCommand := fmt.Sprintf("ffmpeg -i %s ", absInputFile)
-	filterComplex := fmt.Sprintf(
-		`-filter_complex "[0:v]scale=-1:%d[bg];[0:v]scale=-1:%d[img];`,
-		imageFullHeight,
-		imageSingeHeight,
-	)
-	// filter compelx filter splitting
-	filterComplexSplit := fmt.Sprintf("[img]split=%d", imageCount)
-	for i := 0; i < imageCount; i++ {
-		filterComplexSplit += fmt.Sprintf("[v%d]", i)
-	}
-	filterComplexSplit += ";"
-	filterComplex += filterComplexSplit
+	ffmpegCommand := fmt.Sprintf("ffmpeg -i %s -vframes 1 ", absInputFile)
+	filterComplex := `-filter_complex "`
 
 	// filter complex overlay
-	filterComplexOverlay := ""
-	filterComplexOverlayPositionX := 0
-	filterComplexOverlayPositionY := 0
-	filterComplexOverlayPositionM := imageCountAxis - 1
+	filterComplexStackPositionX := 0
+	filterComplexStackPositionY := 0
+	filterComplexStackPositionM := imageCountAxis - 1
 	for i := 0; i < imageCount; i++ {
-		var filterInput string
-		if i == 0 {
-			filterInput = "[bg]"
-		} else {
-			filterInput = fmt.Sprintf("[f%d]", i)
-		}
-
-		videoStartTime := (videoDuration - 0.1) / float64(imageCount) * float64(i+1)
-		filterComplexOverlay += fmt.Sprintf(
-			"%s[v%d]overlay=w*%d:h*%d,trim=start=%.2f:end=%.2f[f%d];",
-			filterInput,
-			i,
-			filterComplexOverlayPositionX,
-			filterComplexOverlayPositionY,
-			videoStartTime,
-			videoStartTime+0.1,
-			i+1,
+		videoStartTimeFrame := math.Floor((videoDuration / float64(imageCount+1)) * float64(i+1) * math.Floor(fps))
+		filterComplex += fmt.Sprintf(
+			"[0:v]select='eq(n,%.0f)',scale=iw/%d:-1[X%dY%d];",
+			videoStartTimeFrame,
+			imageCountAxis,
+			filterComplexStackPositionX,
+			filterComplexStackPositionY,
 		)
-		filterComplexOverlayPositionX++
-		// this will check if the next filterComplexOverlayPositionX is over the limit and set the new counter
-		if filterComplexOverlayPositionX > filterComplexOverlayPositionM {
-			filterComplexOverlayPositionX = 0
-			filterComplexOverlayPositionY++
+		filterComplexStackPositionX++
+		// this will check if the next filterComplexStackPositionX is over the limit and set the new counter
+		if filterComplexStackPositionX > filterComplexStackPositionM {
+			filterComplexStackPositionX = 0
+			filterComplexStackPositionY++
 		}
 	}
-	filterComplexOverlay += fmt.Sprintf(
-		`[f%d]setpts=PTS-STARTPTS,scale=-1:%d[fin]" `,
-		imageCount,
-		imageFullHeight,
-	)
+	// add left to right
+	for i := 0; i < imageCountAxis; i++ {
+		inputs := ""
+		for ii := 0; ii < imageCountAxis; ii++ {
+			inputs += fmt.Sprintf("[X%dY%d]", ii, i)
+		}
+		filterComplex += fmt.Sprintf("%shstack=inputs=%d[R%d];", inputs, imageCountAxis, i)
+	}
 
-	filterComplex += filterComplexOverlay
+	// add top to bottom
+	inputs := ""
+	for i := 0; i < imageCountAxis; i++ {
+		inputs += fmt.Sprintf("[R%d]", i)
+	}
+	filterComplex += fmt.Sprintf(`%svstack=inputs=%d" `, inputs, imageCountAxis)
+
 	ffmpegCommand += filterComplex
 
-	ffmpegCommand += fmt.Sprintf("-map [fin] -vframes 1 %s/%s -y", absOutputFolder, outputFile)
+	ffmpegCommand += fmt.Sprintf("%s/%s -y", absOutputFolder, outputFile)
 
 	ffmpegCommandSimpleImage := fmt.Sprintf(
 		`ffmpeg -i %s -ss %.2f -vf scale=-1:%d -vframes 1 %s/%s -y`,
@@ -101,14 +88,15 @@ func CreateThumbnail(imageCountAxis int, inputFile string, height int, outputFil
 	)
 
 	if err := cmd.Run(); err != nil {
-		// try simple one instead
+		log.Printf("Failed during thumbnail conversion: %s", ffmpegCommand)
+
+		// if tiles fail try simple one instead
 		cmd := exec.Command(
 			"bash",
 			"-c",
 			ffmpegCommandSimpleImage,
 		)
 		if err := cmd.Run(); err != nil {
-			log.Printf("Failed during thumbnail conversion: %s", ffmpegCommand)
 			log.Printf("Failed during simple thumbnail conversion: %s", ffmpegCommandSimpleImage)
 			return fiber.StatusInternalServerError, err
 		}

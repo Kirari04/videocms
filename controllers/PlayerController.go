@@ -44,31 +44,23 @@ func PlayerController(c *fiber.Ctx) error {
 	}
 
 	//check if has some file is ready
-
+	var streamIsReady bool
 	var jsonQualitys []map[string]string
-	var jsonEncQualitys []map[string]string
 	for _, qualiItem := range dbLink.File.Qualitys {
-		if qualiItem.Ready && qualiItem.Type != "hls" {
-			jsonQualitys = append(jsonQualitys, map[string]string{
-				"url":    fmt.Sprintf("/videos/qualitys/%s/%s/%s", dbLink.UUID, qualiItem.Name, qualiItem.OutputFile),
-				"label":  qualiItem.Name,
-				"height": strconv.Itoa(int(qualiItem.Height)),
-				"width":  strconv.Itoa(int(qualiItem.Width)),
-			})
+		if qualiItem.Ready {
+			streamIsReady = true
+			if qualiItem.Type != "hls" {
+				jsonQualitys = append(jsonQualitys, map[string]string{
+					"url":    fmt.Sprintf("/videos/qualitys/%s/%s/%s", dbLink.UUID, qualiItem.Name, qualiItem.OutputFile),
+					"label":  qualiItem.Name,
+					"height": strconv.Itoa(int(qualiItem.Height)),
+					"width":  strconv.Itoa(int(qualiItem.Width)),
+				})
+			}
 		}
-		if qualiItem.Encoding {
-			jsonEncQualitys = append(jsonEncQualitys, map[string]string{
-				"progress": fmt.Sprintf("%v", qualiItem.Progress),
-				"label":    qualiItem.Name,
-				"height":   strconv.Itoa(int(qualiItem.Height)),
-				"width":    strconv.Itoa(int(qualiItem.Width)),
-			})
-		}
-
 	}
 
 	rawQuality, _ := json.Marshal(jsonQualitys)
-	rawEncQualitys, _ := json.Marshal(jsonEncQualitys)
 
 	var jsonSubtitles []map[string]string
 	for _, subItem := range dbLink.File.Subtitles {
@@ -100,12 +92,13 @@ func PlayerController(c *fiber.Ctx) error {
 	rawAudios, _ := json.Marshal(jsonAudios)
 
 	return c.Render("player", fiber.Map{
-		"Title":       dbLink.Name,
-		"Qualitys":    string(rawQuality),
-		"Subtitles":   string(rawSubtitles),
-		"Audios":      string(rawAudios),
-		"EncQualitys": string(rawEncQualitys),
-		"UUID":        requestValidation.UUID,
-		"PROJECTURL":  config.ENV.Project,
+		"Title":         dbLink.Name,
+		"Thumbnail":     fmt.Sprintf("/videos/qualitys/%s/image/thumb/%s", dbLink.UUID, dbLink.File.Thumbnail),
+		"Qualitys":      string(rawQuality),
+		"Subtitles":     string(rawSubtitles),
+		"Audios":        string(rawAudios),
+		"StreamIsReady": streamIsReady,
+		"UUID":          requestValidation.UUID,
+		"PROJECTURL":    config.ENV.Project,
 	})
 }

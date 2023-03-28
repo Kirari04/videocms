@@ -76,12 +76,7 @@
       <div class="subtitle_container">
         <div class="subs"></div>
       </div>
-      <video
-        controls
-        crossorigin
-        playsinline
-        poster="https://bitdash-a.akamaihd.net/content/sintel/poster.png"
-      ></video>
+      <video controls crossorigin playsinline poster="{{ .Thumbnail }}"></video>
     </div>
     <script>
       let Qualitys = JSON.parse(decodeURI("{{.Qualitys}}"));
@@ -93,6 +88,7 @@
       const UUID = "{{.UUID}}";
       const PROJECTURL = "{{.PROJECTURL}}";
       const TITLE = "{{.Title}}";
+      const StreamIsReady = "{{.StreamIsReady}}" == "true";
     </script>
     <script src="https://cdn.plyr.io/3.7.7/plyr.js"></script>
     <script src="https://cdn.rawgit.com/video-dev/hls.js/18bb552/dist/hls.min.js"></script>
@@ -130,6 +126,24 @@
         timer: 1000,
         timerProgressBar: true,
       });
+
+      if (!StreamIsReady) {
+        Swal.fire({
+          target: ".container",
+          title:
+            "The file is not ready yet. Please wait a minute and reload the website again.",
+          confirmButtonText: "Reload Website",
+        }).then((result) => {
+          if (result.isConfirmed) {
+            window.location.reload();
+          }
+        });
+        video.style.position = "absolute";
+        video.style.left = "0px";
+        video.style.top = "0px";
+        video.style.width = "100%";
+        video.style.height = "100%";
+      }
 
       setInterval(() => {
         if (window.ass) {
@@ -270,9 +284,12 @@
         const open_caption_settings = (isEmptyCallback) => {
           let inputOptions = {};
           Subtitles.forEach((Subtitle, index) => {
-            if (!inputOptions[`${Subtitle.lang}`] && Subtitle.type == "ass")
+            if (!inputOptions[`${Subtitle.lang}`]) {
               inputOptions[`${Subtitle.lang}`] = {};
-            inputOptions[`${Subtitle.lang}`][`${index}`] = Subtitle.name;
+            }
+            if (Subtitle.type === "ass") {
+              inputOptions[`${Subtitle.lang}`][`${index}`] = Subtitle.name;
+            }
           });
           Swal.fire({
             target: ".container",
@@ -379,6 +396,8 @@
       });
 
       document.addEventListener("DOMContentLoaded", () => {
+        if (!StreamIsReady) return;
+
         const defaultOptions = {
           seekTime: 5,
           fullscreen: {
