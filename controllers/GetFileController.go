@@ -53,6 +53,7 @@ func GetFile(c *fiber.Ctx) error {
 	}
 	type RespSub struct {
 		Name  string
+		Type  string
 		Lang  string
 		Ready bool
 	}
@@ -89,6 +90,7 @@ func GetFile(c *fiber.Ctx) error {
 		Subtitles = append(Subtitles, RespSub{
 			Name:  Subtitle.Name,
 			Lang:  Subtitle.Lang,
+			Type:  Subtitle.Type,
 			Ready: Subtitle.Ready,
 		})
 	}
