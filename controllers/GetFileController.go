@@ -36,6 +36,7 @@ func GetFile(c *fiber.Ctx) error {
 		Preload("File").
 		Preload("File.Qualitys").
 		Preload("File.Subtitles").
+		Preload("File.Audios").
 		Where(&models.Link{
 			UserID: userID,
 		}).
@@ -57,6 +58,12 @@ func GetFile(c *fiber.Ctx) error {
 		Lang  string
 		Ready bool
 	}
+	type RespAudio struct {
+		Name  string
+		Type  string
+		Lang  string
+		Ready bool
+	}
 	type Resp struct {
 		CreatedAt      time.Time
 		UpdatedAt      time.Time
@@ -67,6 +74,7 @@ func GetFile(c *fiber.Ctx) error {
 		Duration       float64
 		Qualitys       []RespQuali
 		Subtitles      []RespSub
+		Audios         []RespAudio
 	}
 	var Qualitys []RespQuali
 	for _, Quality := range link.File.Qualitys {
@@ -94,6 +102,17 @@ func GetFile(c *fiber.Ctx) error {
 			Ready: Subtitle.Ready,
 		})
 	}
+
+	var Audios []RespAudio
+	for _, Audio := range link.File.Audios {
+		Audios = append(Audios, RespAudio{
+			Name:  Audio.Name,
+			Lang:  Audio.Lang,
+			Type:  Audio.Type,
+			Ready: Audio.Ready,
+		})
+	}
+
 	response := Resp{
 		CreatedAt:      link.CreatedAt,
 		UpdatedAt:      link.UpdatedAt,
@@ -104,6 +123,7 @@ func GetFile(c *fiber.Ctx) error {
 		Duration:       link.File.Duration,
 		Qualitys:       Qualitys,
 		Subtitles:      Subtitles,
+		Audios:         Audios,
 	}
 	// return value
 	return c.JSON(response)
