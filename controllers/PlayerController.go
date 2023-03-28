@@ -73,10 +73,11 @@ func PlayerController(c *fiber.Ctx) error {
 	var jsonSubtitles []map[string]string
 	for _, subItem := range dbLink.File.Subtitles {
 		if subItem.Ready {
-			subPath := fmt.Sprintf("./videos/qualitys/%s/%s/out.ass", dbLink.File.UUID, subItem.UUID)
+			subPath := fmt.Sprintf("./videos/qualitys/%s/%s/%s", dbLink.File.UUID, subItem.UUID, subItem.OutputFile)
 			if subContent, err := os.ReadFile(subPath); err == nil {
 				jsonSubtitles = append(jsonSubtitles, map[string]string{
 					"data": base64.StdEncoding.EncodeToString(subContent),
+					"type": subItem.Type,
 					"name": subItem.Name,
 					"lang": subItem.Lang,
 				})

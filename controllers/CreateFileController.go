@@ -239,27 +239,32 @@ func CreateFile(c *fiber.Ctx) error {
 
 		log.Printf("subtitleName: %s / subtitleLang: %s", subtitleName, subtitleLang)
 
-		// generate unique identifier for subtitle
-		subtitleId := uuid.NewString()
+		for _, subOpt := range models.AvailableSubtitles {
+			// generate unique identifier for subtitle
+			subtitleId := uuid.NewString()
 
-		// save subtitle data to database
-		dbSubtitle := models.Subtitle{
-			UUID:          subtitleId,
-			Name:          subtitleName,
-			Lang:          subtitleLang,
-			Index:         index,
-			FileID:        dbFile.ID,
-			Path:          fmt.Sprintf("./videos/qualitys/%s/%s", dbFile.UUID, subtitleId),
-			OriginalCodec: subtitleStream.CodecName,
-			Encoding:      false,
-			Failed:        false,
-			Ready:         false,
-			Error:         "",
-		}
-		if res := inits.DB.Create(&dbSubtitle); res.Error != nil {
-			log.Printf("Error saving Subtitle in database: %v", res.Error)
-			os.Remove(filePath)
-			return c.SendStatus(fiber.StatusInternalServerError)
+			// save subtitle data to database
+			dbSubtitle := models.Subtitle{
+				UUID:          subtitleId,
+				Name:          subtitleName,
+				Lang:          subtitleLang,
+				Index:         index,
+				Codec:         subOpt.Codec,
+				Type:          subOpt.Type,
+				OutputFile:    subOpt.OutputFile,
+				FileID:        dbFile.ID,
+				Path:          fmt.Sprintf("./videos/qualitys/%s/%s", dbFile.UUID, subtitleId),
+				OriginalCodec: subtitleStream.CodecName,
+				Encoding:      false,
+				Failed:        false,
+				Ready:         false,
+				Error:         "",
+			}
+			if res := inits.DB.Create(&dbSubtitle); res.Error != nil {
+				log.Printf("Error saving Subtitle in database: %v", res.Error)
+				os.Remove(filePath)
+				return c.SendStatus(fiber.StatusInternalServerError)
+			}
 		}
 	}
 

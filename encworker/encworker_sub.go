@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -106,13 +107,32 @@ func runEncode_sub(encodingTask models.Subtitle) {
 	totalDuration := encodingTask.File.Duration
 	os.MkdirAll(encodingTask.Path, 0777)
 
-	ffmpegCommand := "ffmpeg " +
-		fmt.Sprintf("-i %s ", encodingTask.File.Path) + // input file
-		"-an " + // disable audio
-		"-vn " + // disable video stream
-		fmt.Sprintf("-map 0:s:%d ", encodingTask.Index) + // mapping first audio stream
-		fmt.Sprintf("%s/out.ass ", encodingTask.Path) + // output file
-		fmt.Sprintf("-progress unix://%s -y", TempSock_sub(totalDuration, &encodingTask)) // progress tracking
+	absFileInput, _ := filepath.Abs(encodingTask.File.Path)
+	absFolderOutput, _ := filepath.Abs(encodingTask.Path)
+
+	var ffmpegCommand string = "echo Audioencoding type didnt match && exit 1"
+
+	switch encodingTask.Type {
+	case "ass":
+		ffmpegCommand = "ffmpeg " +
+			fmt.Sprintf("-i %s ", absFileInput) + // input file
+			"-an " + // disable audio
+			"-vn " + // disable video stream
+			fmt.Sprintf("-map 0:s:%d ", encodingTask.Index) + // mapping first audio stream
+			fmt.Sprintf("-c:s %s ", encodingTask.Codec) + // setting audio codec
+			fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
+			fmt.Sprintf("-progress unix://%s -y", TempSock_sub(totalDuration, &encodingTask)) // progress tracking
+	case "vtt":
+		ffmpegCommand = "ffmpeg " +
+			fmt.Sprintf("-i %s ", absFileInput) + // input file
+			"-an " + // disable audio
+			"-vn " + // disable video stream
+			fmt.Sprintf("-map 0:s:%d ", encodingTask.Index) + // mapping first audio stream
+			fmt.Sprintf("-c:s %s ", encodingTask.Codec) + // setting audio codec
+			fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
+			fmt.Sprintf("-progress unix://%s -y", TempSock_sub(totalDuration, &encodingTask)) // progress tracking
+
+	}
 
 	cmd := exec.Command(
 		"bash",
