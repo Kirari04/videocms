@@ -12,7 +12,9 @@
             "program": "main.go",
             "env": {
                 "EncodingEnabled": "true",
-                "UploadEnabled": "true"
+                "UploadEnabled": "true",
+                "MaxRunningEncodes_sub": "4",
+                "MaxRunningEncodes_audio": "4",
             }
         }
     ]
