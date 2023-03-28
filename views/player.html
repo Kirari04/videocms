@@ -384,7 +384,7 @@
           fullscreen: {
             enabled: true,
             fallback: true,
-            iosNative: true,
+            iosNative: false,
             container: ".container",
           },
           captions: { active: iOS(), language: "auto", update: false },
@@ -417,7 +417,6 @@
           },
         };
 
-        console.log(defaultOptions);
         // apple native player
         if (video.canPlayType("application/vnd.apple.mpegurl")) {
           video.src = source;
