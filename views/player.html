@@ -385,7 +385,7 @@
             enabled: true,
             fallback: true,
             iosNative: false,
-            container: ".container",
+            container: iOS() ? null : ".container",
           },
           captions: { active: iOS(), language: "auto", update: false },
           iconUrl: "/icons/svgs.svg",
