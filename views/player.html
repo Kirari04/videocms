@@ -34,6 +34,10 @@
         overflow: hidden;
       }
 
+      .plyr__caption {
+        font-size: 20pt;
+      }
+
       .plyr {
         height: 100%;
       }
@@ -105,7 +109,7 @@
       const video = document.querySelector("video");
 
       const Toast = Swal.mixin({
-		target: '.container',
+        target: ".container",
         toast: true,
         position: "top-end",
         showConfirmButton: false,
@@ -119,7 +123,7 @@
       });
 
       const ShortToast = Swal.mixin({
-		target: '.container',
+        target: ".container",
         toast: true,
         position: "top-end",
         showConfirmButton: false,
@@ -149,7 +153,29 @@
 
       function PlayerInit(options) {
         // init player
+        if (iOS()) {
+          // add subtitles inside video object
+          let nth = 0;
+          for (const [index, subItem] of Subtitles.entries()) {
+            if (subItem.type !== "vtt") {
+              continue;
+            }
+            nth++;
+            let track = document.createElement("track");
+            if (nth == 1) track.default = true;
+            track.setAttribute("kind", "captions");
+            track.setAttribute("label", subItem.name);
+            track.setAttribute("srclang", subItem.lang);
+            track.src = URL.createObjectURL(
+              new Blob([b64DecodeUnicode(Subtitles[index].data)], {
+                type: "text/plain",
+              })
+            );
+            video.append(track);
+          }
+        }
         var player = new Plyr(video, options);
+        console.log("player", player);
         player.on("ready", (event) => {
           if (window.ass) {
             setTimeout(() => {
@@ -200,7 +226,7 @@
         const oldPosition = parseInt(localStorage.getItem(`POSITION-${UUID}`));
         if (oldPosition > 0) {
           Swal.fire({
-			target: '.container',
+            target: ".container",
             title: "Do you want to start where you left last time?",
             showDenyButton: true,
             confirmButtonText: "Yes",
@@ -226,6 +252,9 @@
       }
 
       function CaptionInit() {
+        if (iOS()) {
+          return;
+        }
         const plyr_captions_on = addButton(
           ".plyr__time--duration",
           "plyr-captions-on",
@@ -241,12 +270,12 @@
         const open_caption_settings = (isEmptyCallback) => {
           let inputOptions = {};
           Subtitles.forEach((Subtitle, index) => {
-            if (!inputOptions[`${Subtitle.lang}`])
+            if (!inputOptions[`${Subtitle.lang}`] && Subtitle.type == "ass")
               inputOptions[`${Subtitle.lang}`] = {};
             inputOptions[`${Subtitle.lang}`][`${index}`] = Subtitle.name;
           });
           Swal.fire({
-			target: '.container',
+            target: ".container",
             title: "",
             input: "select",
             inputOptions: inputOptions,
@@ -306,6 +335,9 @@
       }
 
       function SubtitleInit(index) {
+        if (iOS()) {
+          return;
+        }
         if (window.ass) {
           window.ass.destroy();
           window.ass = undefined;
@@ -324,6 +356,21 @@
         });
       }
 
+      function iOS() {
+        return (
+          [
+            "iPad Simulator",
+            "iPhone Simulator",
+            "iPod Simulator",
+            "iPad",
+            "iPhone",
+            "iPod",
+          ].includes(navigator.platform) ||
+          // iPad on iOS 13 detection
+          (navigator.userAgent.includes("Mac") && "ontouchend" in document)
+        );
+      }
+
       // subtitle sizing & positioning
       window.addEventListener("resize", () => {
         if (window.ass) {
@@ -337,9 +384,10 @@
           fullscreen: {
             enabled: true,
             fallback: true,
-            iosNative: false,
+            iosNative: true,
             container: ".container",
           },
+          captions: { active: iOS(), language: "auto", update: false },
           iconUrl: "/icons/svgs.svg",
           keyboard: { focused: false, global: true },
           controls: () => {
@@ -351,17 +399,25 @@
               "fast-forward", // Fast forward by the seek time (default 10 seconds)
               "current-time", // The current time of playback
               "duration", // The full duration of the media
-              "mute", // Toggle mute
-              "volume", // Volume control
-              "settings", // Settings menu
-              "pip", // Picture-in-picture (currently Safari only)
-              "airplay", // Airplay (currently Safari only)
-              "fullscreen",
             ];
+            if (iOS()) {
+              controls.push("captions");
+            }
+            controls.push(
+              ...[
+                "mute", // Toggle mute
+                "volume", // Volume control
+                "settings", // Settings menu
+                "pip", // Picture-in-picture (currently Safari only)
+                "airplay", // Airplay (currently Safari only)
+              ]
+            );
+            controls.push("fullscreen");
             return controls;
           },
         };
 
+        console.log(defaultOptions);
         // apple native player
         if (video.canPlayType("application/vnd.apple.mpegurl")) {
           video.src = source;
