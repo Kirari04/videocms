@@ -102,7 +102,7 @@ func runEncode_sub(encodingTask models.Subtitle) {
 		return
 	}
 
-	log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
+	// log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 
 	totalDuration := encodingTask.File.Duration
 	os.MkdirAll(encodingTask.Path, 0777)
@@ -153,7 +153,7 @@ func runEncode_sub(encodingTask models.Subtitle) {
 	encodingTask.Encoding = false
 	encodingTask.Ready = true
 	inits.DB.Save(&encodingTask)
-	log.Printf("Finish encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
+	// log.Printf("Finish encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 	runningEncodes_sub -= 1
 }
 

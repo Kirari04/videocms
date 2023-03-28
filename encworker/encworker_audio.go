@@ -102,7 +102,7 @@ func runEncode_audio(encodingTask models.Audio) {
 		return
 	}
 
-	log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
+	// log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 
 	totalDuration := encodingTask.File.Duration
 	os.MkdirAll(encodingTask.Path, 0777)
@@ -164,7 +164,7 @@ func runEncode_audio(encodingTask models.Audio) {
 	encodingTask.Encoding = false
 	encodingTask.Ready = true
 	inits.DB.Save(&encodingTask)
-	log.Printf("Finish encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
+	// log.Printf("Finish encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 	runningEncodes_audio -= 1
 }
 
