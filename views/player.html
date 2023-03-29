@@ -4,7 +4,17 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
+    <meta name="twitter:title" content="{{ .Title }}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="{{ .Thumbnail}}" />
+    <meta name="og:image:width" content="1920" />
+    <meta name="og:image:height" content="1080" />
+    <meta name="title" content="{{ .Title }}" />
+    <meta name="description" content="{{ .Title }}" />
+    <meta name="og:title" content="{{ .Title }}" />
+    <meta name="og:description" content="{{ .Title }}" />
+    <meta name="og:image" content="{{ .Thumbnail }}" />
+    <title>{{ .Title }}</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />
     <link rel="preconnect" href="https://cdn.plyr.io" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
