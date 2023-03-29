@@ -59,6 +59,21 @@ func PlayerController(c *fiber.Ctx) error {
 			}
 		}
 	}
+	type OgQualityT struct {
+		Url    string
+		Label  string
+		Height string
+		Width  string
+	}
+	var OgQuality OgQualityT
+	if len(jsonQualitys) > 0 {
+		OgQuality = OgQualityT{
+			Url:    jsonQualitys[0]["url"],
+			Label:  jsonQualitys[0]["label"],
+			Height: jsonQualitys[0]["height"],
+			Width:  jsonQualitys[0]["width"],
+		}
+	}
 
 	rawQuality, _ := json.Marshal(jsonQualitys)
 
@@ -95,6 +110,7 @@ func PlayerController(c *fiber.Ctx) error {
 		"Title":         dbLink.Name,
 		"Thumbnail":     fmt.Sprintf("/videos/qualitys/%s/image/thumb/%s", dbLink.UUID, dbLink.File.Thumbnail),
 		"Qualitys":      string(rawQuality),
+		"OgQuality":     OgQuality,
 		"Subtitles":     string(rawSubtitles),
 		"Audios":        string(rawAudios),
 		"StreamIsReady": streamIsReady,

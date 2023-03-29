@@ -14,6 +14,11 @@
     <meta name="og:title" content="{{ .Title }}" />
     <meta name="og:description" content="{{ .Title }}" />
     <meta name="og:image" content="{{ .Thumbnail }}" />
+    {{ if ne .OgQuality.Url ""}}
+    <meta property="og:video" content="{{.OgQuality.Url}}" />
+    <meta property="og:video:width" content="{{.OgQuality.Width}}" />
+    <meta property="og:video:height" content="{{.OgQuality.Height}}" />
+    {{ end }}
     <title>{{ .Title }}</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />
     <link rel="preconnect" href="https://cdn.plyr.io" />
