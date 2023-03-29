@@ -126,7 +126,7 @@ func CreateFile(c *fiber.Ctx) error {
 	}
 	// proobe type
 	dataStreams := data.StreamType(ffprobe.StreamAny)
-
+	dataSubtitleStreams := data.StreamType(ffprobe.StreamSubtitle)
 	// declare needed informations
 	var videoStream ffprobe.Stream
 	var subtitleStreams []ffprobe.Stream
@@ -147,12 +147,15 @@ func CreateFile(c *fiber.Ctx) error {
 			hasVideoStream = true
 		}
 
-		if streamInfo.CodecType == "subtitle" && streamInfo.CodecName != "hdmv_pgs_subtitle" {
-			subtitleStreams = append(subtitleStreams, streamInfo)
-		}
-
 		if streamInfo.CodecType == "audio" {
 			audioStreams = append(audioStreams, streamInfo)
+		}
+	}
+
+	//loop over subtitles in file
+	for _, streamInfo := range dataSubtitleStreams {
+		if streamInfo.CodecName != "hdmv_pgs_subtitle" {
+			subtitleStreams = append(subtitleStreams, streamInfo)
 		}
 	}
 
@@ -245,16 +248,17 @@ func CreateFile(c *fiber.Ctx) error {
 	for index, subtitleStream := range subtitleStreams {
 		// generate subtitle name
 		var subtitleName = fmt.Sprintf("Subtitle %v", index+1)
-		if autoName, err := subtitleStream.TagList.GetString("title"); err == nil && autoName != "" {
+		if autoName := subtitleStream.Tags.Title; autoName != "" && len(autoName) < 20 {
 			subtitleName = autoName
 		}
+
 		// detect subtitle language
-		var subtitleLang = "en"
-		if autoLang, err := subtitleStream.TagList.GetString("language"); err == nil && autoLang != "" && len(autoLang) < 10 {
+		var subtitleLang = "eng"
+		if autoLang := subtitleStream.Tags.Language; autoLang != "" && len(autoLang) < 10 {
 			subtitleLang = autoLang
 		}
 
-		// log.Printf("subtitleName: %s / subtitleLang: %s", subtitleName, subtitleLang)
+		// log.Printf("subtitleName: %s / subtitleLang: %s", subtitleStream.Tags.Title, subtitleStream.Tags.Language)
 
 		for _, subOpt := range models.AvailableSubtitles {
 			// generate unique identifier for subtitle
