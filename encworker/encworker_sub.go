@@ -87,7 +87,7 @@ func runEncode_sub(encodingTask models.Subtitle) {
 			inits.DB.Save(&encodingTask)
 			return
 		}
-		time.Sleep(time.Second * 10)
+		time.Sleep(time.Second * 1)
 	}
 	runningEncodes_sub += 1
 

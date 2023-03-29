@@ -41,9 +41,9 @@ var AvailableAudios = []AvailableAudio{
 	// 	Codec:      "libopus",
 	// 	OutputFile: "audio.ogg",
 	// },
-	{
-		Type:       "mp3",
-		Codec:      "libmp3lame",
-		OutputFile: "audio.mp3",
-	},
+	// {
+	// 	Type:       "mp3",
+	// 	Codec:      "libmp3lame",
+	// 	OutputFile: "audio.mp3",
+	// },
 }

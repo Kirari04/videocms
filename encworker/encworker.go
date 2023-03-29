@@ -87,7 +87,7 @@ func runEncode(encodingTask models.Quality) {
 			inits.DB.Save(&encodingTask)
 			return
 		}
-		time.Sleep(time.Second * 10)
+		time.Sleep(time.Second * 1)
 	}
 	runningEncodes += 1
 
@@ -132,6 +132,7 @@ func runEncode(encodingTask models.Quality) {
 			fmt.Sprintf("%s ", encFilePath) + // output file
 			fmt.Sprintf("-progress unix://%s -y", TempSock(totalDuration, &encodingTask)) // progress tracking
 	case "vp9":
+
 		ffmpegCommand = "ffmpeg " + // starting pass 1
 			fmt.Sprintf("-i %s ", absFileInput) + // input file
 			"-c:v libvpx-vp9 " +
@@ -143,9 +144,10 @@ func runEncode(encodingTask models.Quality) {
 			"ffmpeg " + // starting pass 2
 			fmt.Sprintf("-i %s ", absFileInput) + // input file
 			"-sn " + // disable subtitle
-			"-an " + // disable audio
+			// "-an " + // disable audio
 			`-af aformat=channel_layouts="7.1|5.1|stereo" ` + // audio channel layouts
 			"-c:v libvpx-vp9 " + // setting video codec libx264 | libaom-av1
+			"-c:a libopus " + // setting audio codec
 			"-pass 2 " + // setting pass 2 flag
 			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
 			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
@@ -163,9 +165,10 @@ func runEncode(encodingTask models.Quality) {
 			"ffmpeg " + // starting pass 2
 			fmt.Sprintf("-i %s ", absFileInput) + // input file
 			"-sn " + // disable subtitle
-			"-an " + // disable audio
+			// "-an " + // disable audio
 			`-af aformat=channel_layouts="7.1|5.1|stereo" ` + // audio channel layouts
 			"-c:v libaom-av1 " + // setting video codec libx264 | libaom-av1
+			"-c:a aac " + // setting audio codec
 			"-pass 2 " + // setting pass 2 flag
 			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
 			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate

@@ -105,13 +105,22 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/assjs/dist/ass.min.js"></script>
     <script>
-      const source =
-        Audios.findIndex((Audio) => Audio.type == "hls") !== -1
-          ? `/videos/qualitys/${UUID}/${
-              Audios.find((Audio) => Audio.type == "hls").uuid
-            }/stream/master.m3u8`
-          : `/videos/qualitys/${UUID}/stream/muted/master.m3u8`;
+      const HLSENABLED = Hls.isSupported();
+      let source = `/videos/qualitys/${UUID}/stream/muted/master.m3u8`;
       let currentValue = "";
+      let currentAudioValue = "";
+      const setAudioSource = (HlsAudioIndex) => {
+        currentAudioValue = `${HlsAudioIndex}`;
+        source = `/videos/qualitys/${UUID}/${Audios[HlsAudioIndex].uuid}/stream/master.m3u8`;
+      };
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get("audio")) {
+        setAudioSource(parseInt(urlParams.get("audio")));
+      } else {
+        let HlsAudioIndex = Audios.findIndex((Audio) => Audio.type == "hls");
+        if (HlsAudioIndex !== -1) setAudioSource(HlsAudioIndex);
+      }
+
       const video = document.querySelector("video");
 
       const Toast = Swal.mixin({
@@ -160,6 +169,117 @@
           window.ass.resize();
         }
       }, 1000);
+
+      function Build() {
+        if (!StreamIsReady) return;
+        // if (window.hls) window.hls.destroy();
+        // if (window.player) window.player.destroy();
+
+        const defaultOptions = {
+          seekTime: 5,
+          fullscreen: {
+            enabled: true,
+            fallback: true,
+            iosNative: false,
+            container: iOS() ? null : ".container",
+          },
+          captions: { active: iOS(), language: "auto", update: false },
+          iconUrl: "/icons/svgs.svg",
+          keyboard: { focused: false, global: true },
+          controls: () => {
+            let controls = [
+              "progress", // The progress bar and scrubber for playback and buffering
+              "play-large", // The large play button in the center
+              "play", // Play/pause playback
+              "rewind", // Rewind by the seek time (default 10 seconds)
+              "fast-forward", // Fast forward by the seek time (default 10 seconds)
+              "current-time", // The current time of playback
+              "duration", // The full duration of the media
+            ];
+            if (iOS()) {
+              controls.push("captions");
+            }
+            controls.push(
+              ...[
+                "mute", // Toggle mute
+                "volume", // Volume control
+                "settings", // Settings menu
+                "pip", // Picture-in-picture (currently Safari only)
+                "airplay", // Airplay (currently Safari only)
+              ]
+            );
+            controls.push("fullscreen");
+            return controls;
+          },
+        };
+
+        // apple native player
+        if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.src = source;
+          PlayerInit(defaultOptions);
+
+          // hls.js player
+        } else if (HLSENABLED) {
+          const hls = new Hls();
+          hls.loadSource(source);
+          hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
+            const availableQualities = hls.levels.map((l) => l.height);
+            availableQualities.unshift(0); //prepend 0 to quality array
+
+            // Add new qualities to option
+            defaultOptions.quality = {
+              default: 0, //Default - AUTO
+              options: availableQualities,
+              forced: true,
+              onChange: (e) => updateQuality(e),
+            };
+            // Add Auto Label
+            defaultOptions.i18n = {
+              qualityLabel: {
+                0: "Auto",
+              },
+            };
+            hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
+              var span = document.querySelector(
+                ".plyr__menu__container [data-plyr='quality'][value='0'] span"
+              );
+              if (hls.autoLevelEnabled) {
+                span.innerHTML = `AUTO (${hls.levels[data.level].height}p)`;
+              } else {
+                span.innerHTML = `AUTO`;
+              }
+            });
+            PlayerInit(defaultOptions);
+          });
+
+          hls.attachMedia(video);
+          window.hls = hls;
+          // use fallback url (webm or mp4)
+        } else if ("{{.OgQuality.Url}}" !== "") {
+          video.src = "{{.OgQuality.Url}}";
+          PlayerInit(defaultOptions);
+        } else {
+          // show error message
+          PlayerInit(defaultOptions);
+          Toast.fire({
+            icon: "error",
+            title: `Your Browser doesn't support Hls and currently there is no alternativ stream available.`,
+          });
+        }
+
+        function updateQuality(newQuality) {
+          if (newQuality === 0) {
+            window.hls.currentLevel = -1; //Enable AUTO quality if option.value = 0
+          } else {
+            window.hls.levels.forEach((level, levelIndex) => {
+              if (level.height === newQuality) {
+                console.log("Found quality match with " + newQuality);
+                window.hls.currentLevel = levelIndex;
+              }
+            });
+          }
+        }
+      }
 
       function addButton(selectorName, iconId, buttonName) {
         const playerControlsEl = document.querySelector(
@@ -244,6 +364,9 @@
 
         // init captions
         CaptionInit();
+
+        // init audios
+        AudioInit();
 
         // save position
         setInterval(() => {
@@ -390,6 +513,74 @@
         });
       }
 
+      function AudioInit() {
+        if (!iOS() && !HLSENABLED) {
+          return;
+        }
+        const plyr_audio = addButton(
+          ".plyr__time--duration",
+          "plyr-audios",
+          "Audios"
+        );
+
+        const open_caption_settings = (isEmptyCallback) => {
+          let inputOptions = {};
+          Audios.forEach((Audio, index) => {
+            if (!inputOptions[`${Audio.lang}`]) {
+              inputOptions[`${Audio.lang}`] = {};
+            }
+            if (Audio.type === "hls") {
+              inputOptions[`${Audio.lang}`][`${index}`] = Audio.name;
+            }
+          });
+          Swal.fire({
+            target: ".container",
+            title: "",
+            input: "select",
+            inputOptions: inputOptions,
+            inputPlaceholder: "Select Audio",
+            confirmButtonText: "Choose",
+            inputValue: currentAudioValue,
+            inputValidator: (value) => {
+              currentAudioValue = value;
+              if (!value) {
+                if (Audios.length == 0) {
+                  isEmptyCallback(true);
+                } else {
+                  return "Choose one audio language.";
+                }
+              } else {
+                isEmptyCallback(false);
+              }
+              if (value) {
+                setAudioSource(parseInt(value));
+              }
+            },
+          }).then((result) => {
+            //nothing
+          });
+        };
+
+        const plyr_audios_toggle = (empty) => {
+          if (currentAudioValue != "" && empty == false) {
+            // change hls audio or switch direct audio channel
+            if (video.canPlayType("application/vnd.apple.mpegurl")) {
+              if (source != video.source) {
+                video.src = source;
+              }
+            } else if (window.hls) {
+              window.location = `${
+                new URL(window.location).pathname
+              }?audio=${currentAudioValue}`;
+            }
+          }
+        };
+
+        plyr_audio.onclick = () => {
+          open_caption_settings((empty) => plyr_audios_toggle(empty));
+        };
+      }
+
       function iOS() {
         return (
           [
@@ -413,113 +604,10 @@
       });
 
       document.addEventListener("DOMContentLoaded", () => {
-        if (!StreamIsReady) return;
-
-        const defaultOptions = {
-          seekTime: 5,
-          fullscreen: {
-            enabled: true,
-            fallback: true,
-            iosNative: false,
-            container: iOS() ? null : ".container",
-          },
-          captions: { active: iOS(), language: "auto", update: false },
-          iconUrl: "/icons/svgs.svg",
-          keyboard: { focused: false, global: true },
-          controls: () => {
-            let controls = [
-              "progress", // The progress bar and scrubber for playback and buffering
-              "play-large", // The large play button in the center
-              "play", // Play/pause playback
-              "rewind", // Rewind by the seek time (default 10 seconds)
-              "fast-forward", // Fast forward by the seek time (default 10 seconds)
-              "current-time", // The current time of playback
-              "duration", // The full duration of the media
-            ];
-            if (iOS()) {
-              controls.push("captions");
-            }
-            controls.push(
-              ...[
-                "mute", // Toggle mute
-                "volume", // Volume control
-                "settings", // Settings menu
-                "pip", // Picture-in-picture (currently Safari only)
-                "airplay", // Airplay (currently Safari only)
-              ]
-            );
-            controls.push("fullscreen");
-            return controls;
-          },
-        };
-
-        // apple native player
-        if (video.canPlayType("application/vnd.apple.mpegurl")) {
-          video.src = source;
-          PlayerInit(defaultOptions);
-
-          // hls.js player
-        } else if (Hls.isSupported()) {
-          const hls = new Hls();
-          hls.loadSource(source);
-          hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
-            const availableQualities = hls.levels.map((l) => l.height);
-            availableQualities.unshift(0); //prepend 0 to quality array
-
-            // Add new qualities to option
-            defaultOptions.quality = {
-              default: 0, //Default - AUTO
-              options: availableQualities,
-              forced: true,
-              onChange: (e) => updateQuality(e),
-            };
-            // Add Auto Label
-            defaultOptions.i18n = {
-              qualityLabel: {
-                0: "Auto",
-              },
-            };
-
-            hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
-              var span = document.querySelector(
-                ".plyr__menu__container [data-plyr='quality'][value='0'] span"
-              );
-              if (hls.autoLevelEnabled) {
-                span.innerHTML = `AUTO (${hls.levels[data.level].height}p)`;
-              } else {
-                span.innerHTML = `AUTO`;
-              }
-            });
-            PlayerInit(defaultOptions);
-          });
-
-          hls.attachMedia(video);
-          window.hls = hls;
-
-          // use fallback url (webm or mp4)
-        } else if ("{{.OgQuality.Url}}" !== "") {
-          video.src = "{{.OgQuality.Url}}";
-          PlayerInit(defaultOptions);
-        } else {
-          // show error message
-          PlayerInit(defaultOptions);
-          Toast.fire({
-            icon: "error",
-            title: `Your Browser doesn't support Hls and currently there is no alternativ stream available.`,
-          });
-        }
-
-        function updateQuality(newQuality) {
-          if (newQuality === 0) {
-            window.hls.currentLevel = -1; //Enable AUTO quality if option.value = 0
-          } else {
-            window.hls.levels.forEach((level, levelIndex) => {
-              if (level.height === newQuality) {
-                console.log("Found quality match with " + newQuality);
-                window.hls.currentLevel = levelIndex;
-              }
-            });
-          }
+        try {
+          Build();
+        } catch (e) {
+          alert("Some Error happend");
         }
       });
     </script>

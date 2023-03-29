@@ -87,7 +87,7 @@ func runEncode_audio(encodingTask models.Audio) {
 			inits.DB.Save(&encodingTask)
 			return
 		}
-		time.Sleep(time.Second * 10)
+		time.Sleep(time.Second * 1)
 	}
 	runningEncodes_audio += 1
 

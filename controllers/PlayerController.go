@@ -101,6 +101,7 @@ func PlayerController(c *fiber.Ctx) error {
 				"type": audioItem.Type,
 				"name": audioItem.Name,
 				"lang": audioItem.Lang,
+				"file": audioItem.OutputFile,
 			})
 		}
 	}
