@@ -46,6 +46,7 @@ func GetFile(c *fiber.Ctx) error {
 	}
 	type RespQuali struct {
 		Name         string
+		Type         string
 		Height       int64
 		Width        int64
 		AvgFrameRate float64
@@ -86,6 +87,7 @@ func GetFile(c *fiber.Ctx) error {
 		}
 		Qualitys = append(Qualitys, RespQuali{
 			Name:         Quality.Name,
+			Type:         Quality.Type,
 			Height:       Quality.Height,
 			Width:        Quality.Width,
 			AvgFrameRate: avgFps,
