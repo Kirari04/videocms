@@ -8,19 +8,12 @@
     <meta name="og:image:width" content="1920" />
     <meta name="og:image:height" content="1080" />
     <meta name="title" content="{{ .Title }}" />
-    <meta name="description" content="{{ .Title }}" />
+    <meta name="description" content="{{ .Description }}" />
     <meta name="og:title" content="{{ .Title }}" />
-    <meta name="og:description" content="{{ .Title }}" />
-    {{ if ne .OgQuality.Url ""}}
-    <meta name="twitter:card" content="summary" />
-    <meta property="og:video" content="{{.OgQuality.Url}}" />
-    <meta property="og:video:width" content="{{.OgQuality.Width}}" />
-    <meta property="og:video:height" content="{{.OgQuality.Height}}" />
-    {{ else }}
+    <meta name="og:description" content="{{ .Description }}" />
     <meta name="og:image" content="{{ .Thumbnail }}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="{{ .Thumbnail}}" />
-    {{ end }}
     <title>{{ .Title }}</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />
     <link rel="preconnect" href="https://cdn.plyr.io" />
@@ -504,8 +497,8 @@
           window.hls = hls;
 
           // use fallback url (webm or mp4)
-        } else if (Qualitys.length === 1) {
-          video.src = Qualitys[0].url;
+        } else if ("{{.OgQuality.Url}}" !== "") {
+          video.src = "{{.OgQuality.Url}}";
           PlayerInit(defaultOptions);
         } else {
           // show error message

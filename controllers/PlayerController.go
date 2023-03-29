@@ -107,7 +107,8 @@ func PlayerController(c *fiber.Ctx) error {
 	rawAudios, _ := json.Marshal(jsonAudios)
 
 	return c.Render("player", fiber.Map{
-		"Title":         dbLink.Name,
+		"Title":         fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
+		"Description":   fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),
 		"Thumbnail":     fmt.Sprintf("/videos/qualitys/%s/image/thumb/%s", dbLink.UUID, dbLink.File.Thumbnail),
 		"Qualitys":      string(rawQuality),
 		"OgQuality":     OgQuality,
