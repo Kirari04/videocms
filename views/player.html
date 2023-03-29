@@ -5,19 +5,21 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="twitter:title" content="{{ .Title }}" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content="{{ .Thumbnail}}" />
     <meta name="og:image:width" content="1920" />
     <meta name="og:image:height" content="1080" />
     <meta name="title" content="{{ .Title }}" />
     <meta name="description" content="{{ .Title }}" />
     <meta name="og:title" content="{{ .Title }}" />
     <meta name="og:description" content="{{ .Title }}" />
-    <meta name="og:image" content="{{ .Thumbnail }}" />
     {{ if ne .OgQuality.Url ""}}
+    <meta name="twitter:card" content="summary" />
     <meta property="og:video" content="{{.OgQuality.Url}}" />
     <meta property="og:video:width" content="{{.OgQuality.Width}}" />
     <meta property="og:video:height" content="{{.OgQuality.Height}}" />
+    {{ else }}
+    <meta name="og:image" content="{{ .Thumbnail }}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="{{ .Thumbnail}}" />
     {{ end }}
     <title>{{ .Title }}</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />
@@ -204,7 +206,7 @@
           }
         }
         var player = new Plyr(video, options);
-        console.log("player", player);
+        // console.log("player", player);
         player.on("ready", (event) => {
           if (window.ass) {
             setTimeout(() => {
@@ -235,6 +237,11 @@
             (S) => S.lang === lastUsedLang
           );
           if (lastUsedIndex !== -1) {
+            console.log(
+              "found last used sub: ",
+              Subtitles[lastUsedIndex].lang,
+              Subtitles[lastUsedIndex].name
+            );
             currentValue = lastUsedIndex;
             SubtitleInit(lastUsedIndex);
           } else {
@@ -363,7 +370,9 @@
           open_caption_settings((empty) => plyr_captions_toggle(empty));
         };
 
-        plyr_captions_toggle(!currentValue);
+        if (currentValue !== "") {
+          plyr_captions_toggle(false);
+        }
       }
 
       function SubtitleInit(index) {
