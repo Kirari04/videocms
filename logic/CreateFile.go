@@ -21,6 +21,13 @@ import (
 )
 
 func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint) (status int, newFile *models.Link, err error) {
+	//check if requested folder exists (if set)
+	if toFolder > 0 {
+		res := inits.DB.First(&models.Folder{}, toFolder)
+		if res.Error != nil {
+			return fiber.StatusBadRequest, nil, errors.New("parent folder doesn't exist")
+		}
+	}
 
 	// create hash
 	f, err := os.Open(fromFile)
