@@ -7,7 +7,6 @@ import (
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -73,95 +72,52 @@ func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint
 	}
 
 	// query all containing
-	folderIdDeleteList := []uint{}
-	linkIdDeleteList := []uint{}
+	folders := []uint{}
+	files := []models.LinkDeleteValidation{}
 
 	for _, reqFolderId := range reqFolderIdDeleteList {
-		if err := deleteFolderRecursive(&folderIdDeleteList, &linkIdDeleteList, &reqFolderId, &userID); err != nil {
-			return fiber.StatusInternalServerError, errors.New("")
-		}
-
-		if err := deleteLinksFromFolder(&folderIdDeleteList, &linkIdDeleteList, &reqFolderId, &userID); err != nil {
-			return fiber.StatusInternalServerError, errors.New("")
-		}
-
-		// add top if is not 0
-		if reqFolderId > 0 {
-			folderIdDeleteList = append(folderIdDeleteList, reqFolderId)
-			inits.DB.Delete(&models.Folder{}, reqFolderId)
-		}
+		listFolders(reqFolderId, &folders, &files)
+		folders = append(folders, reqFolderId)
+		listFiles(reqFolderId, &files)
 	}
 
-	// delete first files so folder structure stays if it fails
-	if len(linkIdDeleteList) > 0 {
-		deleteVasadeList := make([]models.LinkDeleteValidation, len(linkIdDeleteList))
-		for i, linkIdDeleteItem := range linkIdDeleteList {
-			deleteVasadeList[i] = models.LinkDeleteValidation{
-				LinkID: linkIdDeleteItem,
-			}
-		}
-		if status, err := DeleteFiles(&models.LinksDeleteValidation{
-			LinkIDs: deleteVasadeList,
-		}, userID); err != nil {
-			return status, err
-		}
+	if status, err := DeleteFiles(&models.LinksDeleteValidation{
+		LinkIDs: files,
+	}, userID); err != nil {
+		return status, fmt.Errorf("failed to delete all files from folders: %v", err)
 	}
 
-	//delete folders
-	if res := inits.DB.Delete(&models.Folder{}, folderIdDeleteList); res.Error != nil {
-		log.Printf("Failed to delete folders from id list: %v", res.Error)
-		log.Println(folderIdDeleteList)
-		return fiber.StatusInternalServerError, errors.New("")
+	if res := inits.DB.Delete(&models.Folder{}, folders); res.Error != nil {
+		return status, fmt.Errorf("failed to delete all folders: %v", err)
 	}
 
 	return fiber.StatusOK, nil
 }
 
-func deleteFolderRecursive(folderIdDeleteList *[]uint, linkIdDeleteList *[]uint, ParentFolderIDptr *uint, UserIDptr *uint) error {
-	var folders []models.Folder
-
-	if res := inits.DB.
-		Model(&models.Folder{}).
-		Preload("User").
+func listFolders(folderId uint, folders *[]uint, files *[]models.LinkDeleteValidation) {
+	var folderList []models.Folder
+	inits.DB.Select("id").
 		Where(&models.Folder{
-			ParentFolderID: *ParentFolderIDptr,
-			UserID:         *UserIDptr,
-		}, "ParentFolderID", "UserID").
-		Find(&folders); res.Error != nil {
-		return fmt.Errorf("failed to get a list of folders from parentfolder: %v", res.Error)
+			ParentFolderID: folderId,
+		}).
+		Find(&folderList)
+	for _, id := range folderList {
+		listFolders(id.ID, folders, files)
+		*folders = append(*folders, id.ID)
+		listFiles(id.ID, files)
 	}
-
-	for _, folder := range folders {
-		// delete first the containing folders of the current folder
-		if err := deleteFolderRecursive(folderIdDeleteList, linkIdDeleteList, &folder.ID, UserIDptr); err != nil {
-			return err
-		}
-		// delete all files in the current folder
-		if err := deleteLinksFromFolder(folderIdDeleteList, linkIdDeleteList, &folder.ID, UserIDptr); err != nil {
-			return err
-		}
-		// add current folder to list
-		*folderIdDeleteList = append(*folderIdDeleteList, folder.ID)
-	}
-
-	return nil
 }
 
-func deleteLinksFromFolder(folderIdDeleteList *[]uint, linkIdDeleteList *[]uint, ParentFolderIDptr *uint, UserIDptr *uint) error {
-	var links []models.Link
-	res := inits.DB.
-		Model(&models.Link{}).
+func listFiles(folderId uint, files *[]models.LinkDeleteValidation) {
+	var fileList []models.Link
+	inits.DB.Select("id").
 		Where(&models.Link{
-			UserID:         *UserIDptr,
-			ParentFolderID: *ParentFolderIDptr,
+			ParentFolderID: folderId,
 		}).
-		Find(&links)
-	if res.Error != nil {
-		return fmt.Errorf("failed to list the links from the parentfolder for deletion: %v", res.Error)
+		Find(&fileList)
+	for _, id := range fileList {
+		*files = append(*files, models.LinkDeleteValidation{
+			LinkID: id.ID,
+		})
 	}
-	for _, v := range links {
-		*linkIdDeleteList = append(*linkIdDeleteList, v.ID)
-	}
-
-	return nil
 }
