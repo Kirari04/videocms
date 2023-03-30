@@ -53,7 +53,7 @@ func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint
 		if i > 0 {
 			if parentFolderID != dbFolder.ParentFolderID {
 				return fiber.StatusBadRequest, fmt.Errorf(
-					"All folders have to share the same parent folder. Folder %d doesnt: %d (required) vs %d (actual)",
+					"all folders have to share the same parent folder. Folder %d doesnt: %d (required) vs %d (actual)",
 					FolderValidation.FolderID,
 					parentFolderID,
 					dbFolder.ParentFolderID,
@@ -63,7 +63,7 @@ func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint
 
 		if reqFolderIdDeleteMap[FolderValidation.FolderID] {
 			return fiber.StatusBadRequest, fmt.Errorf(
-				"The folders have to be distinct. Folder %d is dublicate",
+				"the folders have to be distinct. Folder %d is dublicate",
 				FolderValidation.FolderID,
 			)
 		}
@@ -81,6 +81,10 @@ func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint
 			return fiber.StatusInternalServerError, errors.New("")
 		}
 
+		if err := deleteLinksFromFolder(&folderIdDeleteList, &linkIdDeleteList, &reqFolderId, &userID); err != nil {
+			return fiber.StatusInternalServerError, errors.New("")
+		}
+
 		// add top if is not 0
 		if reqFolderId > 0 {
 			folderIdDeleteList = append(folderIdDeleteList, reqFolderId)
@@ -90,10 +94,16 @@ func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint
 
 	// delete first files so folder structure stays if it fails
 	if len(linkIdDeleteList) > 0 {
-		if res := inits.DB.Delete(&models.Link{}, linkIdDeleteList); res.Error != nil {
-			log.Printf("Failed to delete files from id list: %v", res.Error)
-			log.Println(linkIdDeleteList)
-			return fiber.StatusInternalServerError, errors.New("")
+		deleteVasadeList := make([]models.LinkDeleteValidation, len(linkIdDeleteList))
+		for i, linkIdDeleteItem := range linkIdDeleteList {
+			deleteVasadeList[i] = models.LinkDeleteValidation{
+				LinkID: linkIdDeleteItem,
+			}
+		}
+		if status, err := DeleteFiles(&models.LinksDeleteValidation{
+			LinkIDs: deleteVasadeList,
+		}, userID); err != nil {
+			return status, err
 		}
 	}
 
@@ -149,7 +159,6 @@ func deleteLinksFromFolder(folderIdDeleteList *[]uint, linkIdDeleteList *[]uint,
 	if res.Error != nil {
 		return fmt.Errorf("failed to list the links from the parentfolder for deletion: %v", res.Error)
 	}
-
 	for _, v := range links {
 		*linkIdDeleteList = append(*linkIdDeleteList, v.ID)
 	}
