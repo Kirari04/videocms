@@ -22,17 +22,11 @@ func CreateFile(c *fiber.Ctx) error {
 	// parse & validate request
 	var fileValidation models.FileCreateValidation
 	if err := c.BodyParser(&fileValidation); err != nil {
-		return c.Status(400).JSON([]helpers.ValidationError{
-			{
-				FailedField: "none",
-				Tag:         "none",
-				Value:       "Invalid body request format",
-			},
-		})
+		return c.Status(400).SendString("Invalid body request format")
 	}
 
 	if errors := helpers.ValidateStruct(fileValidation); len(errors) > 0 {
-		return c.Status(400).JSON(errors)
+		return c.Status(400).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
 	}
 
 	file, err := c.FormFile("file")
@@ -55,13 +49,7 @@ func CreateFile(c *fiber.Ctx) error {
 	if fileValidation.ParentFolderID > 0 {
 		res := inits.DB.First(&models.Folder{}, fileValidation.ParentFolderID)
 		if res.Error != nil {
-			return c.Status(400).JSON([]helpers.ValidationError{
-				{
-					FailedField: "ParentFolderID",
-					Tag:         "exists",
-					Value:       "Parent folder doesn't exist",
-				},
-			})
+			return c.Status(400).SendString("Parent folder doesn't exist")
 		}
 	}
 
