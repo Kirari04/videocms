@@ -1,11 +1,7 @@
 package models
 
-import (
-	"gorm.io/gorm"
-)
-
 type Folder struct {
-	gorm.Model
+	Model
 	Name           string `gorm:"size:120;"`
 	User           User   `json:"-"`
 	UserID         uint

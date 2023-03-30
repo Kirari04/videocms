@@ -120,8 +120,8 @@ func GetFile(c *fiber.Ctx) error {
 	}
 
 	response := Resp{
-		CreatedAt:      link.CreatedAt,
-		UpdatedAt:      link.UpdatedAt,
+		CreatedAt:      *link.CreatedAt,
+		UpdatedAt:      *link.UpdatedAt,
 		UUID:           link.UUID,
 		Name:           link.Name,
 		Thumbnail:      fmt.Sprintf("/videos/qualitys/%s/image/thumb/%s", link.UUID, link.File.Thumbnail),

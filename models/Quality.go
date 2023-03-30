@@ -1,11 +1,7 @@
 package models
 
-import (
-	"gorm.io/gorm"
-)
-
 type Quality struct {
-	gorm.Model
+	Model
 	Name         string `gorm:"size:20;"`
 	Height       int64
 	Width        int64

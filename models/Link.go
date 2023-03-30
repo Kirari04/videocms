@@ -1,11 +1,7 @@
 package models
 
-import (
-	"gorm.io/gorm"
-)
-
 type Link struct {
-	gorm.Model
+	Model
 	UUID           string
 	Name           string  `gorm:"size:128;"`
 	File           File    `json:"-"`

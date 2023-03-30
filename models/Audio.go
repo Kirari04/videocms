@@ -1,11 +1,7 @@
 package models
 
-import (
-	"gorm.io/gorm"
-)
-
 type Audio struct {
-	gorm.Model
+	Model
 	UUID          string
 	Name          string `gorm:"size:120;"`
 	Lang          string `gorm:"size:10;"`

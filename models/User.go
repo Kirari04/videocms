@@ -1,11 +1,7 @@
 package models
 
-import (
-	"gorm.io/gorm"
-)
-
 type User struct {
-	gorm.Model
+	Model
 	Username string `gorm:"unique;size:32;"`
 	Hash     string `gorm:"size:250;" json:"-"`
 	Admin    bool
