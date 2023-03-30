@@ -19,8 +19,7 @@ func runDeleter() {
 	var notReferencedFiles []uint
 	if res := inits.DB.
 		Raw(`
-			SELECT files.id FROM
-				files
+			SELECT files.id FROM files
 			JOIN links ON links.file_id = files.id
 			WHERE links.deleted_at IS NOT NULL
 			GROUP BY files.id;
@@ -28,13 +27,15 @@ func runDeleter() {
 		log.Printf("Failed to query unreferenced files: %v", res.Error)
 		return
 	}
-	if res := inits.DB.Delete(&models.File{}, notReferencedFiles); res.Error != nil {
-		log.Printf("Failed to delete unreferenced files: %v", res.Error)
-		return
+
+	if len(notReferencedFiles) > 0 {
+		if res := inits.DB.Delete(&models.File{}, notReferencedFiles); res.Error != nil {
+			log.Printf("Failed to delete unreferenced files: %v", res.Error)
+			return
+		}
 	}
 
 	var todos []models.File
-
 	if res := inits.DB.
 		Model(&models.File{}).
 		Preload("Qualitys").
