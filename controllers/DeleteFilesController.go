@@ -13,7 +13,7 @@ func DeleteFilesController(c *fiber.Ctx) error {
 	// parse & validate request
 	var fileValidation models.LinksDeleteValidation
 	if err := c.BodyParser(&fileValidation); err != nil {
-		return c.Status(400).SendString("Invalid body request format")
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
 	}
 	if errors := helpers.ValidateStruct(fileValidation); len(errors) > 0 {
 		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
