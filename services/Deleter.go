@@ -11,7 +11,7 @@ import (
 func Deleter() {
 	for {
 		runDeleter()
-		time.Sleep(time.Second * 10)
+		time.Sleep(time.Second * 20)
 	}
 }
 
@@ -19,10 +19,10 @@ func runDeleter() {
 	var notReferencedFiles []uint
 	if res := inits.DB.
 		Raw(`
-			SELECT files.id FROM files
-			JOIN links ON links.file_id = files.id
-			WHERE links.deleted_at IS NOT NULL
-			GROUP BY files.id;
+		SELECT files.id FROM files
+		JOIN links ON links.file_id = files.id
+		GROUP BY files.id
+		HAVING COUNT(links.id) = SUM(CASE WHEN links.deleted_at IS NULL THEN 0 ELSE 1 END);
 		`).Scan(&notReferencedFiles); res.Error != nil {
 		log.Printf("Failed to query unreferenced files: %v", res.Error)
 		return
