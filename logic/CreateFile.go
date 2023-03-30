@@ -18,6 +18,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"gopkg.in/vansante/go-ffprobe.v2"
+	"gorm.io/gorm"
 )
 
 func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint) (status int, newFile *models.Link, cloned bool, err error) {
@@ -155,23 +156,40 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 		log.Printf("Failed to generate thumbnail: %v", err)
 		return responseStatus, nil, false, err
 	}
-
-	// save file data to database
-	dbFile := models.File{
-		UUID:         fileId,
-		Hash:         FileHash,
-		Thumbnail:    thumbnailFileName,
-		Path:         fromFile,
-		Folder:       fmt.Sprintf("./videos/qualitys/%s", fileId),
-		UserID:       userId,
-		Height:       int64(videoHeight),
-		Width:        int64(videoWidth),
-		Duration:     videoDuration,
-		AvgFrameRate: avgFramerate,
-		Size:         fileSize,
-	}
-	if res := inits.DB.Create(&dbFile); res.Error != nil {
-		log.Printf("Error saving file in database: %v", res.Error)
+	var dbFile models.File
+	var dbLink models.Link
+	// create an transaction consisting of the file and its link
+	// a transaction is necessary so the service Deleter wont mark an file as unreferenced by accident
+	if err := inits.DB.Transaction(func(tx *gorm.DB) error {
+		dbFile = models.File{
+			UUID:         fileId,
+			Hash:         FileHash,
+			Thumbnail:    thumbnailFileName,
+			Path:         fromFile,
+			Folder:       fmt.Sprintf("./videos/qualitys/%s", fileId),
+			UserID:       userId,
+			Height:       int64(videoHeight),
+			Width:        int64(videoWidth),
+			Duration:     videoDuration,
+			AvgFrameRate: avgFramerate,
+			Size:         fileSize,
+		}
+		if err := tx.Create(&dbFile).Error; err != nil {
+			return err
+		}
+		dbLink = models.Link{
+			UUID:           uuid.NewString(),
+			Name:           fileName,
+			ParentFolderID: toFolder,
+			UserID:         userId,
+			FileID:         dbFile.ID,
+		}
+		if err := tx.Create(&dbLink).Error; err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		log.Printf("Error saving file & link in database: %v", err)
 		return fiber.StatusInternalServerError, nil, false, errors.New("")
 	}
 
@@ -259,19 +277,6 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 				return fiber.StatusInternalServerError, nil, false, errors.New("")
 			}
 		}
-	}
-
-	// save link data to database
-	dbLink := models.Link{
-		UUID:           uuid.NewString(),
-		Name:           fileName,
-		ParentFolderID: toFolder,
-		UserID:         userId,
-		FileID:         dbFile.ID,
-	}
-	if res := inits.DB.Create(&dbLink); res.Error != nil {
-		log.Printf("Error saving link in database: %v", res.Error)
-		return fiber.StatusInternalServerError, nil, false, errors.New("")
 	}
 
 	// add qualitys to database so they can be converted later
