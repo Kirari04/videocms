@@ -3,6 +3,7 @@ package encworker
 import (
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/inits"
+	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"fmt"
 	"log"
@@ -159,7 +160,6 @@ func runEncode(encodingTask models.Quality) {
 			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
 			fmt.Sprintf("%s ", encFilePath) + // output file
 			fmt.Sprintf("-progress unix://%s -y", TempSock(totalDuration, &encodingTask)) // progress tracking
-
 	case "h264":
 		ffmpegAudio := "-an "
 		if !encodingTask.Muted && encodingTask.AudioCodec != "" {
@@ -219,9 +219,16 @@ func runEncode(encodingTask models.Quality) {
 		return
 	}
 
+	qualitySize, err := logic.DirSize(absFolderOutput)
+	if err != nil {
+		log.Printf("Failed to calc folder size after quality encode: %v", err)
+	}
+
+	encodingTask.Size = qualitySize
 	encodingTask.Encoding = false
 	encodingTask.Ready = true
 	inits.DB.Save(&encodingTask)
+
 	// log.Printf("Finish encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 	runningEncodes -= 1
 }

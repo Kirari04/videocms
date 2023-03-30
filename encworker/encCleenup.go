@@ -2,6 +2,7 @@ package encworker
 
 import (
 	"ch/kirari04/videocms/inits"
+	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"log"
 	"os"
@@ -77,6 +78,13 @@ func runEncCleenup() {
 				log.Printf("Failed to delete file from path (%v): %v", dbReadyFile.Path, err)
 				continue
 			}
+
+			// overwrite total filesize in file
+			newSize, err := logic.DirSize(dbReadyFile.Folder)
+			if err != nil {
+				log.Printf("Failed to calc folder size after cleenup: %v", err)
+			}
+			dbReadyFile.Size = newSize
 			dbReadyFile.Path = ""
 			inits.DB.Save(&dbReadyFile)
 		}

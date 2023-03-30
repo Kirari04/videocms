@@ -1,10 +1,10 @@
 package controllers
 
 import (
-	logic "ch/kirari04/videocms/Logic"
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
+	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"context"
 	"crypto/sha256"

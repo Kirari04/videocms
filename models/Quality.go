@@ -9,10 +9,11 @@ type Quality struct {
 	Name         string `gorm:"size:20;"`
 	Height       int64
 	Width        int64
+	Size         int64
 	Crf          int `json:"-"`
 	Type         string
 	Muted        bool
-	AudioCodec   string
+	AudioCodec   string `json:"-"`
 	AvgFrameRate float64
 	Path         string `gorm:"size:120;" json:"-"`
 	OutputFile   string
