@@ -22,5 +22,8 @@ func DeleteFolders(c *fiber.Ctx) error {
 
 	// Business logic
 	status, err := logic.DeleteFolders(&folderValidation, c.Locals("UserID").(uint))
-	return c.Status(status).SendString(err.Error())
+	if err != nil {
+		return c.Status(status).SendString(err.Error())
+	}
+	return c.SendStatus(status)
 }

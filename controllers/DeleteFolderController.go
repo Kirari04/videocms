@@ -26,5 +26,8 @@ func DeleteFolder(c *fiber.Ctx) error {
 			folderValidation,
 		},
 	}, c.Locals("UserID").(uint))
-	return c.Status(status).SendString(err.Error())
+	if err != nil {
+		return c.Status(status).SendString(err.Error())
+	}
+	return c.SendStatus(status)
 }

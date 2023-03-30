@@ -22,5 +22,8 @@ func DeleteFilesController(c *fiber.Ctx) error {
 	// Business logic
 	status, err := logic.DeleteFiles(&fileValidation, c.Locals("UserID").(uint))
 
-	return c.Status(status).SendString(err.Error())
+	if err != nil {
+		return c.Status(status).SendString(err.Error())
+	}
+	return c.SendStatus(status)
 }
