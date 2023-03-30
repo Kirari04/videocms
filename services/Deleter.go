@@ -41,6 +41,7 @@ func runDeleter() {
 		Preload("Qualitys").
 		Preload("Subtitles").
 		Preload("Audios").
+		Preload("Links").
 		Unscoped().
 		Where("deleted_at IS NOT NULL").
 		Find(&todos, todos); res.Error != nil {
