@@ -14,7 +14,7 @@ import (
 
 func DeleteFiles(fileValidation *models.LinksDeleteValidation, userID uint) (status int, err error) {
 	if helpers.UserRequestAsyncObj.Blocked(userID) {
-		return fiber.StatusTooManyRequests, errors.New("Wait until the previous delete request finished")
+		return fiber.StatusTooManyRequests, errors.New("wait until the previous delete request finished")
 	}
 	helpers.UserRequestAsyncObj.Start(userID)
 	defer helpers.UserRequestAsyncObj.End(userID)
@@ -33,10 +33,10 @@ func DeleteFiles(fileValidation *models.LinksDeleteValidation, userID uint) (sta
 		if res := inits.DB.First(&models.Link{
 			UserID: userID,
 		}, LinkValidation.LinkID); res.Error != nil {
-			return fiber.StatusBadRequest, fmt.Errorf("LinkID (%d) doesn't exist", LinkValidation.LinkID)
+			return fiber.StatusBadRequest, fmt.Errorf("linkID (%d) doesn't exist", LinkValidation.LinkID)
 		}
 		if linkIdDeleteMap[LinkValidation.LinkID] {
-			return fiber.StatusBadRequest, fmt.Errorf("The files have to be distinct. File %d is dublicate", LinkValidation.LinkID)
+			return fiber.StatusBadRequest, fmt.Errorf("the files have to be distinct. File %d is dublicate", LinkValidation.LinkID)
 		}
 		linkIdDeleteList = append(linkIdDeleteList, LinkValidation.LinkID)
 		linkIdDeleteMap[LinkValidation.LinkID] = true
