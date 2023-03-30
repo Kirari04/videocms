@@ -24,6 +24,12 @@ type Audio struct {
 	FileID        uint
 }
 
+type AudioGetValidation struct {
+	UUID      string `validate:"required,uuid_rfc4122"`
+	AUDIOUUID string `validate:"required,uuid_rfc4122"`
+	FILE      string `validate:"required"`
+}
+
 type AvailableAudio struct {
 	Type       string // hls | ogg | mp3
 	Codec      string
