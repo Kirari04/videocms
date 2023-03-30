@@ -44,12 +44,14 @@ func CreateFile(c *fiber.Ctx) error {
 		log.Printf("Failed to save file: %v", err)
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
-	defer os.Remove(filePath)
 
 	// business logic
-	status, dbLink, err := logic.CreateFile(filePath, fileValidation.ParentFolderID, file.Filename, fileId, file.Size, c.Locals("UserID").(uint))
+	status, dbLink, cloned, err := logic.CreateFile(filePath, fileValidation.ParentFolderID, file.Filename, fileId, file.Size, c.Locals("UserID").(uint))
 	if err != nil {
 		return c.Status(status).SendString(err.Error())
+	}
+	if err != nil || cloned {
+		os.Remove(filePath)
 	}
 
 	return c.Status(status).JSON(dbLink)

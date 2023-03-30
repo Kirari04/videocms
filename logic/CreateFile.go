@@ -20,12 +20,12 @@ import (
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
-func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint) (status int, newFile *models.Link, err error) {
+func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint) (status int, newFile *models.Link, cloned bool, err error) {
 	//check if requested folder exists (if set)
 	if toFolder > 0 {
 		res := inits.DB.First(&models.Folder{}, toFolder)
 		if res.Error != nil {
-			return fiber.StatusBadRequest, nil, errors.New("parent folder doesn't exist")
+			return fiber.StatusBadRequest, nil, false, errors.New("parent folder doesn't exist")
 		}
 	}
 
@@ -33,7 +33,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 	f, err := os.Open(fromFile)
 	if err != nil {
 		log.Printf("Failed to open file: %v", err)
-		return fiber.StatusInternalServerError, nil, errors.New("")
+		return fiber.StatusInternalServerError, nil, false, errors.New("")
 	}
 	defer f.Close()
 
@@ -41,14 +41,14 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		log.Printf("Failed to create hash from file: %v", err)
-		return fiber.StatusInternalServerError, nil, errors.New("")
+		return fiber.StatusInternalServerError, nil, false, errors.New("")
 	}
 	FileHash := fmt.Sprintf("%x", h.Sum(nil))
 
 	// check file hash with database
 	status, newLink, err := CloneFileByHash(FileHash, toFolder, fileName, userId)
 	if err == nil {
-		return status, newLink, err
+		return status, newLink, true, err
 	}
 
 	// ffprobe context
@@ -59,7 +59,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 	data, err := ffprobe.ProbeURL(ctx, fromFile)
 	if err != nil {
 		log.Printf("Error getting data using ffprobe: %v", err)
-		return fiber.StatusInternalServerError, nil, errors.New("")
+		return fiber.StatusInternalServerError, nil, false, errors.New("")
 	}
 	// proobe type
 	dataStreams := data.StreamType(ffprobe.StreamAny)
@@ -73,7 +73,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 	hasVideoStream := false
 
 	if videoDuration == 0 || videoDuration > 60*60*10 {
-		return fiber.StatusBadRequest, nil, errors.New("invalid video duration")
+		return fiber.StatusBadRequest, nil, false, errors.New("invalid video duration")
 	}
 
 	// loop over streams in file
@@ -97,7 +97,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 
 	//check if video stream exists
 	if !hasVideoStream {
-		return fiber.StatusBadRequest, nil, errors.New("uploaded file doesn't contain any video stream")
+		return fiber.StatusBadRequest, nil, false, errors.New("uploaded file doesn't contain any video stream")
 	}
 
 	// set average framerate
@@ -111,7 +111,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 
 	// check average framerate
 	if avgFramerate < 1 || avgFramerate > 120 {
-		return fiber.StatusBadRequest, nil, errors.New("invalid video framerate")
+		return fiber.StatusBadRequest, nil, false, errors.New("invalid video framerate")
 	}
 
 	// check video stream data (resolution)
@@ -122,15 +122,15 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 			videoStream.Width,
 			videoStream.Height,
 		)
-		return fiber.StatusInternalServerError, nil, errors.New("")
+		return fiber.StatusInternalServerError, nil, false, errors.New("")
 	}
 
 	// check if resolution is in scope of supported sizes
 	if videoStream.Height > 8000 || videoStream.Width > 8000 {
-		return fiber.StatusBadRequest, nil, errors.New("video resolution is too high")
+		return fiber.StatusBadRequest, nil, false, errors.New("video resolution is too high")
 	}
 	if videoStream.Height < 50 || videoStream.Width < 50 {
-		return fiber.StatusBadRequest, nil, errors.New("video resolution is too low")
+		return fiber.StatusBadRequest, nil, false, errors.New("video resolution is too low")
 	}
 
 	// declare required variables for database insert
@@ -139,7 +139,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 
 	if videoDuration == 0 {
 		log.Printf("Error getting videoDuration: %v %v", err, dataStreams)
-		return fiber.StatusInternalServerError, nil, errors.New("")
+		return fiber.StatusInternalServerError, nil, false, errors.New("")
 	}
 
 	thumbnailFileName := "4x4.webp"
@@ -153,7 +153,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 		avgFramerate,
 	); err != nil {
 		log.Printf("Failed to generate thumbnail: %v", err)
-		return responseStatus, nil, err
+		return responseStatus, nil, false, err
 	}
 
 	// save file data to database
@@ -172,7 +172,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 	}
 	if res := inits.DB.Create(&dbFile); res.Error != nil {
 		log.Printf("Error saving file in database: %v", res.Error)
-		return fiber.StatusInternalServerError, nil, errors.New("")
+		return fiber.StatusInternalServerError, nil, false, errors.New("")
 	}
 
 	// save subtitle data to database so they can be converted later
@@ -214,7 +214,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 			}
 			if res := inits.DB.Create(&dbSubtitle); res.Error != nil {
 				log.Printf("Error saving Subtitle in database: %v", res.Error)
-				return fiber.StatusInternalServerError, nil, errors.New("")
+				return fiber.StatusInternalServerError, nil, false, errors.New("")
 			}
 		}
 	}
@@ -256,7 +256,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 				Error:         "",
 			}); res.Error != nil {
 				log.Printf("Error saving Audio in database: %v", res.Error)
-				return fiber.StatusInternalServerError, nil, errors.New("")
+				return fiber.StatusInternalServerError, nil, false, errors.New("")
 			}
 		}
 	}
@@ -271,7 +271,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 	}
 	if res := inits.DB.Create(&dbLink); res.Error != nil {
 		log.Printf("Error saving link in database: %v", res.Error)
-		return fiber.StatusInternalServerError, nil, errors.New("")
+		return fiber.StatusInternalServerError, nil, false, errors.New("")
 	}
 
 	// add qualitys to database so they can be converted later
@@ -304,7 +304,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 					Error:        "",
 				}); res.Error != nil {
 					log.Printf("Error saving quality in database: %v\n", res.Error)
-					return fiber.StatusInternalServerError, nil, errors.New("")
+					return fiber.StatusInternalServerError, nil, false, errors.New("")
 				}
 			}
 		} else {
@@ -328,12 +328,12 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 					Error:        "",
 				}); res.Error != nil {
 					log.Printf("Error saving quality in database: %v\n", res.Error)
-					return fiber.StatusInternalServerError, nil, errors.New("")
+					return fiber.StatusInternalServerError, nil, false, errors.New("")
 				}
 			}
 		}
 	}
 
 	// return link to file
-	return fiber.StatusOK, &dbLink, nil
+	return fiber.StatusOK, &dbLink, false, nil
 }
