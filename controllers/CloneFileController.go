@@ -26,5 +26,5 @@ func CloneFile(c *fiber.Ctx) error {
 		return c.Status(status).SendString(err.Error())
 	}
 
-	return c.Status(fiber.StatusOK).JSON(dbLink)
+	return c.Status(status).JSON(dbLink)
 }
