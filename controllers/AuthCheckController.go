@@ -16,10 +16,10 @@ func AuthCheck(c *fiber.Ctx) error {
 	tokenString := bearerHeader[len(bearerHeader)-1]
 	token, claims, err := auth.VerifyJWT(tokenString)
 	if err != nil {
-		return c.Status(fiber.StatusForbidden).SendString(err.Error())
+		return c.SendStatus(fiber.StatusForbidden)
 	}
 	if !token.Valid {
-		return c.Status(fiber.StatusForbidden).SendString(token.Raw)
+		return c.SendStatus(fiber.StatusForbidden)
 	}
 	return c.JSON(fiber.Map{
 		"username": claims.Username,
