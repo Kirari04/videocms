@@ -29,6 +29,10 @@ func runDeleter() {
 		log.Printf("Failed to query deleted files: %v", res.Error)
 	}
 
+	if len(todos) > 0 {
+		log.Printf("Queued %d filed to delete", len(todos))
+	}
+
 	for _, todo := range todos {
 		/**
 		* check if all files qualities, subs & audios are not currently encoding because else there might be
