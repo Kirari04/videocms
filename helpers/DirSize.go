@@ -1,4 +1,4 @@
-package logic
+package helpers
 
 import (
 	"os"

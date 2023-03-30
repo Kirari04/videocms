@@ -2,8 +2,8 @@ package encworker
 
 import (
 	"ch/kirari04/videocms/config"
+	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"fmt"
 	"log"
@@ -219,7 +219,7 @@ func runEncode(encodingTask models.Quality) {
 		return
 	}
 
-	qualitySize, err := logic.DirSize(absFolderOutput)
+	qualitySize, err := helpers.DirSize(absFolderOutput)
 	if err != nil {
 		log.Printf("Failed to calc folder size after quality encode: %v", err)
 	}

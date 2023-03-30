@@ -1,8 +1,8 @@
 package encworker
 
 import (
+	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"log"
 	"os"
@@ -80,7 +80,7 @@ func runEncCleenup() {
 			}
 
 			// overwrite total filesize in file
-			newSize, err := logic.DirSize(dbReadyFile.Folder)
+			newSize, err := helpers.DirSize(dbReadyFile.Folder)
 			if err != nil {
 				log.Printf("Failed to calc folder size after cleenup: %v", err)
 			}
