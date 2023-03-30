@@ -5,6 +5,7 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
+	"fmt"
 	"log"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,17 +14,11 @@ import (
 func AuthLogin(c *fiber.Ctx) error {
 	var userValidation models.UserLoginValidation
 	if err := c.BodyParser(&userValidation); err != nil {
-		return c.Status(400).JSON([]helpers.ValidationError{
-			{
-				FailedField: "none",
-				Tag:         "none",
-				Value:       "Invalid body request format",
-			},
-		})
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
 	}
 
 	if errors := helpers.ValidateStruct(userValidation); len(errors) > 0 {
-		return c.Status(400).JSON(errors)
+		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
 	}
 
 	var user models.User
@@ -31,29 +26,16 @@ func AuthLogin(c *fiber.Ctx) error {
 		Username: userValidation.Username,
 	}).First(&user)
 	if res.Error != nil {
-		return c.Status(404).JSON([]helpers.ValidationError{
-			{
-				FailedField: "username",
-				Tag:         "none",
-				Value:       "User not found",
-			},
-		})
+		return c.Status(fiber.StatusNotFound).SendString("User not found")
 	}
 
 	if !helpers.CheckPasswordHash(userValidation.Password, user.Hash) {
-		return c.Status(400).JSON([]helpers.ValidationError{
-			{
-				FailedField: "password",
-				Tag:         "none",
-				Value:       "Wrong password",
-			},
-		})
+		return c.Status(fiber.StatusBadRequest).SendString("Wrong password")
 	}
 
 	tokenString, expirationTime, err := auth.GenerateJWT(user)
 	if err != nil {
-		log.Printf("Failed to generate jwt for user %s\n", user.Username)
-		log.Println(err.Error())
+		log.Printf("Failed to generate jwt for user %s: %v\n", user.Username, err)
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 
