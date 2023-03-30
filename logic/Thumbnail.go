@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -97,8 +98,8 @@ func CreateThumbnail(imageCountAxis int, inputFile string, height int, outputFil
 			ffmpegCommandSimpleImage,
 		)
 		if err := cmd.Run(); err != nil {
-			log.Printf("Failed during simple thumbnail conversion: %s", ffmpegCommandSimpleImage)
-			return fiber.StatusInternalServerError, err
+			log.Printf("Failed during simple thumbnail conversion: %v : %s", err, ffmpegCommandSimpleImage)
+			return fiber.StatusInternalServerError, errors.New("")
 		}
 
 	}
