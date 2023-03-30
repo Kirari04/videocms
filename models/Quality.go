@@ -11,6 +11,8 @@ type Quality struct {
 	Width        int64
 	Crf          int `json:"-"`
 	Type         string
+	Muted        bool
+	AudioCodec   string
 	AvgFrameRate float64
 	Path         string `gorm:"size:120;" json:"-"`
 	OutputFile   string
@@ -30,6 +32,8 @@ type AvailableQuality struct {
 	Width      int64
 	Crf        int
 	Type       string // hls | vp9 | av1
+	Muted      bool
+	AudioCodec string
 	OutputFile string
 }
 
@@ -41,6 +45,7 @@ var AvailableQualitys = []AvailableQuality{
 		Width:      426,
 		Crf:        30,
 		Type:       "hls",
+		Muted:      true,
 		OutputFile: "out.m3u8",
 	},
 	{
@@ -50,6 +55,7 @@ var AvailableQualitys = []AvailableQuality{
 		Width:      640,
 		Crf:        26,
 		Type:       "hls",
+		Muted:      true,
 		OutputFile: "out.m3u8",
 	},
 	{
@@ -59,6 +65,7 @@ var AvailableQualitys = []AvailableQuality{
 		Width:      854,
 		Crf:        26,
 		Type:       "hls",
+		Muted:      true,
 		OutputFile: "out.m3u8",
 	},
 	{
@@ -68,6 +75,7 @@ var AvailableQualitys = []AvailableQuality{
 		Width:      1280,
 		Crf:        26,
 		Type:       "hls",
+		Muted:      true,
 		OutputFile: "out.m3u8",
 	},
 	{
@@ -77,6 +85,7 @@ var AvailableQualitys = []AvailableQuality{
 		Width:      1920,
 		Crf:        24,
 		Type:       "hls",
+		Muted:      true,
 		OutputFile: "out.m3u8",
 	},
 	{
@@ -86,6 +95,7 @@ var AvailableQualitys = []AvailableQuality{
 		Width:      2560,
 		Crf:        24,
 		Type:       "hls",
+		Muted:      true,
 		OutputFile: "out.m3u8",
 	},
 	{
@@ -95,24 +105,40 @@ var AvailableQualitys = []AvailableQuality{
 		Width:      3840,
 		Crf:        24,
 		Type:       "hls",
+		Muted:      true,
 		OutputFile: "out.m3u8",
 	},
 	// {
-	// 	Name:       "480p",
-	// 	FolderName: "480p",
-	// 	Height:     480,
-	// 	Width:      854,
+	// 	Name:       "360p_av1",
+	// 	FolderName: "360p_av1",
+	// 	Height:     360,
+	// 	Width:      640,
 	// 	Crf:        30,
 	// 	Type:       "av1",
+	// 	Muted:      false,
+	// 	AudioCodec: "aac",
 	// 	OutputFile: "out.mp4",
 	// },
+	// {
+	// 	Name:       "360p_vp9",
+	// 	FolderName: "360p_vp9",
+	// 	Height:     360,
+	// 	Width:      640,
+	// 	Crf:        30,
+	// 	Type:       "vp9",
+	// 	Muted:      false,
+	// 	AudioCodec: "libopus",
+	// 	OutputFile: "out.webm",
+	// },
 	{
-		Name:       "360p",
-		FolderName: "360p",
-		Height:     360,
-		Width:      640,
+		Name:       "480p_h264",
+		FolderName: "480p_h264",
+		Height:     480,
+		Width:      854,
 		Crf:        30,
-		Type:       "vp9",
-		OutputFile: "out.webm",
+		Type:       "h264",
+		Muted:      false,
+		AudioCodec: "aac",
+		OutputFile: "out.mp4",
 	},
 }

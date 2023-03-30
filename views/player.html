@@ -106,6 +106,7 @@
     <script src="https://cdn.jsdelivr.net/npm/assjs/dist/ass.min.js"></script>
     <script>
       const HLSENABLED = Hls.isSupported();
+      // const HLSENABLED = false;
       let source = `/videos/qualitys/${UUID}/stream/muted/master.m3u8`;
       let currentValue = "";
       let currentAudioValue = "";
@@ -183,7 +184,11 @@
             iosNative: false,
             container: iOS() ? null : ".container",
           },
-          captions: { active: iOS(), language: "auto", update: false },
+          captions: {
+            active: iOS() || !HLSENABLED,
+            language: "auto",
+            update: false,
+          },
           iconUrl: "/icons/svgs.svg",
           keyboard: { focused: false, global: true },
           controls: () => {
@@ -196,7 +201,7 @@
               "current-time", // The current time of playback
               "duration", // The full duration of the media
             ];
-            if (iOS()) {
+            if (iOS() || !HLSENABLED) {
               controls.push("captions");
             }
             controls.push(
@@ -255,9 +260,36 @@
           hls.attachMedia(video);
           window.hls = hls;
           // use fallback url (webm or mp4)
-        } else if ("{{.OgQuality.Url}}" !== "") {
-          video.src = "{{.OgQuality.Url}}";
+        } else if (Qualitys.length > 0) {
           PlayerInit(defaultOptions);
+          // the ass subtitles will be overwritten here because devices that dont suport any hls probably will have issues with ass too
+          window.player.source = {
+            type: "video",
+            title: "Example title",
+            sources: Qualitys.map((Quality) => {
+              return {
+                src: Quality.url,
+                type: "video/mp4",
+                size: Quality.height,
+              };
+            }),
+            poster: "{{.Thumbnail}}",
+            tracks: Subtitles.filter((e) => e.type == "vtt").map(
+              (Subtitle, i) => {
+                return {
+                  kind: "captions",
+                  label: Subtitle.name,
+                  srclang: Subtitle.lang,
+                  src: URL.createObjectURL(
+                    new Blob([b64DecodeUnicode(Subtitle.data)], {
+                      type: "text/plain",
+                    })
+                  ),
+                  default: i === 0,
+                };
+              }
+            ),
+          };
         } else {
           // show error message
           PlayerInit(defaultOptions);

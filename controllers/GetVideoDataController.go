@@ -13,7 +13,7 @@ import (
 func GetVideoData(c *fiber.Ctx) error {
 	type Request struct {
 		UUID    string `validate:"required,uuid_rfc4122"`
-		QUALITY string `validate:"required,alphanum"`
+		QUALITY string `validate:"required,min=1,max=10"`
 		FILE    string `validate:"required"`
 	}
 	var requestValidation Request
@@ -31,7 +31,7 @@ func GetVideoData(c *fiber.Ctx) error {
 		return c.Status(400).JSON(errors)
 	}
 
-	reQUALITY := regexp.MustCompile("^[0-9]{3,4}[p]$")
+	reQUALITY := regexp.MustCompile(`^[0-9]{3,4}(p|p\_(h264|vp9|av1))$`)
 	reFILE := regexp.MustCompile(`^out[0-9]{0,4}\.(m3u8|ts|webm|mp4)$`)
 
 	if !reQUALITY.MatchString(requestValidation.QUALITY) {
