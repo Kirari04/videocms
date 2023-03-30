@@ -2,8 +2,9 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
+	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
+	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -13,50 +14,18 @@ func CreateFolder(c *fiber.Ctx) error {
 
 	var folderValidation models.FolderCreateValidation
 	if err := c.BodyParser(&folderValidation); err != nil {
-		return c.Status(400).JSON([]helpers.ValidationError{
-			{
-				FailedField: "none",
-				Tag:         "none",
-				Value:       "Invalid body request format",
-			},
-		})
+		return c.Status(400).SendString("Invalid body request format")
 	}
 
 	if errors := helpers.ValidateStruct(folderValidation); len(errors) > 0 {
-		return c.Status(400).JSON(errors)
+		return c.Status(400).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
 	}
 
-	//check if requested folder exists (if set)
-	if folderValidation.ParentFolderID > 0 {
-		res := inits.DB.First(&models.Folder{}, folderValidation.ParentFolderID)
-		if res.Error != nil {
-			return c.Status(400).JSON([]helpers.ValidationError{
-				{
-					FailedField: "ParentFolderID",
-					Tag:         "exists",
-					Value:       "Parent folder doesn't exist",
-				},
-			})
-		}
+	status, dbFolder, err := logic.CreateFolder(folderValidation.Name, folderValidation.ParentFolderID, c.Locals("UserID").(uint))
+
+	if err != nil {
+		return c.Status(status).SendString(err.Error())
 	}
 
-	// create folder
-	folder := models.Folder{
-		Name:           folderValidation.Name,
-		ParentFolderID: folderValidation.ParentFolderID,
-		UserID:         c.Locals("UserID").(uint),
-	}
-	res := inits.DB.Model(&models.Folder{}).Create(&folder)
-	if res.Error != nil {
-		return c.Status(404).JSON([]helpers.ValidationError{
-			{
-				FailedField: "username",
-				Tag:         "none",
-				Value:       "User not found",
-			},
-		})
-	}
-
-	//return created folder
-	return c.JSON(folder)
+	return c.Status(status).JSON(dbFolder)
 }
