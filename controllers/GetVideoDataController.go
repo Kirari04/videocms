@@ -2,10 +2,8 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
-	"ch/kirari04/videocms/models"
+	"ch/kirari04/videocms/logic"
 	"fmt"
-	"regexp"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -18,43 +16,20 @@ func GetVideoData(c *fiber.Ctx) error {
 	}
 	var requestValidation Request
 	if err := c.ParamsParser(&requestValidation); err != nil {
-		return c.Status(400).JSON([]helpers.ValidationError{
-			{
-				FailedField: "none",
-				Tag:         "none",
-				Value:       "Invalid body request format",
-			},
-		})
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
 	}
 
 	if errors := helpers.ValidateStruct(requestValidation); len(errors) > 0 {
-		return c.Status(400).JSON(errors)
+		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
 	}
 
-	reQUALITY := regexp.MustCompile(`^[0-9]{3,4}(p|p\_(h264|vp9|av1))$`)
-	reFILE := regexp.MustCompile(`^out[0-9]{0,4}\.(m3u8|ts|webm|mp4)$`)
-
-	if !reQUALITY.MatchString(requestValidation.QUALITY) {
-		return c.Status(400).SendString("Bad quality format")
+	status, filePath, err := logic.GetVideoData(requestValidation.FILE, requestValidation.QUALITY, requestValidation.UUID)
+	if err != nil {
+		return c.Status(status).SendString(err.Error())
 	}
 
-	if !reFILE.MatchString(requestValidation.FILE) {
-		return c.Status(400).SendString("Bad file format")
+	if err := c.Status(status).SendFile(*filePath); err != nil {
+		return c.Status(fiber.StatusNotFound).SendString("Video doesn't exist")
 	}
-
-	//translate link id to file id
-	var dbLink models.Link
-	if dbRes := inits.DB.
-		Model(&models.Link{}).
-		Preload("File").
-		Where(&models.Link{
-			UUID: requestValidation.UUID,
-		}).
-		First(&dbLink); dbRes.Error != nil {
-		return c.Status(fiber.StatusNotFound).SendString("Link doesn't exist")
-	}
-
-	filePath := fmt.Sprintf("./videos/qualitys/%s/%s/%s", dbLink.File.UUID, requestValidation.QUALITY, requestValidation.FILE)
-
-	return c.SendFile(filePath)
+	return nil
 }
