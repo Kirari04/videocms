@@ -16,6 +16,9 @@ RUN go build -o /tmp/app/console.bin ./console/console.go
 FROM debian
 
 WORKDIR /app
+VOLUME /videos
+VOLUME /public
+VOLUME /database
 
 RUN apt update && apt upgrade -y
 RUN apt install ffmpeg -y
