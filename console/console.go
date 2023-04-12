@@ -2,9 +2,8 @@ package main
 
 import (
 	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/helpers"
+	console_helpers "ch/kirari04/videocms/console/helpers"
 	"ch/kirari04/videocms/inits"
-	"ch/kirari04/videocms/models"
 	"log"
 	"os"
 )
@@ -30,19 +29,12 @@ func main() {
 	for _, v := range argsWithoutProg {
 		switch v {
 		case "seed:adminuser":
-
 			log.Println("running seed:adminuser")
-			res := inits.DB.Where(&models.User{Username: "admin"}).Unscoped().Delete(&models.User{})
-			if res.Error != nil {
-				log.Printf("Error while deleting existing admin user: %s", res.Error.Error())
+			if err := console_helpers.SeedAdminUser(); err != nil {
+				log.Println(err)
+			} else {
+				log.Println("success seed:adminuser")
 			}
-
-			hash, _ := helpers.HashPassword("12345678")
-			inits.DB.Create(&models.User{
-				Username: "admin",
-				Hash:     hash,
-				Admin:    true,
-			})
 		case "database:fresh":
 			log.Println("running database:fresh")
 			os.Remove("./database/database.sqlite")
