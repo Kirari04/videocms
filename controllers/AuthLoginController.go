@@ -5,7 +5,6 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
-	"fmt"
 	"log"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,13 +12,12 @@ import (
 
 func AuthLogin(c *fiber.Ctx) error {
 	var userValidation models.UserLoginValidation
-	if err := c.BodyParser(&userValidation); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
+	if status, err := helpers.Validate(c, &userValidation, "body"); err != nil {
+		return c.Status(status).SendString(err.Error())
 	}
 
-	if errors := helpers.ValidateStruct(userValidation); len(errors) > 0 {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
-	}
+	// validate captcha
+	// success, err := helpers.CaptchaValid(c)
 
 	var user models.User
 	res := inits.DB.Model(&models.User{}).Where(&models.User{
