@@ -60,7 +60,6 @@ type PublicConfig struct {
 func (c Config) PublicConfig() PublicConfig {
 	return PublicConfig{
 		AppName:                     c.AppName,
-		Host:                        c.Host,
 		Project:                     c.Project,
 		EncodingEnabled:             *c.EncodingEnabled,
 		UploadEnabled:               *c.UploadEnabled,
