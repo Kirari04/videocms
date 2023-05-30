@@ -31,7 +31,7 @@ func ListFiles(fromFolder uint, userId uint) (status int, response *[]models.Lin
 		Find(&links)
 	if res.Error != nil {
 		log.Printf("Failed to query file list: %v", res.Error)
-		return fiber.StatusInternalServerError, nil, errors.New("")
+		return fiber.StatusInternalServerError, nil, errors.New(fiber.ErrInternalServerError.Message)
 	}
 
 	return fiber.StatusOK, &links, nil

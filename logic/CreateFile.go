@@ -34,7 +34,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 	f, err := os.Open(fromFile)
 	if err != nil {
 		log.Printf("Failed to open file: %v", err)
-		return fiber.StatusInternalServerError, nil, false, errors.New("")
+		return fiber.StatusInternalServerError, nil, false, errors.New(fiber.ErrInternalServerError.Message)
 	}
 	defer f.Close()
 
@@ -42,7 +42,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		log.Printf("Failed to create hash from file: %v", err)
-		return fiber.StatusInternalServerError, nil, false, errors.New("")
+		return fiber.StatusInternalServerError, nil, false, errors.New(fiber.ErrInternalServerError.Message)
 	}
 	FileHash := fmt.Sprintf("%x", h.Sum(nil))
 
@@ -60,7 +60,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 	data, err := ffprobe.ProbeURL(ctx, fromFile)
 	if err != nil {
 		log.Printf("Error getting data using ffprobe: %v", err)
-		return fiber.StatusInternalServerError, nil, false, errors.New("")
+		return fiber.StatusInternalServerError, nil, false, errors.New(fiber.ErrInternalServerError.Message)
 	}
 	// proobe type
 	dataStreams := data.StreamType(ffprobe.StreamAny)
@@ -123,7 +123,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 			videoStream.Width,
 			videoStream.Height,
 		)
-		return fiber.StatusInternalServerError, nil, false, errors.New("")
+		return fiber.StatusInternalServerError, nil, false, errors.New(fiber.ErrInternalServerError.Message)
 	}
 
 	// check if resolution is in scope of supported sizes
@@ -140,7 +140,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 
 	if videoDuration == 0 {
 		log.Printf("Error getting videoDuration: %v %v", err, dataStreams)
-		return fiber.StatusInternalServerError, nil, false, errors.New("")
+		return fiber.StatusInternalServerError, nil, false, errors.New(fiber.ErrInternalServerError.Message)
 	}
 
 	thumbnailFileName := "4x4.webp"
@@ -190,7 +190,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 		return nil
 	}); err != nil {
 		log.Printf("Error saving file & link in database: %v", err)
-		return fiber.StatusInternalServerError, nil, false, errors.New("")
+		return fiber.StatusInternalServerError, nil, false, errors.New(fiber.ErrInternalServerError.Message)
 	}
 
 	// save subtitle data to database so they can be converted later
@@ -232,7 +232,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 			}
 			if res := inits.DB.Create(&dbSubtitle); res.Error != nil {
 				log.Printf("Error saving Subtitle in database: %v", res.Error)
-				return fiber.StatusInternalServerError, nil, false, errors.New("")
+				return fiber.StatusInternalServerError, nil, false, errors.New(fiber.ErrInternalServerError.Message)
 			}
 		}
 	}
@@ -274,7 +274,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 				Error:         "",
 			}); res.Error != nil {
 				log.Printf("Error saving Audio in database: %v", res.Error)
-				return fiber.StatusInternalServerError, nil, false, errors.New("")
+				return fiber.StatusInternalServerError, nil, false, errors.New(fiber.ErrInternalServerError.Message)
 			}
 		}
 	}
@@ -309,7 +309,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 					Error:        "",
 				}); res.Error != nil {
 					log.Printf("Error saving quality in database: %v\n", res.Error)
-					return fiber.StatusInternalServerError, nil, false, errors.New("")
+					return fiber.StatusInternalServerError, nil, false, errors.New(fiber.ErrInternalServerError.Message)
 				}
 			}
 		} else {
@@ -333,7 +333,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 					Error:        "",
 				}); res.Error != nil {
 					log.Printf("Error saving quality in database: %v\n", res.Error)
-					return fiber.StatusInternalServerError, nil, false, errors.New("")
+					return fiber.StatusInternalServerError, nil, false, errors.New(fiber.ErrInternalServerError.Message)
 				}
 			}
 		}

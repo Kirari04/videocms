@@ -62,7 +62,7 @@ func GetFile(LinkID uint, userID uint) (status int, fileData *GetFileResp, err e
 			UserID: userID,
 		}).
 		First(&link, LinkID); res.Error != nil {
-		return fiber.StatusNotFound, nil, errors.New("")
+		return fiber.StatusNotFound, nil, errors.New(fiber.ErrNotFound.Message)
 	}
 
 	var Qualitys []GetFileRespQuali

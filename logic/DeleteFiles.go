@@ -38,7 +38,7 @@ func DeleteFiles(fileValidation *models.LinksDeleteValidation, userID uint) (sta
 	// delete links
 	if res := inits.DB.Delete(&models.Link{}, linkIdDeleteList); res.Error != nil {
 		log.Printf("Failed to delete links: %v", res.Error)
-		return fiber.StatusInternalServerError, errors.New("")
+		return fiber.StatusInternalServerError, errors.New(fiber.ErrInternalServerError.Message)
 	}
 
 	return fiber.StatusOK, nil

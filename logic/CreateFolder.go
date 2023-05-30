@@ -27,7 +27,7 @@ func CreateFolder(folderName string, toFolder uint, userId uint) (status int, ne
 
 	if res := inits.DB.Model(&models.Folder{}).Create(&folder); res.Error != nil {
 		log.Printf("Error creating new folder: %v", res.Error)
-		return fiber.StatusInternalServerError, nil, errors.New("")
+		return fiber.StatusInternalServerError, nil, errors.New(fiber.ErrInternalServerError.Message)
 	}
 
 	return fiber.StatusOK, &folder, nil

@@ -99,7 +99,7 @@ func CreateThumbnail(imageCountAxis int, inputFile string, height int, outputFil
 		)
 		if err := cmd.Run(); err != nil {
 			log.Printf("Failed during simple thumbnail conversion: %v : %s", err, ffmpegCommandSimpleImage)
-			return fiber.StatusInternalServerError, errors.New("")
+			return fiber.StatusInternalServerError, errors.New(fiber.ErrInternalServerError.Message)
 		}
 
 	}

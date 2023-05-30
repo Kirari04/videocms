@@ -30,7 +30,7 @@ func GetAccount(userID uint) (status int, response *GetAccountResponse, err erro
 	var dbUser models.User
 	if res := inits.DB.Find(&dbUser, userID); res.Error != nil {
 		log.Printf("Failed to query user: %v", res.Error)
-		return fiber.StatusInternalServerError, nil, errors.New("")
+		return fiber.StatusInternalServerError, nil, errors.New(fiber.ErrInternalServerError.Message)
 	}
 	type DBResponse struct {
 		UploadedFiles int64
@@ -46,7 +46,7 @@ func GetAccount(userID uint) (status int, response *GetAccountResponse, err erro
 		Group("links.user_id").
 		First(&dbUsed); res.Error != nil {
 		log.Printf("Failed to query UploadedFiles & StorageUsed: %v", res.Error)
-		return fiber.StatusInternalServerError, nil, errors.New("")
+		return fiber.StatusInternalServerError, nil, errors.New(fiber.ErrInternalServerError.Message)
 	}
 	newResponse := GetAccountResponse{
 		Username: dbUser.Username,
