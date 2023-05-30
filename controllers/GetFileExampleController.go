@@ -1,17 +1,15 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/inits"
-	"ch/kirari04/videocms/models"
-	"fmt"
+	"ch/kirari04/videocms/logic"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 func GetFileExample(c *fiber.Ctx) error {
-	var link models.Link
-	if res := inits.DB.First(&link); res.Error != nil {
-		return c.Status(fiber.StatusNotFound).SendString(fiber.ErrNotFound.Message)
+	status, response, err := logic.GetFileExample()
+	if err != nil {
+		return c.Status(status).SendString(err.Error())
 	}
-	return c.SendString(fmt.Sprintf("%v", link.UUID))
+	return c.Status(status).SendString(response)
 }
