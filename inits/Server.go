@@ -56,7 +56,7 @@ func Server() {
 		Prefork:       false,
 		CaseSensitive: true,
 		StrictRouting: true,
-		ServerHeader:  "Fiber",
+		ServerHeader:  "Videocms",
 		AppName:       config.ENV.AppName,
 		IdleTimeout:   time.Minute,
 		ReadTimeout:   time.Minute * 10,
