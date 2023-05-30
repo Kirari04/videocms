@@ -22,6 +22,7 @@ func Api() {
 		Get("/refresh", controllers.AuthRefresh)
 
 	// Routes that dont require authentication
+	inits.Api.Get("/config", controllers.GetConfig)
 	inits.Api.Get("/file/example", controllers.GetFileExample)
 
 	// Routes that require to be authenticated
