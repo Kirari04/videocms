@@ -25,12 +25,52 @@ type Config struct {
 	MaxRunningEncodes_sub   int64 `validate:"required,number,min=1"`
 	MaxRunningEncodes_audio int64 `validate:"required,number,min=1"`
 
+	MaxUploadFilesize int64 `validate:"required,number,min=1"`
+	MaxUploadSessions int64 `validate:"required,number,min=1"`
+	MaxPostSize       int64 `validate:"required,number,min=1"`
+
+	CorsAllowOrigins     string `validate:"required,min=1"`
+	CorsAllowHeaders     string `validate:"required,min=1"`
+	CorsAllowCredentials *bool  `validate:"required,boolean"`
+
 	CaptchaEnabled               *bool  `validate:"required,boolean"`
 	CaptchaType                  string `validate:"required_if=CaptchaEnabled 1,omitempty,min=1,max=10"`
 	Captcha_Recaptcha_PrivateKey string `validate:"required_if=CaptchaType recaptcha,omitempty,min=1,max=40"`
 	Captcha_Recaptcha_PublicKey  string `validate:"required_if=CaptchaType recaptcha,omitempty,min=1,max=40"`
 	Captcha_Hcaptcha_PrivateKey  string `validate:"required_if=CaptchaType hcaptcha,omitempty,min=1,max=42"`
 	Captcha_Hcaptcha_PublicKey   string `validate:"required_if=CaptchaType hcaptcha,omitempty,uuid_rfc4122"`
+}
+
+type PublicConfig struct {
+	AppName         string
+	Host            string
+	Project         string
+	EncodingEnabled bool
+	UploadEnabled   bool
+
+	MaxUploadFilesize int64
+	MaxUploadSessions int64
+
+	CaptchaEnabled              bool
+	CaptchaType                 string
+	Captcha_Recaptcha_PublicKey string
+	Captcha_Hcaptcha_PublicKey  string
+}
+
+func (c Config) PublicConfig() PublicConfig {
+	return PublicConfig{
+		AppName:                     c.AppName,
+		Host:                        c.Host,
+		Project:                     c.Project,
+		EncodingEnabled:             *c.EncodingEnabled,
+		UploadEnabled:               *c.UploadEnabled,
+		MaxUploadFilesize:           c.MaxUploadFilesize,
+		MaxUploadSessions:           c.MaxUploadSessions,
+		CaptchaEnabled:              *c.CaptchaEnabled,
+		CaptchaType:                 c.CaptchaType,
+		Captcha_Recaptcha_PublicKey: c.Captcha_Recaptcha_PublicKey,
+		Captcha_Hcaptcha_PublicKey:  c.Captcha_Hcaptcha_PublicKey,
+	}
 }
 
 type ConfigMap map[string]string
@@ -54,6 +94,14 @@ func Setup() {
 	ENV.MaxRunningEncodes = getEnv_int64("MaxRunningEncodes", 1)
 	ENV.MaxRunningEncodes_sub = getEnv_int64("MaxRunningEncodes_sub", 1)
 	ENV.MaxRunningEncodes_audio = getEnv_int64("MaxRunningEncodes_audio", 1)
+
+	ENV.MaxUploadFilesize = getEnv_int64("MaxUploadFilesize", 5*1024*1024*1024) // 5gb
+	ENV.MaxUploadSessions = getEnv_int64("MaxUploadSessions", 2)
+	ENV.MaxPostSize = getEnv_int64("MaxPostSize", 100*1024*1024) // 100mb
+
+	ENV.CorsAllowHeaders = getEnv("CorsAllowHeaders", "*")
+	ENV.CorsAllowOrigins = getEnv("CorsAllowOrigins", "*")
+	ENV.CorsAllowCredentials = getEnv_bool("CorsAllowCredentials", boolPtr(true))
 
 	ENV.CaptchaEnabled = getEnv_bool("CaptchaEnabled", boolPtr(false))
 	ENV.CaptchaType = getEnv("CaptchaType", "")
