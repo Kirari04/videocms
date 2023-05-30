@@ -2,6 +2,7 @@ package inits
 
 import (
 	"ch/kirari04/videocms/config"
+	"errors"
 	"log"
 	"os"
 	"time"
@@ -63,8 +64,20 @@ func Server() {
 		BodyLimit:     5 * 1024 * 1024 * 1024, //5gb
 		Views:         engine,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
-			log.Printf("Internal server error happend: %v", err)
-			return c.SendStatus(fiber.StatusInternalServerError)
+			// Status code defaults to 500
+			code := fiber.StatusInternalServerError
+
+			// Retrieve the custom status code if it's a *fiber.Error
+			var e *fiber.Error
+			if errors.As(err, &e) {
+				code = e.Code
+			}
+
+			if code == fiber.StatusInternalServerError {
+				log.Printf("InternalServerError: %v \n{%v}{%v}\n%v\n\n", err, c.IP(), c.Request().URI(), string(c.Request().Body()))
+			}
+
+			return c.SendStatus(code)
 		},
 		TrustedProxies:          trustedProxies,
 		EnableTrustedProxyCheck: trustedProxiesEnabled,
