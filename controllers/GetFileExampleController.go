@@ -8,7 +8,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func GetExampleFile(c *fiber.Ctx) error {
+func GetFileExample(c *fiber.Ctx) error {
 	var link models.Link
 	if res := inits.DB.First(&link); res.Error != nil {
 		return c.Status(fiber.StatusNotFound).SendString(fiber.ErrNotFound.Message)
