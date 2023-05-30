@@ -43,7 +43,6 @@ type Config struct {
 
 type PublicConfig struct {
 	AppName         string
-	Host            string
 	Project         string
 	EncodingEnabled bool
 	UploadEnabled   bool
