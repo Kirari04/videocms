@@ -96,9 +96,9 @@ func Server() {
 
 	// cors configuration
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "*",
-		AllowHeaders:     "*",
-		AllowCredentials: true,
+		AllowOrigins:     config.ENV.CorsAllowOrigins,
+		AllowHeaders:     config.ENV.CorsAllowHeaders,
+		AllowCredentials: *config.ENV.CorsAllowCredentials,
 	}))
 
 	// caches response to be more efficient and save bandwidth
