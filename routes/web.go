@@ -10,6 +10,7 @@ func Web() {
 
 	if !*config.ENV.PanelEnabled {
 		inits.App.Get("/", controllers.ViewIndex)
+		inits.App.Get("/examples/upload", controllers.ViewExampleUpload)
 	}
 
 	inits.App.Static("/", "./public")
