@@ -7,7 +7,7 @@ import (
 
 func Folders() {
 	// create folders
-	createFolders := []string{"./database", "./videos", "./logs"}
+	createFolders := []string{"./database", "./videos", "./videos/uploads", "./logs"}
 	for _, createFolder := range createFolders {
 		if fileInfo, err := os.Stat(createFolder); err != nil || !fileInfo.IsDir() {
 			if err := os.Mkdir(createFolder, 0777); err != nil {
