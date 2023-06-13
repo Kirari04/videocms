@@ -8,6 +8,7 @@ type UploadSession struct {
 	UUID           string
 	Hash           string `gorm:"size:128;" json:"-"`
 	Size           int64
+	ChunckCount    int
 	SessionFolder  string  `gorm:"size:120;" json:"-"`
 	ParentFolder   *Folder `json:"-"`
 	ParentFolderID uint    `json:"-"`

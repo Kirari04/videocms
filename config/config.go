@@ -25,9 +25,10 @@ type Config struct {
 	MaxRunningEncodes_sub   int64 `validate:"required,number,min=1"`
 	MaxRunningEncodes_audio int64 `validate:"required,number,min=1"`
 
-	MaxUploadFilesize int64 `validate:"required,number,min=1"`
-	MaxUploadSessions int64 `validate:"required,number,min=1"`
-	MaxPostSize       int64 `validate:"required,number,min=1"`
+	MaxUploadFilesize   int64 `validate:"required,number,min=1"`
+	MaxUploadChuncksize int64 `validate:"required,number,min=1"`
+	MaxUploadSessions   int64 `validate:"required,number,min=1"`
+	MaxPostSize         int64 `validate:"required,number,min=1"`
 
 	FolderVideoQualitysPub  string `validate:"required,min=1,max=255"`
 	FolderVideoQualitysPriv string `validate:"required,min=1,max=255"`
@@ -51,8 +52,9 @@ type PublicConfig struct {
 	EncodingEnabled bool
 	UploadEnabled   bool
 
-	MaxUploadFilesize int64
-	MaxUploadSessions int64
+	MaxUploadFilesize   int64
+	MaxUploadChuncksize int64
+	MaxUploadSessions   int64
 
 	FolderVideoQualitys string
 
@@ -69,8 +71,9 @@ func (c Config) PublicConfig() PublicConfig {
 		EncodingEnabled: *c.EncodingEnabled,
 		UploadEnabled:   *c.UploadEnabled,
 
-		MaxUploadFilesize: c.MaxUploadFilesize,
-		MaxUploadSessions: c.MaxUploadSessions,
+		MaxUploadFilesize:   c.MaxUploadFilesize,
+		MaxUploadChuncksize: c.MaxUploadChuncksize,
+		MaxUploadSessions:   c.MaxUploadSessions,
 
 		FolderVideoQualitys: c.FolderVideoQualitysPub,
 
@@ -104,6 +107,7 @@ func Setup() {
 	ENV.MaxRunningEncodes_audio = getEnv_int64("MaxRunningEncodes_audio", 1)
 
 	ENV.MaxUploadFilesize = getEnv_int64("MaxUploadFilesize", 5*1024*1024*1024) // 5gb
+	ENV.MaxUploadChuncksize = getEnv_int64("MaxUploadChuncksize", 20*1024*1024) // 20mb
 	ENV.MaxUploadSessions = getEnv_int64("MaxUploadSessions", 2)
 	ENV.MaxPostSize = getEnv_int64("MaxPostSize", 100*1024*1024) // 100mb
 

@@ -8,15 +8,18 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
+	"os"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 type CreateUploadSessionResponse struct {
-	Token   string
-	UUID    string
-	Expires time.Time
+	Token       string
+	UUID        string
+	ChunckCount int
+	Expires     time.Time
 }
 
 /*
@@ -57,13 +60,22 @@ func CreateUploadSession(fileHash string, toFolder uint, fileName string, upload
 		return fiber.StatusBadRequest, nil, fmt.Errorf("exceeded max upload sessions: %v", config.ENV.MaxUploadSessions)
 	}
 
+	// create upload session folder
+	sessionFolder := fmt.Sprintf("%s/%s", config.ENV.FolderVideoUploadsPriv, uploadSessionUUID)
+	if err := os.MkdirAll(sessionFolder, 0766); err != nil {
+		log.Printf("Failed to create upload session folder: %v : %v", sessionFolder, err)
+		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
+	}
+
 	// create session
+	chunckCount := math.Ceil(float64(fileSize) / float64(config.ENV.MaxUploadChuncksize))
 	newSession := models.UploadSession{
 		Name:           fileName,
 		UUID:           uploadSessionUUID,
 		Hash:           fileHash,
 		Size:           fileSize,
-		SessionFolder:  fmt.Sprintf("%s/%s", config.ENV.FolderVideoUploadsPriv, uploadSessionUUID),
+		ChunckCount:    int(chunckCount),
+		SessionFolder:  sessionFolder,
 		ParentFolderID: toFolder,
 		UserID:         userId,
 	}
@@ -85,8 +97,9 @@ func CreateUploadSession(fileHash string, toFolder uint, fileName string, upload
 	}
 
 	return fiber.StatusOK, &CreateUploadSessionResponse{
-		Token:   token,
-		Expires: expirationTime,
-		UUID:    uploadSessionUUID,
+		Token:       token,
+		Expires:     expirationTime,
+		UUID:        uploadSessionUUID,
+		ChunckCount: int(chunckCount),
 	}, nil
 }
