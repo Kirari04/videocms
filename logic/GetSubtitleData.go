@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
@@ -43,7 +44,7 @@ func GetSubtitleData(fileName string, UUID string, SUBUUID string) (status int, 
 		return fiber.StatusNotFound, nil, errors.New("subtitle doesn't exist")
 	}
 
-	fileRes := fmt.Sprintf("./videos/qualitys/%s/%s/%s", dbLink.File.UUID, SUBUUID, fileName)
+	fileRes := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, SUBUUID, fileName)
 
 	return fiber.StatusOK, &fileRes, nil
 }

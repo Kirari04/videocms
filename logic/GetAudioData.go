@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
@@ -43,6 +44,6 @@ func GetAudioData(requestValidation *models.AudioGetValidation) (status int, fil
 		return fiber.StatusNotFound, nil, errors.New("audio doesn't exist")
 	}
 
-	resPath := fmt.Sprintf("./videos/qualitys/%s/%s/%s", dbLink.File.UUID, requestValidation.AUDIOUUID, requestValidation.FILE)
+	resPath := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, requestValidation.AUDIOUUID, requestValidation.FILE)
 	return fiber.StatusOK, &resPath, nil
 }

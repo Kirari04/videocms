@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"context"
@@ -149,7 +150,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 		fromFile,
 		1080,
 		thumbnailFileName,
-		fmt.Sprintf("./videos/qualitys/%s", fileId),
+		fmt.Sprintf("%s/%s", config.ENV.FolderVideoQualitysPriv, fileId),
 		videoDuration,
 		avgFramerate,
 	); err != nil {
@@ -166,7 +167,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 			Hash:         FileHash,
 			Thumbnail:    thumbnailFileName,
 			Path:         fromFile,
-			Folder:       fmt.Sprintf("./videos/qualitys/%s", fileId),
+			Folder:       fmt.Sprintf("%s/%s", config.ENV.FolderVideoQualitysPriv, fileId),
 			UserID:       userId,
 			Height:       int64(videoHeight),
 			Width:        int64(videoWidth),
@@ -223,7 +224,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 				Type:          subOpt.Type,
 				OutputFile:    subOpt.OutputFile,
 				FileID:        dbFile.ID,
-				Path:          fmt.Sprintf("./videos/qualitys/%s/%s", dbFile.UUID, subtitleId),
+				Path:          fmt.Sprintf("%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbFile.UUID, subtitleId),
 				OriginalCodec: subtitleStream.CodecName,
 				Encoding:      false,
 				Failed:        false,
@@ -266,7 +267,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 				Type:          audioOpt.Type,
 				OutputFile:    audioOpt.OutputFile,
 				FileID:        dbFile.ID,
-				Path:          fmt.Sprintf("./videos/qualitys/%s/%s", dbFile.UUID, audioId),
+				Path:          fmt.Sprintf("%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbFile.UUID, audioId),
 				OriginalCodec: audioStream.CodecName,
 				Encoding:      false,
 				Failed:        false,
@@ -281,7 +282,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 
 	// add qualitys to database so they can be converted later
 	for _, qualityOpt := range models.AvailableQualitys {
-		qualityPath := fmt.Sprintf("./videos/qualitys/%s/%s", fileId, qualityOpt.FolderName)
+		qualityPath := fmt.Sprintf("%s/%s/%s", config.ENV.FolderVideoQualitysPriv, fileId, qualityOpt.FolderName)
 		// switch framerate if too high
 		var qualityFrameRate float64 = 0
 		if avgFramerate > 30 {

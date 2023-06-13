@@ -11,10 +11,10 @@ import (
 )
 
 func main() {
-	// setting up required folders and config files
-	inits.Folders()
 	// for setting up configuration file from env
 	config.Setup()
+	// setting up required folders and config files
+	inits.Folders()
 	// checking env
 	if errors := helpers.ValidateStruct(config.ENV); len(errors) > 0 {
 		log.Println("Invalid Env configuration;")

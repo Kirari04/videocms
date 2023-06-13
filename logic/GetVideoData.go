@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
@@ -34,6 +35,6 @@ func GetVideoData(fileName string, qualityName string, UUID string) (status int,
 		return fiber.StatusNotFound, nil, errors.New("video doesn't exist")
 	}
 
-	fileRes := fmt.Sprintf("./videos/qualitys/%s/%s/%s", dbLink.File.UUID, qualityName, fileName)
+	fileRes := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, qualityName, fileName)
 	return fiber.StatusOK, &fileRes, nil
 }

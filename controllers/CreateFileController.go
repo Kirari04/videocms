@@ -37,7 +37,7 @@ func CreateFile(c *fiber.Ctx) error {
 	fileId := uuid.NewString()
 	fileSplit := strings.Split(file.Filename, ".")
 	fileExt := fileSplit[len(fileSplit)-1]
-	filePath := fmt.Sprintf("./videos/%s.%s", fileId, fileExt)
+	filePath := fmt.Sprintf("%s/%s.%s", config.ENV.FolderVideoUploadsPriv, fileId, fileExt)
 
 	// Save file to storage
 	if err := c.SaveFile(file, filePath); err != nil {

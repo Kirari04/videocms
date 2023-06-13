@@ -29,6 +29,10 @@ type Config struct {
 	MaxUploadSessions int64 `validate:"required,number,min=1"`
 	MaxPostSize       int64 `validate:"required,number,min=1"`
 
+	FolderVideoQualitysPub  string `validate:"required,min=1,max=255"`
+	FolderVideoQualitysPriv string `validate:"required,min=1,max=255"`
+	FolderVideoUploadsPriv  string `validate:"required,min=1,max=255"`
+
 	CorsAllowOrigins     string `validate:"required,min=1"`
 	CorsAllowHeaders     string `validate:"required,min=1"`
 	CorsAllowCredentials *bool  `validate:"required,boolean"`
@@ -50,6 +54,8 @@ type PublicConfig struct {
 	MaxUploadFilesize int64
 	MaxUploadSessions int64
 
+	FolderVideoQualitys string
+
 	CaptchaEnabled              bool
 	CaptchaType                 string
 	Captcha_Recaptcha_PublicKey string
@@ -58,12 +64,16 @@ type PublicConfig struct {
 
 func (c Config) PublicConfig() PublicConfig {
 	return PublicConfig{
-		AppName:                     c.AppName,
-		Project:                     c.Project,
-		EncodingEnabled:             *c.EncodingEnabled,
-		UploadEnabled:               *c.UploadEnabled,
-		MaxUploadFilesize:           c.MaxUploadFilesize,
-		MaxUploadSessions:           c.MaxUploadSessions,
+		AppName:         c.AppName,
+		Project:         c.Project,
+		EncodingEnabled: *c.EncodingEnabled,
+		UploadEnabled:   *c.UploadEnabled,
+
+		MaxUploadFilesize: c.MaxUploadFilesize,
+		MaxUploadSessions: c.MaxUploadSessions,
+
+		FolderVideoQualitys: c.FolderVideoQualitysPub,
+
 		CaptchaEnabled:              *c.CaptchaEnabled,
 		CaptchaType:                 c.CaptchaType,
 		Captcha_Recaptcha_PublicKey: c.Captcha_Recaptcha_PublicKey,
@@ -96,6 +106,10 @@ func Setup() {
 	ENV.MaxUploadFilesize = getEnv_int64("MaxUploadFilesize", 5*1024*1024*1024) // 5gb
 	ENV.MaxUploadSessions = getEnv_int64("MaxUploadSessions", 2)
 	ENV.MaxPostSize = getEnv_int64("MaxPostSize", 100*1024*1024) // 100mb
+
+	ENV.FolderVideoQualitysPriv = getEnv("FolderVideoQualitysPriv", "./videos/qualitys")
+	ENV.FolderVideoQualitysPub = getEnv("FolderVideoQualitysPub", "/videos/qualitys")
+	ENV.FolderVideoUploadsPriv = getEnv("FolderVideoUploadsPriv", "./videos/uploads")
 
 	ENV.CorsAllowHeaders = getEnv("CorsAllowHeaders", "*")
 	ENV.CorsAllowOrigins = getEnv("CorsAllowOrigins", "*")

@@ -10,4 +10,6 @@ func Models() {
 	DB.AutoMigrate(&models.Quality{})
 	DB.AutoMigrate(&models.Subtitle{})
 	DB.AutoMigrate(&models.Audio{})
+	DB.AutoMigrate(&models.UploadSession{})
+	DB.AutoMigrate(&models.UploadChunck{})
 }

@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
@@ -29,7 +30,7 @@ func GetThumbnailData(fileName string, UUID string) (status int, filePath *strin
 		return fiber.StatusNotFound, nil, errors.New("thumbnail doesn't exist")
 	}
 
-	fileRes := fmt.Sprintf("./videos/qualitys/%s/%s", dbLink.File.UUID, fileName)
+	fileRes := fmt.Sprintf("%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, fileName)
 
 	return fiber.StatusOK, &fileRes, nil
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -89,9 +90,15 @@ func Server() {
 	// Compression middleware
 	app.Use(compress.New(compress.Config{
 		Next: func(c *fiber.Ctx) bool {
-			return c.Path() == "/videos"
+			res := strings.HasPrefix(c.Path(), config.ENV.FolderVideoQualitysPub)
+			if res {
+				c.Append("Compress", "LevelDisabled")
+			} else {
+				c.Append("Compress", "LevelBestCompression")
+			}
+			return res
 		},
-		Level: compress.LevelBestSpeed, // 1
+		Level: compress.LevelBestCompression, // 1
 	}))
 
 	// cors configuration

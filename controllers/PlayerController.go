@@ -51,7 +51,7 @@ func PlayerController(c *fiber.Ctx) error {
 			streamIsReady = true
 			if qualiItem.Type != "hls" {
 				jsonQualitys = append(jsonQualitys, map[string]string{
-					"url":    fmt.Sprintf("/videos/qualitys/%s/%s/%s", dbLink.UUID, qualiItem.Name, qualiItem.OutputFile),
+					"url":    fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name, qualiItem.OutputFile),
 					"label":  qualiItem.Name,
 					"height": strconv.Itoa(int(qualiItem.Height)),
 					"width":  strconv.Itoa(int(qualiItem.Width)),
@@ -80,7 +80,7 @@ func PlayerController(c *fiber.Ctx) error {
 	var jsonSubtitles []map[string]string
 	for _, subItem := range dbLink.File.Subtitles {
 		if subItem.Ready {
-			subPath := fmt.Sprintf("./videos/qualitys/%s/%s/%s", dbLink.File.UUID, subItem.UUID, subItem.OutputFile)
+			subPath := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, subItem.UUID, subItem.OutputFile)
 			if subContent, err := os.ReadFile(subPath); err == nil {
 				jsonSubtitles = append(jsonSubtitles, map[string]string{
 					"data": base64.StdEncoding.EncodeToString(subContent),
@@ -110,7 +110,7 @@ func PlayerController(c *fiber.Ctx) error {
 	return c.Render("player", fiber.Map{
 		"Title":         fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
 		"Description":   fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),
-		"Thumbnail":     fmt.Sprintf("/videos/qualitys/%s/image/thumb/%s", dbLink.UUID, dbLink.File.Thumbnail),
+		"Thumbnail":     fmt.Sprintf("%s/%s/image/thumb/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, dbLink.File.Thumbnail),
 		"Qualitys":      string(rawQuality),
 		"OgQuality":     OgQuality,
 		"Subtitles":     string(rawSubtitles),
@@ -118,5 +118,6 @@ func PlayerController(c *fiber.Ctx) error {
 		"StreamIsReady": streamIsReady,
 		"UUID":          requestValidation.UUID,
 		"PROJECTURL":    config.ENV.Project,
+		"Folder":        config.ENV.FolderVideoQualitysPub,
 	})
 }

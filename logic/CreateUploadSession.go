@@ -8,16 +8,23 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
+
+type CreateUploadSessionResponse struct {
+	Token   string
+	UUID    string
+	Expires time.Time
+}
 
 /*
 This functions shouldn't be run concurrent
 else the user would be able to spam the endpoint and
 use the split delay in the db lookup to have more concurrent upload sessions then defined
 */
-func CreateUploadSession(fileHash string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint) (status int, response *models.UploadSession, err error) {
+func CreateUploadSession(fileHash string, toFolder uint, fileName string, uploadSessionUUID string, fileSize int64, userId uint) (status int, response *CreateUploadSessionResponse, err error) {
 
 	if helpers.UserRequestAsyncObj.Blocked(userId) {
 		return fiber.StatusTooManyRequests, nil, errors.New("wait until the previous delete request finished")
@@ -53,10 +60,10 @@ func CreateUploadSession(fileHash string, toFolder uint, fileName string, fileId
 	// create session
 	newSession := models.UploadSession{
 		Name:           fileName,
-		UUID:           fileId,
+		UUID:           uploadSessionUUID,
 		Hash:           fileHash,
 		Size:           fileSize,
-		SessionFolder:  fmt.Sprintf("./videos/uploads/%s", fileId),
+		SessionFolder:  fmt.Sprintf("%s/%s", config.ENV.FolderVideoUploadsPriv, uploadSessionUUID),
 		ParentFolderID: toFolder,
 		UserID:         userId,
 	}
@@ -65,5 +72,21 @@ func CreateUploadSession(fileHash string, toFolder uint, fileName string, fileId
 		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
 	}
 
-	return fiber.StatusOK, &newSession, nil
+	claims := models.UploadSessionClaims{
+		UUID:   uploadSessionUUID,
+		UserID: userId,
+	}
+
+	maxUploadDuration := time.Hour * 2
+	token, expirationTime, err := helpers.GenerateDynamicJWT[models.UploadSessionClaims](&claims, maxUploadDuration)
+	if err != nil {
+		log.Printf("Failed to generate jwt token for upload session: %v", err)
+		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
+	}
+
+	return fiber.StatusOK, &CreateUploadSessionResponse{
+		Token:   token,
+		Expires: expirationTime,
+		UUID:    uploadSessionUUID,
+	}, nil
 }

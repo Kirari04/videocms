@@ -38,8 +38,10 @@ func main() {
 		case "database:fresh":
 			log.Println("running database:fresh")
 			os.Remove("./database/database.sqlite")
-			os.RemoveAll("./videos")
-			os.Mkdir("./videos", 0776)
+			os.RemoveAll(config.ENV.FolderVideoQualitysPriv)
+			os.RemoveAll(config.ENV.FolderVideoUploadsPriv)
+			os.MkdirAll(config.ENV.FolderVideoQualitysPriv, 0776)
+			os.MkdirAll(config.ENV.FolderVideoUploadsPriv, 0776)
 			os.Create("./database/database.sqlite")
 
 			// migrate

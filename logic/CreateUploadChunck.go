@@ -1,0 +1,43 @@
+package logic
+
+import (
+	"ch/kirari04/videocms/helpers"
+	"ch/kirari04/videocms/inits"
+	"ch/kirari04/videocms/models"
+	"errors"
+
+	"github.com/gofiber/fiber/v2"
+)
+
+func CreateUploadChunck(index uint, sessionToken string, fromFile string, userId uint) (status int, response string, err error) {
+	// validate token
+	claims := models.UploadSessionClaims{}
+	token, err := helpers.VerifyDynamicJWT[models.UploadSessionClaims](sessionToken, &claims)
+	if err != nil {
+		return fiber.StatusBadRequest, "", errors.New("broken upload session token")
+	}
+	if !token.Valid {
+		return fiber.StatusBadRequest, "", errors.New("invalid upload session token")
+	}
+	if claims.UserID != userId {
+		return fiber.StatusForbidden, "", fiber.ErrForbidden
+	}
+
+	//check if session still active
+	uploadSession := models.UploadSession{}
+	if res := inits.DB.
+		Preload("UploadChuncks").
+		Where(&models.UploadSession{
+			UUID: claims.UUID,
+		}).First(&uploadSession); res.Error != nil {
+		return fiber.StatusNotFound, "", errors.New("upload session not found")
+	}
+
+	/*
+		Because of parallelism we don't check if the index has already been uploaded.
+		Incase it already has been uploaded the new one will just overwrite the old one.
+	*/
+	// chunckPath := fmt.Sprintf("")
+
+	return fiber.StatusOK, "ok", nil
+}

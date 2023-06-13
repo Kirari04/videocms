@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
@@ -109,7 +110,7 @@ func GetFile(LinkID uint, userID uint) (status int, fileData *GetFileResp, err e
 		UpdatedAt:      *link.UpdatedAt,
 		UUID:           link.UUID,
 		Name:           link.Name,
-		Thumbnail:      fmt.Sprintf("/videos/qualitys/%s/image/thumb/%s", link.UUID, link.File.Thumbnail),
+		Thumbnail:      fmt.Sprintf("%s/%s/image/thumb/%s", config.ENV.FolderVideoQualitysPub, link.UUID, link.File.Thumbnail),
 		ParentFolderID: link.ParentFolderID,
 		Size:           link.File.Size,
 		Duration:       link.File.Duration,
