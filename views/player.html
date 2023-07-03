@@ -105,14 +105,15 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/assjs/dist/ass.min.js"></script>
     <script>
+      const FOLDER = "{{.Folder}}";
       const HLSENABLED = Hls.isSupported();
       // const HLSENABLED = false;
-      let source = `{{.Folder}}/${UUID}/stream/muted/master.m3u8`;
+      let source = `${FOLDER}/${UUID}/stream/muted/master.m3u8`;
       let currentValue = "";
       let currentAudioValue = "";
       const setAudioSource = (HlsAudioIndex) => {
         currentAudioValue = `${HlsAudioIndex}`;
-        source = `{{.Folder}}/${UUID}/${Audios[HlsAudioIndex].uuid}/stream/master.m3u8`;
+        source = `${FOLDER}/${UUID}/${Audios[HlsAudioIndex].uuid}/stream/master.m3u8`;
       };
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get("audio")) {
