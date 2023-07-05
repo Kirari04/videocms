@@ -9,10 +9,10 @@ import (
 )
 
 func main() {
-	//loading folders
-	inits.Folders()
 	// loaing default config
 	config.Setup()
+	//loading folders
+	inits.Folders()
 	// for setting up the database connection
 	inits.Database()
 
