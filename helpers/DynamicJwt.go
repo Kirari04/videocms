@@ -20,14 +20,14 @@ func GenerateDynamicJWT[T jwt.Claims](claims *T, expire time.Duration) (string, 
 	return tokenString, expirationTime, nil
 }
 
-func VerifyDynamicJWT[T jwt.Claims](tknStr string, claims *T) (*jwt.Token, error) {
+func VerifyDynamicJWT[T jwt.Claims](tknStr string, claims T) (*jwt.Token, *T, error) {
 	jwtKey = []byte(config.ENV.JwtSecretKey)
 
-	tkn, err := jwt.ParseWithClaims(tknStr, *claims, func(token *jwt.Token) (interface{}, error) {
+	tkn, err := jwt.ParseWithClaims(tknStr, claims, func(token *jwt.Token) (interface{}, error) {
 		return jwtKey, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return tkn, nil
+	return tkn, &claims, nil
 }
