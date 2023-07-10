@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
 )
 
 type GetAccountResponse struct {
@@ -45,8 +46,10 @@ func GetAccount(userID uint) (status int, response *GetAccountResponse, err erro
 		}).
 		Group("links.user_id").
 		First(&dbUsed); res.Error != nil {
-		log.Printf("Failed to query UploadedFiles & StorageUsed: %v", res.Error)
-		return fiber.StatusInternalServerError, nil, errors.New(fiber.ErrInternalServerError.Message)
+		if !errors.Is(res.Error, gorm.ErrRecordNotFound) {
+			log.Printf("Failed to query UploadedFiles & StorageUsed: %v", res.Error)
+			return fiber.StatusInternalServerError, nil, errors.New(fiber.ErrInternalServerError.Message)
+		}
 	}
 	newResponse := GetAccountResponse{
 		Username: dbUser.Username,
@@ -58,7 +61,7 @@ func GetAccount(userID uint) (status int, response *GetAccountResponse, err erro
 		Files:    dbUsed.UploadedFiles,
 	}
 	// save in cache
-	inits.Cache.Set(fmt.Sprintf("account-%d", userID), &newResponse, time.Minute)
+	inits.Cache.Set(fmt.Sprintf("account-%d", userID), newResponse, time.Minute)
 
 	return fiber.StatusOK, &newResponse, nil
 }
