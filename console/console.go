@@ -49,6 +49,10 @@ func main() {
 			config.Setup()
 			inits.Database()
 			inits.Models()
+
+			if err := console_helpers.SeedAdminUser(); err != nil {
+				log.Println(err)
+			}
 		default:
 			log.Fatal("Bad arguments passed")
 			functions()
