@@ -21,6 +21,10 @@ func Api() {
 	auth.Use(limiter.New(*helpers.LimiterConfig(1, time.Minute))).
 		Get("/refresh", controllers.AuthRefresh)
 
+	// Routes that dont require authentication
+	inits.Api.Get("/config", controllers.GetConfig)
+	inits.Api.Get("/file/example", controllers.GetFileExample)
+
 	// Routes that require to be authenticated
 	protectedApi := inits.Api.Group("", middlewares.Auth)
 	protectedApi.Post("/folder", controllers.CreateFolder)
@@ -39,7 +43,6 @@ func Api() {
 
 	protectedApi.Get("/account", controllers.GetAccount)
 
-	// Routes that dont require authentication
-	inits.Api.Get("/config", controllers.GetConfig)
-	inits.Api.Get("/file/example", controllers.GetFileExample)
+	protectedApi.Post("/pcu/session", controllers.CreateUploadSession)
+	protectedApi.Post("/pcu/chunck", controllers.CreateUploadChunck)
 }
