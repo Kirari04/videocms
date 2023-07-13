@@ -81,10 +81,12 @@ func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint
 		listFiles(reqFolderId, &files)
 	}
 
-	if status, err := DeleteFiles(&models.LinksDeleteValidation{
-		LinkIDs: files,
-	}, userID); err != nil {
-		return status, fmt.Errorf("failed to delete all files from folders: %v", err)
+	if len(files) > 0 {
+		if status, err := DeleteFiles(&models.LinksDeleteValidation{
+			LinkIDs: files,
+		}, userID); err != nil {
+			return status, fmt.Errorf("failed to delete all files from folders: %v", err)
+		}
 	}
 
 	if res := inits.DB.Delete(&models.Folder{}, folders); res.Error != nil {
