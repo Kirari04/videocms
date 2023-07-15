@@ -2,16 +2,14 @@ package logic
 
 import (
 	"ch/kirari04/videocms/config"
+	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"math"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -31,21 +29,12 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 		}
 	}
 
-	// create hash
-	f, err := os.Open(fromFile)
-	if err != nil {
-		log.Printf("Failed to open file: %v", err)
-		return fiber.StatusInternalServerError, nil, false, errors.New(fiber.ErrInternalServerError.Message)
-	}
-	defer f.Close()
-
 	// obtain hash from file
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
+	FileHash, err := helpers.HashFile(fromFile)
+	if err != nil {
 		log.Printf("Failed to create hash from file: %v", err)
-		return fiber.StatusInternalServerError, nil, false, errors.New(fiber.ErrInternalServerError.Message)
+		return fiber.StatusInternalServerError, nil, false, fiber.ErrInternalServerError
 	}
-	FileHash := fmt.Sprintf("%x", h.Sum(nil))
 
 	// check file hash with database
 	status, newLink, err := CloneFileByHash(FileHash, toFolder, fileName, userId)
@@ -61,7 +50,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 	data, err := ffprobe.ProbeURL(ctx, fromFile)
 	if err != nil {
 		log.Printf("Error getting data using ffprobe: %v", err)
-		return fiber.StatusInternalServerError, nil, false, errors.New(fiber.ErrInternalServerError.Message)
+		return fiber.StatusInternalServerError, nil, false, fiber.ErrInternalServerError
 	}
 	// proobe type
 	dataStreams := data.StreamType(ffprobe.StreamAny)
