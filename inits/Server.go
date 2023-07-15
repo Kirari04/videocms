@@ -23,6 +23,7 @@ var logFile *os.File
 
 func Server() {
 	engine := html.New("./views", ".html")
+	// engine.Reload(true)
 	trustedProxies := []string{}
 	trustedProxiesEnabled := false
 	if *config.ENV.CloudflareEnabled {
@@ -54,6 +55,7 @@ func Server() {
 	}
 
 	app := fiber.New(fiber.Config{
+
 		Prefork:       false,
 		CaseSensitive: true,
 		StrictRouting: true,
