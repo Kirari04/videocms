@@ -134,18 +134,19 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 	}
 
 	thumbnailFileName := "4x4.webp"
-	if responseStatus, err := CreateThumbnail(
-		4,
-		fromFile,
-		1080,
-		thumbnailFileName,
-		fmt.Sprintf("%s/%s", config.ENV.FolderVideoQualitysPriv, fileId),
-		videoDuration,
-		avgFramerate,
-	); err != nil {
-		log.Printf("Failed to generate thumbnail: %v", err)
-		return responseStatus, nil, false, err
-	}
+	go func() {
+		if _, err := CreateThumbnail(
+			4,
+			fromFile,
+			1080,
+			thumbnailFileName,
+			fmt.Sprintf("%s/%s", config.ENV.FolderVideoQualitysPriv, fileId),
+			videoDuration,
+			avgFramerate,
+		); err != nil {
+			log.Printf("Failed to generate thumbnail from file %v: %v", fromFile, err)
+		}
+	}()
 	var dbFile models.File
 	var dbLink models.Link
 	// create an transaction consisting of the file and its link
