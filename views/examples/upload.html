@@ -9,15 +9,125 @@
     <body>
         <img src="/logo.png" alt="Logo" width="100" />
         <h1>VideoCMS</h1>
-        <form action="#">
-            <h2>Choose Video File</h2>
-            <div>
-                <progress id="file" value="32" max="100"></progress> 
-                <span>32%</span>
-            </div>
-            <div>
-                <input type="file" name="file">
-            </div>
-        </form>
+        <h2>Choose Video File</h2>
+        <div>
+            <progress id="progress" value="0" max="100"></progress>
+        </div>
+        <div>
+            <input id="file" type="file" name="file" />
+        </div>
+        <br />
+        <div>
+            <button onclick="upload()">Upload</button>
+        </div>
+        <div>
+            <pre class="log"></pre>
+        </div>
+        <script>
+            const fileinput = document.getElementById("file");
+            const logfield = document.querySelector(".log");
+
+            const log = (msg) => (logfield.innerHTML += `${msg}\n`);
+
+            const upload = async () => {
+                log("Script Started");
+                fileinput.style.opacity = ".4";
+                fileinput.style.pointerEvents = "none";
+
+                const file = fileinput.files[0];
+                log(`File Selected: ${file.name}`);
+
+                log(`login using default credentials (admin)`);
+                var formdata = new FormData();
+                formdata.append("username", "admin");
+                formdata.append("password", "12345678");
+                const result = await fetch("/api/auth/login", {
+                    method: "POST",
+                    body: formdata,
+                    redirect: "follow",
+                }).then((response) => response.json());
+
+                log(
+                    `login response: ${JSON.stringify(result).substring(0, 50)}`
+                );
+
+                const token = result.token;
+
+                log(`Creating file hash`);
+                const hash = await crypto.subtle.digest(
+                    "SHA-256",
+                    await file.arrayBuffer()
+                );
+                const sha256 = Array.from(new Uint8Array(hash))
+                    .map((b) => b.toString(16).padStart(2, "0"))
+                    .join("");
+                log(`${file.name}: ${sha256}`);
+
+                log(`Create upload session`);
+                const authHeaders = new Headers();
+                authHeaders.append("Authorization", `Bearer ${token}`);
+
+                var formdata = new FormData();
+                formdata.append("Name", file.name);
+                formdata.append("Size", file.size);
+                formdata.append("Sha256", sha256);
+
+                const uploadsession = await fetch("/api/pcu/session", {
+                    method: "POST",
+                    headers: authHeaders,
+                    body: formdata,
+                    redirect: "follow",
+                }).then((response) => response.json());
+
+                log(
+                    `uploadsession response: ${JSON.stringify(
+                        uploadsession
+                    ).substring(0, 50)}`
+                );
+
+                const fileSliceSize = Math.ceil(
+                    file.size / uploadsession.ChunckCount
+                );
+                log(
+                    `Upload all ${uploadsession.ChunckCount} chuncks by ${fileSliceSize}bytes`
+                );
+
+                for (let i = 0; i < uploadsession.ChunckCount; i++) {
+                    const fileChunck = file.slice(
+                        i * fileSliceSize,
+                        (i + 1) * fileSliceSize
+                    );
+                    formdata = new FormData();
+                    formdata.append("file", fileChunck, "mha.mkv");
+                    formdata.append("Index", i);
+                    formdata.append("SessionJwtToken", uploadsession.Token);
+
+                    const chunckRes = await fetch("/api/pcu/chunck", {
+                        method: "POST",
+                        headers: authHeaders,
+                        body: formdata,
+                        redirect: "follow",
+                    }).then((response) => response.text());
+                    log(`Chunck ${i} response: ${chunckRes}`);
+                }
+
+                log(`Finalizing Upload`);
+                formdata = new FormData();
+                formdata.append("SessionJwtToken", uploadsession.Token);
+
+                const uploadedFile = await fetch("/api/pcu/file", {
+                    method: "POST",
+                    headers: authHeaders,
+                    body: formdata,
+                    redirect: "follow",
+                }).then((response) => response.json());
+                log(
+                    `uploadedFile response: ${JSON.stringify(
+                        uploadedFile
+                    ).substring(0, 100)}`
+                );
+                log(`http://localhost:3000/${uploadedFile.UUID}`);
+            };
+        </script>
     </body>
 </html>
