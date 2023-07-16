@@ -5,6 +5,7 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Upload Example</title>
+        <script src="https://caligatio.github.io/jsSHA/sha.js"></script>
     </head>
     <body>
         <img src="/logo.png" alt="Logo" width="100" />
@@ -54,13 +55,16 @@
                 const token = result.token;
 
                 log(`Creating file hash`);
-                const hash = await crypto.subtle.digest(
-                    "SHA-256",
-                    await file.arrayBuffer()
-                );
-                const sha256 = Array.from(new Uint8Array(hash))
-                    .map((b) => b.toString(16).padStart(2, "0"))
-                    .join("");
+                const reader = file.stream().getReader();
+
+                const shaObj = new jsSHA("SHA-256", "ARRAYBUFFER");
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    shaObj.update(value);
+                }
+
+                const sha256 = shaObj.getHash("HEX");
                 log(`${file.name}: ${sha256}`);
 
                 log(`Create upload session`);
