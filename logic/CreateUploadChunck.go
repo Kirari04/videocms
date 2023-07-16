@@ -14,15 +14,15 @@ import (
 
 func CreateUploadChunck(index uint, sessionToken string, fromFile string, userId uint) (status int, response string, err error) {
 	// validate token
-	claims := models.UploadSessionClaims{}
-	token, err := helpers.VerifyDynamicJWT[models.UploadSessionClaims](sessionToken, &claims)
-	if err != nil {
+	token, claims, err := helpers.VerifyDynamicJWT(sessionToken, &models.UploadSessionClaims{})
+	if err != nil && claims != nil {
+		log.Printf("err: %v", err)
 		return fiber.StatusBadRequest, "", errors.New("broken upload session token")
 	}
 	if !token.Valid {
 		return fiber.StatusBadRequest, "", errors.New("invalid upload session token")
 	}
-	if claims.UserID != userId {
+	if (*claims).UserID != userId {
 		return fiber.StatusForbidden, "", fiber.ErrForbidden
 	}
 
@@ -30,7 +30,7 @@ func CreateUploadChunck(index uint, sessionToken string, fromFile string, userId
 	uploadSession := models.UploadSession{}
 	if res := inits.DB.
 		Where(&models.UploadSession{
-			UUID: claims.UUID,
+			UUID: (*claims).UUID,
 		}).First(&uploadSession); res.Error != nil {
 		return fiber.StatusNotFound, "", errors.New("upload session not found")
 	}

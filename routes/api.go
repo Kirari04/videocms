@@ -45,4 +45,5 @@ func Api() {
 
 	protectedApi.Post("/pcu/session", controllers.CreateUploadSession)
 	protectedApi.Post("/pcu/chunck", controllers.CreateUploadChunck)
+	protectedApi.Post("/pcu/file", controllers.CreateUploadFile)
 }

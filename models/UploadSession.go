@@ -18,8 +18,8 @@ type UploadSession struct {
 }
 
 type UploadSessionClaims struct {
-	UUID   string
-	UserID uint
+	UUID   string `json:"uuid"`
+	UserID uint   `json:"userid"`
 	jwt.RegisteredClaims
 }
 

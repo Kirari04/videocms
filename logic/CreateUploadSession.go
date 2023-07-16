@@ -50,9 +50,11 @@ func CreateUploadSession(fileHash string, toFolder uint, fileName string, upload
 
 	//check for active upload sessions
 	var activeUploadSessions int64
-	if res := inits.DB.Where(&models.UploadSession{
-		UserID: userId,
-	}).Count(&activeUploadSessions); res.Error != nil {
+	if res := inits.DB.
+		Model(&models.UploadSession{}).
+		Where(&models.UploadSession{
+			UserID: userId,
+		}).Count(&activeUploadSessions); res.Error != nil {
 		log.Printf("Failed to calc activeUploadSessions: %v : %v", activeUploadSessions, res.Error)
 		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
 	}
