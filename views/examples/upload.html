@@ -19,6 +19,16 @@
         </div>
         <br />
         <div>
+            <input
+                id="parrallelUploads"
+                type="number"
+                value="4"
+                min="1"
+                max="12"
+            />
+        </div>
+        <br />
+        <div>
             <button onclick="upload()">Upload</button>
         </div>
         <div>
@@ -28,7 +38,38 @@
             const fileinput = document.getElementById("file");
             const logfield = document.querySelector(".log");
 
-            const log = (msg) => (logfield.innerHTML += `${msg}\n`);
+            const log = (msg) =>
+                (logfield.innerHTML = `[${new Date().toLocaleString()}] ${msg}\n${
+                    logfield.innerHTML
+                }`);
+
+            // keep active token up to date
+            let token = "";
+            let timeout = new Date();
+            let refreshing = false;
+            setInterval(async () => {
+                if (
+                    token !== "" &&
+                    timeout.getTime() - 10000 < new Date().getTime()
+                ) {
+                    log(`Refreshing auth token`);
+                    if (refreshing) return;
+                    refreshing = true;
+                    const authHeaders = new Headers();
+                    authHeaders.append("Authorization", `Bearer ${token}`);
+
+                    const authRefresh = await fetch("/api/auth/refresh", {
+                        method: "get",
+                        headers: authHeaders,
+                        redirect: "follow",
+                    }).then((response) => response.json());
+
+                    token = authRefresh.token;
+                    timeout = new Date(authRefresh.exp);
+                    refreshing = false;
+                    log(`New auth token has been generated`);
+                }
+            }, 1000);
 
             const upload = async () => {
                 log("Script Started");
@@ -52,9 +93,12 @@
                     `login response: ${JSON.stringify(result).substring(0, 50)}`
                 );
 
-                const token = result.token;
+                token = result.token;
+                timeout = new Date(result.exp);
 
-                log(`Creating file hash`);
+                log(
+                    `Creating file hash (this can take a wile on big files (>200mb))`
+                );
                 const reader = file.stream().getReader();
 
                 const shaObj = new jsSHA("SHA-256", "ARRAYBUFFER");
@@ -96,11 +140,7 @@
                     `Upload all ${uploadsession.ChunckCount} chuncks by ${fileSliceSize}bytes`
                 );
 
-                for (let i = 0; i < uploadsession.ChunckCount; i++) {
-                    const fileChunck = file.slice(
-                        i * fileSliceSize,
-                        (i + 1) * fileSliceSize
-                    );
+                const uploadChunck = async (fileChunck, i) => {
                     formdata = new FormData();
                     formdata.append("file", fileChunck, "mha.mkv");
                     formdata.append("Index", i);
@@ -113,6 +153,31 @@
                         redirect: "follow",
                     }).then((response) => response.text());
                     log(`Chunck ${i} response: ${chunckRes}`);
+                };
+
+                const parrallelUploads = parseInt(
+                    document.getElementById("parrallelUploads").value
+                );
+                let pthreads = Math.ceil(
+                    uploadsession.ChunckCount / parrallelUploads
+                );
+                for (let p = 0; p < pthreads; p++) {
+                    let startIndex = p * parrallelUploads;
+                    let endIndex = (p + 1) * parrallelUploads;
+                    let promisses = [];
+                    for (let i = startIndex; i < endIndex; i++) {
+                        // ignore overhead
+                        if (i < uploadsession.ChunckCount) {
+                            const fileChunck = file.slice(
+                                i * fileSliceSize,
+                                (i + 1) * fileSliceSize
+                            );
+                            console.log("start index", i);
+                            promisses.push(uploadChunck(fileChunck, i));
+                        }
+                    }
+                    console.log("await from", startIndex, "until", endIndex);
+                    await Promise.all(promisses);
                 }
 
                 log(`Finalizing Upload`);
