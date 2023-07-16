@@ -23,7 +23,7 @@ var logFile *os.File
 
 func Server() {
 	engine := html.New("./views", ".html")
-	// engine.Reload(true)
+	engine.Reload(*config.ENV.ReloadHtml)
 	trustedProxies := []string{}
 	trustedProxiesEnabled := false
 	if *config.ENV.CloudflareEnabled {
