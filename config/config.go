@@ -1,7 +1,7 @@
 package config
 
 import (
-	"encoding/json"
+	"ch/kirari04/videocms/models"
 	"log"
 	"os"
 	"strconv"
@@ -45,6 +45,32 @@ type Config struct {
 	Captcha_Recaptcha_PublicKey  string `validate:"required_if=CaptchaType recaptcha,omitempty,min=1,max=40"`
 	Captcha_Hcaptcha_PrivateKey  string `validate:"required_if=CaptchaType hcaptcha,omitempty,min=1,max=42"`
 	Captcha_Hcaptcha_PublicKey   string `validate:"required_if=CaptchaType hcaptcha,omitempty,uuid_rfc4122"`
+
+	EncodeHls240p  *bool `validate:"required,boolean"`
+	EncodeHls360p  *bool `validate:"required,boolean"`
+	EncodeHls480p  *bool `validate:"required,boolean"`
+	EncodeHls720p  *bool `validate:"required,boolean"`
+	EncodeHls1080p *bool `validate:"required,boolean"`
+	EncodeHls1440p *bool `validate:"required,boolean"`
+	EncodeHls2160p *bool `validate:"required,boolean"`
+	EncodeAv1      *bool `validate:"required,boolean"`
+	EncodeVp9      *bool `validate:"required,boolean"`
+	EncodeH264     *bool `validate:"required,boolean"`
+
+	FFmpegAv1AudioCodec  string `validate:"required,min=1"`
+	FFmpegVp9AudioCodec  string `validate:"required,min=1"`
+	FFmpegH264AudioCodec string `validate:"required,min=1"`
+
+	FFmpegAv1Crf  int `validate:"required,number,min=1,max=50"`
+	FFmpegVp9Crf  int `validate:"required,number,min=1,max=50"`
+	FFmpegH264Crf int `validate:"required,number,min=1,max=50"`
+
+	FFmpegAv1Height  int64 `validate:"required,number,min=1"`
+	FFmpegAv1Width   int64 `validate:"required,number,min=1"`
+	FFmpegVp9Height  int64 `validate:"required,number,min=1"`
+	FFmpegVp9Width   int64 `validate:"required,number,min=1"`
+	FFmpegH264Height int64 `validate:"required,number,min=1"`
+	FFmpegH264Width  int64 `validate:"required,number,min=1"`
 }
 
 type PublicConfig struct {
@@ -128,8 +154,146 @@ func Setup() {
 	ENV.Captcha_Hcaptcha_PrivateKey = getEnv("Captcha_Hcaptcha_PrivateKey", "")
 	ENV.Captcha_Hcaptcha_PublicKey = getEnv("Captcha_Hcaptcha_PublicKey", "")
 
-	if jsonString, err := json.Marshal(ENV); err == nil {
-		log.Println(string(jsonString))
+	ENV.EncodeHls240p = getEnv_bool("EncodeHls240p", boolPtr(true))
+	ENV.EncodeHls360p = getEnv_bool("EncodeHls360p", boolPtr(true))
+	ENV.EncodeHls480p = getEnv_bool("EncodeHls480p", boolPtr(true))
+	ENV.EncodeHls720p = getEnv_bool("EncodeHls720p", boolPtr(true))
+	ENV.EncodeHls1080p = getEnv_bool("EncodeHls1080p", boolPtr(true))
+	ENV.EncodeHls1440p = getEnv_bool("EncodeHls1440p", boolPtr(false))
+	ENV.EncodeHls2160p = getEnv_bool("EncodeHls2160p", boolPtr(false))
+	ENV.EncodeAv1 = getEnv_bool("EncodeAv1", boolPtr(false))
+	ENV.EncodeVp9 = getEnv_bool("EncodeVp9", boolPtr(false))
+	ENV.EncodeH264 = getEnv_bool("EncodeH264", boolPtr(true))
+
+	ENV.FFmpegAv1AudioCodec = getEnv("FFmpegAv1AudioCodec", "aac")
+	ENV.FFmpegVp9AudioCodec = getEnv("FFmpegVp9AudioCodec", "libopus")
+	ENV.FFmpegH264AudioCodec = getEnv("FFmpegH264AudioCodec", "aac")
+
+	ENV.FFmpegAv1Crf = getEnv_int("FFmpegAv1Crf", 30)
+	ENV.FFmpegVp9Crf = getEnv_int("FFmpegVp9Crf", 30)
+	ENV.FFmpegH264Crf = getEnv_int("FFmpegH264Crf", 30)
+
+	ENV.FFmpegAv1Height = getEnv_int64("FFmpegAv1Height", 480)
+	ENV.FFmpegAv1Width = getEnv_int64("FFmpegAv1Width", 854)
+	ENV.FFmpegVp9Height = getEnv_int64("FFmpegVp9Height", 480)
+	ENV.FFmpegVp9Width = getEnv_int64("FFmpegVp9Width", 854)
+	ENV.FFmpegH264Height = getEnv_int64("FFmpegH264Height", 480)
+	ENV.FFmpegH264Width = getEnv_int64("FFmpegH264Width", 854)
+
+	models.AvailableQualitys = []models.AvailableQuality{
+		{
+			Name:       "240p",
+			FolderName: "240p",
+			Height:     240,
+			Width:      426,
+			Crf:        30,
+			Type:       "hls",
+			Muted:      true,
+			OutputFile: "out.m3u8",
+			Enabled:    *ENV.EncodeHls240p,
+		},
+		{
+			Name:       "360p",
+			FolderName: "360p",
+			Height:     360,
+			Width:      640,
+			Crf:        26,
+			Type:       "hls",
+			Muted:      true,
+			OutputFile: "out.m3u8",
+			Enabled:    *ENV.EncodeHls360p,
+		},
+		{
+			Name:       "480p",
+			FolderName: "480p",
+			Height:     480,
+			Width:      854,
+			Crf:        26,
+			Type:       "hls",
+			Muted:      true,
+			OutputFile: "out.m3u8",
+			Enabled:    *ENV.EncodeHls480p,
+		},
+		{
+			Name:       "720p",
+			FolderName: "720p",
+			Height:     720,
+			Width:      1280,
+			Crf:        26,
+			Type:       "hls",
+			Muted:      true,
+			OutputFile: "out.m3u8",
+			Enabled:    *ENV.EncodeHls720p,
+		},
+		{
+			Name:       "1080p",
+			FolderName: "1080p",
+			Height:     1080,
+			Width:      1920,
+			Crf:        24,
+			Type:       "hls",
+			Muted:      true,
+			OutputFile: "out.m3u8",
+			Enabled:    *ENV.EncodeHls1080p,
+		},
+		{
+			Name:       "1440p",
+			FolderName: "1440p",
+			Height:     1440,
+			Width:      2560,
+			Crf:        24,
+			Type:       "hls",
+			Muted:      true,
+			OutputFile: "out.m3u8",
+			Enabled:    *ENV.EncodeHls1440p,
+		},
+		{
+			Name:       "2160p",
+			FolderName: "2160p",
+			Height:     2160,
+			Width:      3840,
+			Crf:        24,
+			Type:       "hls",
+			Muted:      true,
+			OutputFile: "out.m3u8",
+			Enabled:    *ENV.EncodeHls2160p,
+		},
+		{
+			Name:       "av1",
+			FolderName: "av1",
+			Height:     ENV.FFmpegAv1Height,
+			Width:      ENV.FFmpegAv1Width,
+			Crf:        ENV.FFmpegAv1Crf,
+			Type:       "av1",
+			Muted:      false,
+			AudioCodec: ENV.FFmpegAv1AudioCodec,
+			OutputFile: "out.mp4",
+			Enabled:    *ENV.EncodeAv1,
+		},
+		{
+			Name:       "vp9",
+			FolderName: "vp9",
+			Height:     ENV.FFmpegVp9Height,
+			Width:      ENV.FFmpegVp9Width,
+			Crf:        ENV.FFmpegVp9Crf,
+			Type:       "vp9",
+			Muted:      false,
+			AudioCodec: ENV.FFmpegVp9AudioCodec,
+			OutputFile: "out.webm",
+			Enabled:    *ENV.EncodeVp9,
+		},
+		{
+			Name:       "h264",
+			FolderName: "h264",
+			Height:     ENV.FFmpegH264Height,
+			Width:      ENV.FFmpegH264Width,
+			Crf:        ENV.FFmpegH264Crf,
+			Type:       "h264",
+			Muted:      false,
+			AudioCodec: ENV.FFmpegH264AudioCodec,
+			OutputFile: "out.mp4",
+			Enabled:    *ENV.EncodeH264,
+		},
 	}
 }
 
@@ -163,6 +327,17 @@ func getEnv_bool(key string, defaultValue *bool) *bool {
 func getEnv_int64(key string, defaultValue int64) int64 {
 	if value := os.Getenv(key); value != "" {
 		res, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			log.Panicf("Failed to parse int from value %v", value)
+		}
+		return res
+	}
+
+	return defaultValue
+}
+func getEnv_int(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		res, err := strconv.Atoi(value)
 		if err != nil {
 			log.Panicf("Failed to parse int from value %v", value)
 		}

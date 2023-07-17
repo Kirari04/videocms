@@ -272,6 +272,9 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 
 	// add qualitys to database so they can be converted later
 	for _, qualityOpt := range models.AvailableQualitys {
+		if !qualityOpt.Enabled {
+			continue
+		}
 		qualityPath := fmt.Sprintf("%s/%s/%s", config.ENV.FolderVideoQualitysPriv, fileId, qualityOpt.FolderName)
 		// switch framerate if too high
 		var qualityFrameRate float64 = 0
