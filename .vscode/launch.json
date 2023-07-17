@@ -11,6 +11,7 @@
             "mode": "auto",
             "program": "main.go",
             "env": {
+                "ReloadHtml": "true",
                 "EncodingEnabled": "true",
                 "UploadEnabled": "true",
                 "MaxRunningEncodes_sub": "4",
