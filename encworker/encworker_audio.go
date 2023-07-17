@@ -18,6 +18,13 @@ import (
 	"time"
 )
 
+type ActiveEncodingAudio struct {
+	FileID  uint
+	AudioID uint
+	Channel *chan bool
+}
+
+var ActiveEncodingsAudio []ActiveEncodingAudio
 var runningEncodes_audio int = 0
 var maxRunningEncodes_audio int = 1
 
@@ -150,6 +157,25 @@ func runEncode_audio(encodingTask models.Audio) {
 		"-c",
 		ffmpegCommand)
 
+	activeEncodingChannel := make(chan bool)
+	defer deleteActiveEncodingAudio(encodingTask.FileID, encodingTask.ID)
+
+	ActiveEncodingsAudio = append(ActiveEncodingsAudio, ActiveEncodingAudio{
+		FileID:  encodingTask.FileID,
+		AudioID: encodingTask.ID,
+		Channel: &activeEncodingChannel,
+	})
+	go func() {
+		for {
+			_, ok := <-activeEncodingChannel
+			if !ok {
+				break
+			}
+			cmd.Process.Kill()
+			log.Printf("killed encode (quality) of FileID %d AudioID %d\n", encodingTask.FileID, encodingTask.ID)
+		}
+	}()
+
 	if err := cmd.Run(); err != nil {
 		runningEncodes_audio -= 1
 		encodingTask.Ready = false
@@ -222,4 +248,19 @@ func TempSock_audio(totalDuration float64, encodingTask *models.Audio) string {
 	}()
 
 	return sockFileName
+}
+
+func deleteActiveEncodingAudio(fileID uint, audioID uint) {
+	foundIndex := -1
+	for i, v := range ActiveEncodingsAudio {
+		if v.FileID == fileID && v.AudioID == audioID {
+			foundIndex = i
+		}
+	}
+	if foundIndex < 0 {
+		log.Printf("Failed to delete an deleteActiveEncodingAudio with the fileID %v and audioID %v", fileID, audioID)
+		return
+	}
+
+	ActiveEncodings = removeFromArray(ActiveEncodings, foundIndex)
 }

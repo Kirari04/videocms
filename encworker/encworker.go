@@ -19,6 +19,13 @@ import (
 	"time"
 )
 
+type ActiveEncoding struct {
+	FileID    uint
+	QualityID uint
+	Channel   *chan bool
+}
+
+var ActiveEncodings []ActiveEncoding
 var runningEncodes int = 0
 var maxRunningEncodes int = 2
 
@@ -208,6 +215,25 @@ func runEncode(encodingTask models.Quality) {
 		"-c",
 		ffmpegCommand)
 
+	activeEncodingChannel := make(chan bool)
+	defer deleteActiveEncoding(encodingTask.FileID, encodingTask.ID)
+
+	ActiveEncodings = append(ActiveEncodings, ActiveEncoding{
+		FileID:    encodingTask.FileID,
+		QualityID: encodingTask.ID,
+		Channel:   &activeEncodingChannel,
+	})
+	go func() {
+		for {
+			_, ok := <-activeEncodingChannel
+			if !ok {
+				break
+			}
+			cmd.Process.Kill()
+			log.Printf("killed encode (quality) of FileID %d QualityID %d\n", encodingTask.FileID, encodingTask.ID)
+		}
+	}()
+
 	if err := cmd.Run(); err != nil {
 		runningEncodes -= 1
 		encodingTask.Ready = false
@@ -294,4 +320,24 @@ func originalFileExists(fileId uint) bool {
 		return false
 	}
 	return true
+}
+
+func deleteActiveEncoding(fileID uint, qualityID uint) {
+	foundIndex := -1
+	for i, v := range ActiveEncodings {
+		if v.FileID == fileID && v.QualityID == qualityID {
+			foundIndex = i
+		}
+	}
+	if foundIndex < 0 {
+		log.Printf("Failed to delete an deleteActiveEncoding with the fileID %v and qualityID %v", fileID, qualityID)
+		return
+	}
+
+	ActiveEncodings = removeFromArray(ActiveEncodings, foundIndex)
+}
+
+func removeFromArray[T any](s []T, i int) []T {
+	s[i] = s[len(s)-1]
+	return s[:len(s)-1]
 }

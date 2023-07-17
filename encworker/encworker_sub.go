@@ -18,6 +18,13 @@ import (
 	"time"
 )
 
+type ActiveEncodingSub struct {
+	FileID  uint
+	SubID   uint
+	Channel *chan bool
+}
+
+var ActiveEncodingsSub []ActiveEncodingSub
 var runningEncodes_sub int = 0
 var maxRunningEncodes_sub int = 2
 
@@ -110,7 +117,7 @@ func runEncode_sub(encodingTask models.Subtitle) {
 	absFileInput, _ := filepath.Abs(encodingTask.File.Path)
 	absFolderOutput, _ := filepath.Abs(encodingTask.Path)
 
-	var ffmpegCommand string = "echo Audioencoding type didnt match && exit 1"
+	var ffmpegCommand string = "echo Subencoding type didnt match && exit 1"
 
 	switch encodingTask.Type {
 	case "ass":
@@ -138,6 +145,24 @@ func runEncode_sub(encodingTask models.Subtitle) {
 		"bash",
 		"-c",
 		ffmpegCommand)
+	activeEncodingChannel := make(chan bool)
+	defer deleteActiveEncodingSub(encodingTask.FileID, encodingTask.ID)
+
+	ActiveEncodingsSub = append(ActiveEncodingsSub, ActiveEncodingSub{
+		FileID:  encodingTask.FileID,
+		SubID:   encodingTask.ID,
+		Channel: &activeEncodingChannel,
+	})
+	go func() {
+		for {
+			_, ok := <-activeEncodingChannel
+			if !ok {
+				break
+			}
+			cmd.Process.Kill()
+			log.Printf("killed encode (quality) of FileID %d SubID %d\n", encodingTask.FileID, encodingTask.ID)
+		}
+	}()
 
 	if err := cmd.Run(); err != nil {
 		runningEncodes_sub -= 1
@@ -211,4 +236,19 @@ func TempSock_sub(totalDuration float64, encodingTask *models.Subtitle) string {
 	}()
 
 	return sockFileName
+}
+
+func deleteActiveEncodingSub(fileID uint, subID uint) {
+	foundIndex := -1
+	for i, v := range ActiveEncodingsSub {
+		if v.FileID == fileID && v.SubID == subID {
+			foundIndex = i
+		}
+	}
+	if foundIndex < 0 {
+		log.Printf("Failed to delete an deleteActiveEncodingSub with the fileID %v and subID %v", fileID, subID)
+		return
+	}
+
+	ActiveEncodings = removeFromArray(ActiveEncodings, foundIndex)
 }

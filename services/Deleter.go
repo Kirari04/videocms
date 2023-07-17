@@ -1,6 +1,7 @@
 package services
 
 import (
+	"ch/kirari04/videocms/encworker"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
@@ -50,7 +51,7 @@ func runDeleter() {
 	}
 
 	if len(todos) > 0 {
-		log.Printf("Queued %d filed to delete", len(todos))
+		log.Printf("Queued %d file to delete", len(todos))
 	}
 
 	for _, todo := range todos {
@@ -76,6 +77,18 @@ func runDeleter() {
 		}
 
 		if encoding {
+			// kill ffmpeg process if active
+			for _, v := range encworker.ActiveEncodings {
+				if v.FileID == todo.ID && v.Channel != nil {
+					*v.Channel <- true
+				}
+			}
+			for _, v := range encworker.ActiveEncodingsAudio {
+				if v.FileID == todo.ID && v.Channel != nil {
+					*v.Channel <- true
+				}
+			}
+
 			// we will try again in the next loop (the encoding process may be finished until then)
 			continue
 		}
