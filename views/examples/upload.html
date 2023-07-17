@@ -36,6 +36,7 @@
         </div>
         <script>
             const fileinput = document.getElementById("file");
+            const progress = document.getElementById("progress");
             const logfield = document.querySelector(".log");
 
             const log = (msg) =>
@@ -102,11 +103,25 @@
                 const reader = file.stream().getReader();
 
                 const shaObj = new jsSHA("SHA-256", "ARRAYBUFFER");
+
+                let loopCounter = 0;
+                progress.min = 0;
+                progress.max = 100;
+                const percentalProgress = () =>
+                    Math.round(
+                        (100 / file.size) * (loopCounter * 65536) * 1000
+                    ) / 1000;
+                let intv = setInterval(() => {
+                    progress.value = percentalProgress();
+                    log(`Hashing progress: ${percentalProgress()}%`);
+                }, 1000);
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
                     shaObj.update(value);
+                    loopCounter++;
                 }
+                clearInterval(intv);
 
                 const sha256 = shaObj.getHash("HEX");
                 log(`${file.name}: ${sha256}`);
@@ -158,6 +173,9 @@
                 const parrallelUploads = parseInt(
                     document.getElementById("parrallelUploads").value
                 );
+                progress.min = 0;
+                progress.value = 0;
+                progress.max = uploadsession.ChunckCount;
                 let pthreads = Math.ceil(
                     uploadsession.ChunckCount / parrallelUploads
                 );
@@ -178,6 +196,7 @@
                     }
                     console.log("await from", startIndex, "until", endIndex);
                     await Promise.all(promisses);
+                    progress.value += promisses.length;
                 }
 
                 log(`Finalizing Upload`);
