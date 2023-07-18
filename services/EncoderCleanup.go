@@ -1,4 +1,4 @@
-package encworker
+package services
 
 import (
 	"ch/kirari04/videocms/helpers"
@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-func StartEncCleenup() {
+func EncoderCleanup() {
 	for {
-		runEncCleenup()
+		runEncoderCleanup()
 		time.Sleep(time.Minute)
 	}
 }
@@ -19,7 +19,7 @@ func StartEncCleenup() {
 /*
 This function deletes the originally uploaded file after all qualitys and subtitles were encoded
 */
-func runEncCleenup() {
+func runEncoderCleanup() {
 	var dbReadyFiles []models.File
 	if res := inits.DB.
 		Preload("Qualitys").

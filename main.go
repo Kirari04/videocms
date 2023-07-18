@@ -2,7 +2,6 @@ package main
 
 import (
 	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/encworker"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/routes"
@@ -38,8 +37,8 @@ func main() {
 		services.ResetEncodingState()
 		go services.Encoder()
 
-		// start cleenup process
-		go encworker.StartEncCleenup()
+		// start cleanup process
+		go services.EncoderCleanup()
 		go services.Deleter()
 	}
 
