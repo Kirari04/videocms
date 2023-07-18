@@ -1,7 +1,6 @@
 package services
 
 import (
-	"ch/kirari04/videocms/encworker"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
@@ -78,12 +77,7 @@ func runDeleter() {
 
 		if encoding {
 			// kill ffmpeg process if active
-			for _, v := range encworker.ActiveEncodings {
-				if v.FileID == todo.ID && v.Channel != nil {
-					*v.Channel <- true
-				}
-			}
-			for _, v := range encworker.ActiveEncodingsAudio {
+			for _, v := range ActiveEncodings {
 				if v.FileID == todo.ID && v.Channel != nil {
 					*v.Channel <- true
 				}

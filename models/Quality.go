@@ -1,5 +1,9 @@
 package models
 
+import (
+	"gorm.io/gorm"
+)
+
 type Quality struct {
 	Model
 	Name         string `gorm:"size:20;"`
@@ -20,6 +24,16 @@ type Quality struct {
 	Error        string `json:"-"`
 	File         File   `json:"-"`
 	FileID       uint
+}
+
+func (c *Quality) SetProcess(v float64) {
+	c.Progress = v
+}
+func (c *Quality) GetProcess() float64 {
+	return c.Progress
+}
+func (c *Quality) Save(DB *gorm.DB) *gorm.DB {
+	return DB.Save(c)
 }
 
 type AvailableQuality struct {

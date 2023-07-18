@@ -1,5 +1,7 @@
 package models
 
+import "gorm.io/gorm"
+
 type Subtitle struct {
 	Model
 	UUID          string
@@ -18,6 +20,16 @@ type Subtitle struct {
 	Error         string `json:"-"`
 	File          File   `json:"-"`
 	FileID        uint
+}
+
+func (c *Subtitle) SetProcess(v float64) {
+	c.Progress = v
+}
+func (c *Subtitle) GetProcess() float64 {
+	return c.Progress
+}
+func (c *Subtitle) Save(DB *gorm.DB) *gorm.DB {
+	return DB.Save(c)
 }
 
 type AvailableSubtitle struct {

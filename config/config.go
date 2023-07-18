@@ -21,10 +21,8 @@ type Config struct {
 	RatelimitEnabled  *bool `validate:"required,boolean"`
 	CloudflareEnabled *bool `validate:"required,boolean"`
 
-	MaxItemsMultiDelete     int64 `validate:"required,number,min=1"`
-	MaxRunningEncodes       int64 `validate:"required,number,min=1"`
-	MaxRunningEncodes_sub   int64 `validate:"required,number,min=1"`
-	MaxRunningEncodes_audio int64 `validate:"required,number,min=1"`
+	MaxItemsMultiDelete int64 `validate:"required,number,min=1"`
+	MaxRunningEncodes   int64 `validate:"required,number,min=1"`
 
 	MaxUploadFilesize   int64 `validate:"required,number,min=1"`
 	MaxUploadChuncksize int64 `validate:"required,number,min=1"`
@@ -131,8 +129,6 @@ func Setup() {
 
 	ENV.MaxItemsMultiDelete = getEnv_int64("MaxItemsMultiDelete", 1000)
 	ENV.MaxRunningEncodes = getEnv_int64("MaxRunningEncodes", 1)
-	ENV.MaxRunningEncodes_sub = getEnv_int64("MaxRunningEncodes_sub", 1)
-	ENV.MaxRunningEncodes_audio = getEnv_int64("MaxRunningEncodes_audio", 1)
 
 	ENV.MaxUploadFilesize = getEnv_int64("MaxUploadFilesize", 5*1024*1024*1024) // 5gb
 	ENV.MaxUploadChuncksize = getEnv_int64("MaxUploadChuncksize", 20*1024*1024) // 20mb

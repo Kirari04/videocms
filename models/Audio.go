@@ -1,5 +1,7 @@
 package models
 
+import "gorm.io/gorm"
+
 type Audio struct {
 	Model
 	UUID          string
@@ -18,6 +20,16 @@ type Audio struct {
 	Error         string `json:"-"`
 	File          File   `json:"-"`
 	FileID        uint
+}
+
+func (c *Audio) SetProcess(v float64) {
+	c.Progress = v
+}
+func (c *Audio) GetProcess() float64 {
+	return c.Progress
+}
+func (c *Audio) Save(DB *gorm.DB) *gorm.DB {
+	return DB.Save(c)
 }
 
 type AudioGetValidation struct {
