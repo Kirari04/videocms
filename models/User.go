@@ -27,11 +27,3 @@ type UserRegisterValidation struct {
 	Password string `validate:"required,min=8,max=250"`
 	Admin    *bool  `validate:"required,boolean"`
 }
-
-func (user *UserLoginValidation) ToUser() User {
-	return User{
-		Username: user.Username,
-		Hash:     user.Username,
-		Admin:    false,
-	}
-}
