@@ -177,6 +177,19 @@
                 display: flex;
                 gap: 1rem;
             }
+            .msgdiv {
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+                color: #fff;
+                background-color: rgba(0, 0, 0, 0.6);
+                backdrop-filter: blur(10px);
+                padding: 2rem;
+                font-size: 35pt;
+                font-weight: 900;
+                border-radius: 1rem;
+            }
 
             @media only screen and (max-width: 800px) {
                 .plyr__controls__item.plyr__volume {
@@ -312,6 +325,15 @@
 
             window.onload = () => main();
             function main() {
+                if (Qualitys.length === 0) {
+                    const msgdiv = document.createElement("div");
+                    msgdiv.classList.add("msgdiv");
+                    msgdiv.append(
+                        document.createTextNode("File is not ready yet!")
+                    );
+                    videoPlayerContainer.append(msgdiv);
+                    return;
+                }
                 createVideoPlayer();
                 createPlyr();
                 renderCustomSettingOverlay();
