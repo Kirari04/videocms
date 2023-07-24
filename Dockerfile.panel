@@ -27,9 +27,9 @@ RUN pnpm run build
 FROM debian
 
 WORKDIR /app
-VOLUME /videos
-VOLUME /public
-VOLUME /database
+VOLUME /app/videos
+VOLUME /app/public
+VOLUME /app/database
 
 RUN apt update && apt upgrade -y
 RUN apt install ffmpeg -y
