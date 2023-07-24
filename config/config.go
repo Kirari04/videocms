@@ -10,7 +10,10 @@ import (
 type Config struct {
 	AppName string `validate:"required,min=1,max=120"`
 	Host    string `validate:"required,min=1,max=120"`
-	Project string `validate:"required,min=1,max=120"`
+
+	Project              string `validate:"required,min=1,max=512"`
+	ProjectDocumentation string `validate:"required,min=1,max=512"`
+	ProjectDownload      string `validate:"required,min=1,max=512"`
 
 	JwtSecretKey string `validate:"required,min=8,max=512"`
 
@@ -116,7 +119,10 @@ var ENV Config
 func Setup() {
 	ENV.AppName = getEnv("AppName", "VideoCMS")
 	ENV.Host = getEnv("Host", ":3000")
-	ENV.Project = "/"
+
+	ENV.Project = getEnv("Project", "https://github.com/Kirari04/videocms")
+	ENV.ProjectDocumentation = getEnv("ProjectDocumentation", "https://documenter.getpostman.com/view/15650779/2s93CPrY2w")
+	ENV.ProjectDownload = getEnv("ProjectDownload", "https://documenter.getpostman.com/view/15650779/2s93CPrY2w")
 
 	ENV.JwtSecretKey = getEnv("JwtSecretKey", "secretkey")
 

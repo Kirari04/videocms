@@ -4,23 +4,23 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>{{.AppName}}</title>
 </head>
 <body>
     <img src="/logo.png" alt="Logo" width="100">
-    <h1>VideoCMS</h1>
+    <h1>{{.AppName}}</h1>
     <ul>
         <li>
-            <a href="{{.ExampleVideo}}">Example Video Player</a>
+            <a target="_blank" href="{{.ExampleVideo}}">Example Video Player</a>
         </li>
         <li>
-            <a href="https://documenter.getpostman.com/view/15650779/2s93CPrY2w">Api Documentation</a>
+            <a target="_blank" href="{{.ProjectDocumentation}}">Api Documentation</a>
         </li>
         <li>
-            <a href="https://hub.docker.com/r/kirari04/videocms">Docker Image</a>
+            <a target="_blank" href="{{.ProjectDownload}}">Docker Image / Download</a>
         </li>   
         <li>
-            <a href="examples/upload">Upload Example</a>
+            <a target="_blank" href="examples/upload">Upload Example</a>
         </li>   
     </ul>
 </body>
