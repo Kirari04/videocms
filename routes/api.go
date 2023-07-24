@@ -43,6 +43,11 @@ func Api() {
 
 	protectedApi.Get("/account", controllers.GetAccount)
 
+	protectedApi.Post("/webhook", controllers.CreateWebhook)
+	protectedApi.Put("/webhook", controllers.UpdateWebhook)
+	protectedApi.Delete("/webhook", controllers.DeleteWebhook)
+	protectedApi.Get("/webhooks", controllers.ListWebhooks)
+
 	protectedApi.Post("/pcu/session", controllers.CreateUploadSession)
 	protectedApi.Post("/pcu/chunck", controllers.CreateUploadChunck)
 	protectedApi.Post("/pcu/file", controllers.CreateUploadFile)

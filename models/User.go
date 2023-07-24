@@ -8,7 +8,8 @@ type User struct {
 	Email    string
 	Balance  float64
 	Storage  int64
-	Folders  []Folder `json:"-"`
+	Folders  []Folder  `json:"-"`
+	Webhooks []Webhook `json:"-"`
 }
 
 type UserLoginValidation struct {

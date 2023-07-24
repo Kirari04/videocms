@@ -12,4 +12,5 @@ func Models() {
 	DB.AutoMigrate(&models.Audio{})
 	DB.AutoMigrate(&models.UploadSession{})
 	DB.AutoMigrate(&models.UploadChunck{})
+	DB.AutoMigrate(&models.Webhook{})
 }
