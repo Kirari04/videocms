@@ -226,6 +226,9 @@
             const FOLDER = "{{.Folder}}";
             const HLSENABLED = Hls.isSupported();
             const THUMB = "{{ .Thumbnail }}";
+            const HEIGHT = parseInt("{{ .Height }}")
+            const WIDTH = parseFloat("{{ .Width }}")
+            const RATIO = WIDTH / HEIGHT;
         </script>
         <script>
             Subtitles = Subtitles.filter((e) =>
@@ -657,18 +660,13 @@
             }
 
             function loadResource() {
-                if (
-                    active_video_el.canPlayType("application/vnd.apple.mpegurl")
-                ) {
-                    // apple native hls player
-                    active_video_el.src = active_src;
-                } else if (HLSENABLED) {
+                 if (HLSENABLED && !iOS()) {
                     // hls.js player
                     const hls = new Hls();
                     hls.config.startLevel = 99;
                     hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
                         settingsList[0].name = `Quality (${
-                            hls.levels[data.level].height
+                            Math.round(hls.levels[data.level].height * RATIO)
                         }p)`;
                         renderCustomSettingOverlaySameState();
                     });
@@ -686,7 +684,7 @@
                                 },
                             },
                             ...hls.levels.map((e, hlslevelIndex) => ({
-                                name: `${e.height}p`,
+                                name: `${Math.round(e.height * RATIO)}p`,
                                 active: active_quality_index === hlslevelIndex,
                                 click: () => {
                                     settingsListSetActive(0, hlslevelIndex + 1);
@@ -701,6 +699,11 @@
                     hls.attachMedia(active_video_el);
 
                     active_hls = hls;
+                } else if (
+                    active_video_el.canPlayType("application/vnd.apple.mpegurl")
+                ) {
+                    // apple native hls player
+                    active_video_el.src = active_src;
                 } else if (Qualitys.length > 0) {
                     // default mp4 player
                     active_video_el.src = Qualitys[0].url;
