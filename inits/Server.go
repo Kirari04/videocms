@@ -138,5 +138,5 @@ func Server() {
 
 func ServerStart() {
 	defer logFile.Close()
-	App.Listen(config.ENV.Host)
+	log.Fatal(App.Listen(config.ENV.Host))
 }
