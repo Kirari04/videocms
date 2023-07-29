@@ -219,6 +219,8 @@
             if (Subtitles == null) Subtitles = [];
             let Audios = JSON.parse(decodeURI("{{.Audios}}"));
             if (Audios == null) Audios = [];
+            let Webhooks = JSON.parse(decodeURI("{{.Webhooks}}"));
+            if (Webhooks == null) Webhooks = [];
             const UUID = "{{.UUID}}";
             const PROJECTURL = "{{.PROJECTURL}}";
             const TITLE = "{{.Title}}";
@@ -226,8 +228,8 @@
             const FOLDER = "{{.Folder}}";
             const HLSENABLED = Hls.isSupported();
             const THUMB = "{{ .Thumbnail }}";
-            const HEIGHT = parseInt("{{ .Height }}")
-            const WIDTH = parseFloat("{{ .Width }}")
+            const HEIGHT = parseInt("{{ .Height }}");
+            const WIDTH = parseFloat("{{ .Width }}");
             const RATIO = WIDTH / HEIGHT;
         </script>
         <script>
@@ -291,6 +293,10 @@
                                 loadResource();
                                 active_video_el.currentTime = oldPosition;
                                 active_video_el.play();
+                                localStorage.setItem(
+                                    "lastusedAudiolang",
+                                    Audios[i].lang
+                                );
                                 settingsListSetActive(2, i + 1);
                                 renderCustomSettingOverlay(false);
                             },
@@ -347,12 +353,45 @@
                 loadResource();
             }
 
+            function qualityString(width, height) {
+                if (width > height) {
+                    return `${height}p`;
+                } else {
+                    return `${width}p`;
+                }
+            }
+
             function setDefaultData() {
                 // use audio track by default
-                if (Audios.length > 0) {
-                    active_src = `${FOLDER}/${UUID}/${Audios[0].uuid}/stream/master.m3u8`;
-                    settingsListSetActive(2, 1);
+
+                // use no subs by default
+                let lastusedAudiolang =
+                    localStorage.getItem("lastusedAudiolang");
+                if (lastusedAudiolang) {
+                    let lastUsedIndex = Audios.findIndex(
+                        (S) => S.lang === lastusedAudiolang
+                    );
+                    if (lastUsedIndex !== -1) {
+                        console.log(
+                            "found last used audio: ",
+                            Audios[lastUsedIndex].lang,
+                            Audios[lastUsedIndex].name
+                        );
+                        active_src = `${FOLDER}/${UUID}/${Audios[lastUsedIndex].uuid}/stream/master.m3u8`;
+                        settingsListSetActive(2, lastUsedIndex + 1);
+                    } else {
+                        if (Audios.length > 0) {
+                            active_src = `${FOLDER}/${UUID}/${Audios[0].uuid}/stream/master.m3u8`;
+                            settingsListSetActive(2, 1);
+                        }
+                    }
+                } else {
+                    if (Audios.length > 0) {
+                        active_src = `${FOLDER}/${UUID}/${Audios[0].uuid}/stream/master.m3u8`;
+                        settingsListSetActive(2, 1);
+                    }
                 }
+
                 // use no subs by default
                 let lastUsedLang = localStorage.getItem("lastusedlang");
                 if (lastUsedLang) {
@@ -660,14 +699,15 @@
             }
 
             function loadResource() {
-                 if (HLSENABLED && !iOS()) {
+                if (HLSENABLED && !iOS()) {
                     // hls.js player
                     const hls = new Hls();
                     hls.config.startLevel = 99;
                     hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
-                        settingsList[0].name = `Quality (${
-                            Math.round(hls.levels[data.level].height * RATIO)
-                        }p)`;
+                        settingsList[0].name = `Quality (${qualityString(
+                            hls.levels[data.level].width,
+                            hls.levels[data.level].height
+                        )})`;
                         renderCustomSettingOverlaySameState();
                     });
                     hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
@@ -684,7 +724,7 @@
                                 },
                             },
                             ...hls.levels.map((e, hlslevelIndex) => ({
-                                name: `${Math.round(e.height * RATIO)}p`,
+                                name: `${qualityString(e.width, e.height)}`,
                                 active: active_quality_index === hlslevelIndex,
                                 click: () => {
                                     settingsListSetActive(0, hlslevelIndex + 1);
