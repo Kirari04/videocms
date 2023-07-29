@@ -20,7 +20,7 @@ func GenM3u8Stream(dbLink *models.Link, qualitys *[]models.Quality, audio *model
 			m3u8 += fmt.Sprintf(
 				"\n#EXT-X-STREAM-INF:BANDWIDTH=%d,AUDIO=\"AAC\",RESOLUTION=%s,CODECS=\"avc1.640015,mp4a.40.2\"\n%s",
 				int64(quality.Height*quality.Width*2),
-				fmt.Sprintf("%dx%d", quality.Height, quality.Height),
+				fmt.Sprintf("%dx%d", quality.Width, quality.Height),
 				fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, quality.Name, quality.OutputFile),
 			)
 		}
