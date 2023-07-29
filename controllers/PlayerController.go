@@ -106,7 +106,6 @@ func PlayerController(c *fiber.Ctx) error {
 	var jsonWebhooks []map[string]any
 	for _, webhookItem := range webhooks {
 		jsonWebhooks = append(jsonWebhooks, map[string]any{
-			"name":     webhookItem.Name,
 			"url":      webhookItem.Url,
 			"rpm":      webhookItem.Rpm,
 			"reqQuery": webhookItem.ReqQuery,
