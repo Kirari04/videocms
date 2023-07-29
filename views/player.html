@@ -351,6 +351,7 @@
                 trackAssPosition();
                 trackPosition();
                 loadResource();
+                activateWebhooks();
             }
 
             function qualityString(width, height) {
@@ -407,6 +408,35 @@
                         active_subtitle_index = -1;
                     }
                 }
+            }
+
+            function activateWebhooks() {
+                Webhooks.forEach((Webhook, i) => {
+                    setInterval(() => {
+                        if (!active_video_el || active_video_el.paused) {
+                            return;
+                        }
+                        const urlParams = new URLSearchParams(
+                            window.location.search
+                        );
+                        const reqFieldValue = urlParams.get(Webhook.reqField);
+
+                        var formdata = new FormData();
+                        formdata.append("uuid", UUID);
+                        formdata.append(
+                            "position",
+                            active_video_el.currentTime
+                        );
+                        formdata.append(Webhook.resField, reqFieldValue);
+                        fetch(Webhook.url, {
+                            method: "POST",
+                            body: formdata,
+                            redirect: "follow",
+                        }).catch((e) => {
+                            console.log("Webhook error", Webhook, e);
+                        });
+                    }, (1000 * 60) / Webhook.rpm);
+                });
             }
 
             function downloadFile(filePath) {
