@@ -35,23 +35,19 @@ func main() {
 			} else {
 				log.Println("success seed:adminuser")
 			}
-		case "database:fresh":
-			log.Println("running database:fresh")
-			os.Remove("./database/database.sqlite")
-			os.RemoveAll(config.ENV.FolderVideoQualitysPriv)
-			os.RemoveAll(config.ENV.FolderVideoUploadsPriv)
-			os.MkdirAll(config.ENV.FolderVideoQualitysPriv, 0776)
-			os.MkdirAll(config.ENV.FolderVideoUploadsPriv, 0776)
-			os.Create("./database/database.sqlite")
-
-			// migrate
-			inits.Folders()
-			config.Setup()
-			inits.Database()
-			inits.Models()
-
-			if err := console_helpers.SeedAdminUser(); err != nil {
+		case "migrate:usersettings":
+			log.Println("running migrate:usersettings")
+			if err := console_helpers.MigrateUserSettings(); err != nil {
 				log.Println(err)
+			} else {
+				log.Println("success migrate:usersettings")
+			}
+		case "fresh:database":
+			log.Println("running fresh:database")
+			if err := console_helpers.FreshDatabase(); err != nil {
+				log.Println(err)
+			} else {
+				log.Println("success fresh:database")
 			}
 		default:
 			log.Fatal("Bad arguments passed")
@@ -64,5 +60,6 @@ func functions() {
 	log.Println("")
 	log.Println("Available commands:")
 	log.Println("seed:adminuser")
-	log.Println("database:fresh")
+	log.Println("fresh:database")
+	log.Println("migrate:usersettings")
 }

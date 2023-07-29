@@ -48,6 +48,13 @@ func CreateUploadSession(toFolder uint, fileName string, uploadSessionUUID strin
 		return fiber.StatusRequestEntityTooLarge, nil, fmt.Errorf("exceeded max upload filesize: %v", config.ENV.MaxUploadFilesize)
 	}
 
+	// get user settings
+	User, err := helpers.GetUser(userId)
+	if err != nil {
+		log.Printf("Failed to fetch user %v: %v", userId, err)
+		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
+	}
+
 	//check for active upload sessions
 	var activeUploadSessions int64
 	if res := inits.DB.
@@ -59,7 +66,9 @@ func CreateUploadSession(toFolder uint, fileName string, uploadSessionUUID strin
 		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
 	}
 	if activeUploadSessions >= config.ENV.MaxUploadSessions {
-		return fiber.StatusBadRequest, nil, fmt.Errorf("exceeded max upload sessions: %v", config.ENV.MaxUploadSessions)
+		if activeUploadSessions >= User.Settings.UploadSessionsMax {
+			return fiber.StatusBadRequest, nil, fmt.Errorf("exceeded max upload sessions: %v", config.ENV.MaxUploadSessions)
+		}
 	}
 
 	// create upload session folder

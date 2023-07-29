@@ -8,8 +8,9 @@ import (
 )
 
 type UserSettings struct {
-	WebhooksEnabled bool
-	WebhooksMax     int
+	WebhooksEnabled   bool
+	WebhooksMax       int
+	UploadSessionsMax int64
 }
 
 // Scan scan value into Jsonb, implements sql.Scanner interface
