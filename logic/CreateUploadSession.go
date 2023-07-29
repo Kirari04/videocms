@@ -45,7 +45,7 @@ func CreateUploadSession(fileHash string, toFolder uint, fileName string, upload
 
 	//check requested filesize size
 	if fileSize > config.ENV.MaxUploadFilesize {
-		return fiber.StatusBadRequest, nil, fmt.Errorf("exceeded max upload filesize: %v", config.ENV.MaxUploadFilesize)
+		return fiber.StatusRequestEntityTooLarge, nil, fmt.Errorf("exceeded max upload filesize: %v", config.ENV.MaxUploadFilesize)
 	}
 
 	//check for active upload sessions
