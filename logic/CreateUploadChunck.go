@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"os"
 
 	"github.com/gofiber/fiber/v2"
@@ -33,6 +34,22 @@ func CreateUploadChunck(index uint, sessionToken string, fromFile string, userId
 			UUID: (*claims).UUID,
 		}).First(&uploadSession); res.Error != nil {
 		return fiber.StatusNotFound, "", errors.New("upload session not found")
+	}
+
+	// check chunck size
+	chunckFile, err := os.Open(fromFile)
+	if err != nil {
+		log.Printf("Failed to open uploaded chunck: %v", err)
+		return fiber.StatusInternalServerError, "", fiber.ErrInternalServerError
+	}
+	chunckFileStat, err := chunckFile.Stat()
+	if err != nil {
+		log.Printf("Failed to read stat from uploaded chunck: %v", err)
+		return fiber.StatusInternalServerError, "", fiber.ErrInternalServerError
+	}
+	maxchunckFileSize := int64(math.Ceil(float64(uploadSession.Size) / float64(uploadSession.ChunckCount)))
+	if chunckFileStat.Size() > maxchunckFileSize+100 {
+		return fiber.StatusRequestEntityTooLarge, "", fiber.ErrRequestEntityTooLarge
 	}
 
 	/*
