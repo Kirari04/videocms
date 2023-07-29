@@ -21,6 +21,10 @@ func SeedAdminUser() error {
 		Username: "admin",
 		Hash:     hash,
 		Admin:    true,
+		Settings: models.UserSettings{
+			WebhooksEnabled: true,
+			WebhooksMax:     10,
+		},
 	}); res.Error != nil {
 		return fmt.Errorf("error while creating admin user: %s", res.Error.Error())
 	}

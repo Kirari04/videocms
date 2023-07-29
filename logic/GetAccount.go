@@ -20,6 +20,7 @@ type GetAccountResponse struct {
 	Storage  int64
 	Used     int64
 	Files    int64
+	Settings models.UserSettings
 }
 
 func GetAccount(userID uint) (status int, response *GetAccountResponse, err error) {
@@ -57,6 +58,7 @@ func GetAccount(userID uint) (status int, response *GetAccountResponse, err erro
 		Email:    dbUser.Email,
 		Balance:  dbUser.Balance,
 		Storage:  dbUser.Storage,
+		Settings: dbUser.Settings,
 		Used:     dbUsed.StorageUsed,
 		Files:    dbUsed.UploadedFiles,
 	}
