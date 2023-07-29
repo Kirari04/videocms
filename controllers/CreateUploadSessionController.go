@@ -24,7 +24,6 @@ func CreateUploadSession(c *fiber.Ctx) error {
 	// business logic
 	uploadSessionUUID := uuid.NewString()
 	status, response, err := logic.CreateUploadSession(
-		validation.Sha256,
 		validation.ParentFolderID,
 		validation.Name,
 		uploadSessionUUID,

@@ -26,6 +26,5 @@ type UploadSessionClaims struct {
 type UploadSessionValidation struct {
 	Name           string `validate:"required,min=1,max=128"`
 	Size           int64  `validate:"required,number,min=1"`
-	Sha256         string `validate:"required,sha256"`
 	ParentFolderID uint   `validate:"number"`
 }

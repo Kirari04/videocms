@@ -52,6 +52,11 @@ func CreateUploadChunck(index uint, sessionToken string, fromFile string, userId
 		return fiber.StatusRequestEntityTooLarge, "", fiber.ErrRequestEntityTooLarge
 	}
 
+	// check chunck count
+	if int(index) >= uploadSession.ChunckCount {
+		return fiber.StatusBadRequest, "", fmt.Errorf("chunck index is too high: chunck index: %d vs max index: %d", index, uploadSession.ChunckCount)
+	}
+
 	/*
 		Because of parallelism we don't check if the index has already been uploaded.
 		Incase it already has been uploaded the new one will just overwrite the old one.

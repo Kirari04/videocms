@@ -5,7 +5,6 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>{{.AppName}} || Upload Example</title>
-        <script src="https://caligatio.github.io/jsSHA/sha.js"></script>
     </head>
     <body>
         <img src="/logo.png" alt="Logo" width="100" />
@@ -96,36 +95,10 @@
 
                 token = result.token;
                 timeout = new Date(result.exp);
-
-                log(
-                    `Creating file hash (this can take a wile on big files (>200mb))`
-                );
-                const reader = file.stream().getReader();
-
-                const shaObj = new jsSHA("SHA-256", "ARRAYBUFFER");
-
-                let loopCounter = 0;
-                progress.min = 0;
-                progress.max = 100;
                 const percentalProgress = () =>
                     Math.round(
                         (100 / file.size) * (loopCounter * 65536) * 1000
                     ) / 1000;
-                let intv = setInterval(() => {
-                    progress.value = percentalProgress();
-                    log(`Hashing progress: ${percentalProgress()}%`);
-                }, 1000);
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    shaObj.update(value);
-                    loopCounter++;
-                }
-                clearInterval(intv);
-
-                const sha256 = shaObj.getHash("HEX");
-                log(`${file.name}: ${sha256}`);
-
                 log(`Create upload session`);
                 const authHeaders = new Headers();
                 authHeaders.append("Authorization", `Bearer ${token}`);
@@ -133,7 +106,6 @@
                 var formdata = new FormData();
                 formdata.append("Name", file.name);
                 formdata.append("Size", file.size);
-                formdata.append("Sha256", sha256);
 
                 const uploadsession = await fetch("/api/pcu/session", {
                     method: "POST",
@@ -179,25 +151,24 @@
                 let pthreads = Math.ceil(
                     uploadsession.ChunckCount / parrallelUploads
                 );
-                for (let p = 0; p < pthreads; p++) {
-                    let startIndex = p * parrallelUploads;
-                    let endIndex = (p + 1) * parrallelUploads;
-                    let promisses = [];
-                    for (let i = startIndex; i < endIndex; i++) {
-                        // ignore overhead
-                        if (i < uploadsession.ChunckCount) {
-                            const fileChunck = file.slice(
-                                i * fileSliceSize,
-                                (i + 1) * fileSliceSize
-                            );
-                            console.log("start index", i);
-                            promisses.push(uploadChunck(fileChunck, i));
-                        }
+                const forLoop = async (i, max) => {
+                    const fileChunck = file.slice(
+                        i * fileSliceSize,
+                        (i + 1) * fileSliceSize
+                    );
+                    console.log("start index", i);
+                    await uploadChunck(fileChunck, i);
+
+                    progress.value += 1;
+                    if (max > i) {
+                        await forLoop(i + 1, max);
                     }
-                    console.log("await from", startIndex, "until", endIndex);
-                    await Promise.all(promisses);
-                    progress.value += promisses.length;
+                };
+                let promisses = [];
+                for (let p = 0; p < parrallelUploads; p++) {
+                    promisses.push(forLoop(p * pthreads, (p + 1) * pthreads));
                 }
+                await Promise.all(promisses);
 
                 log(`Finalizing Upload`);
                 formdata = new FormData();

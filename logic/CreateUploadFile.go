@@ -92,15 +92,14 @@ func CreateUploadFile(sessionToken string, userId uint) (status int, response *m
 		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
 	}
 
-	// check hash
-	hash, err := helpers.HashFile(finalFilePath)
+	// check file size
+	finalFilePathInfo, err := os.Stat(finalFilePath)
 	if err != nil {
-		log.Printf("Failed to create hash of final file: %v", err)
+		log.Printf("Failed to read filestat of final file: %v", err)
 		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
 	}
-
-	if hash != uploadSession.Hash {
-		return fiber.StatusConflict, nil, fmt.Errorf("the uploaded hash doesnt match with the uploaded file: server %v, client %v", hash, uploadSession.Hash)
+	if finalFilePathInfo.Size() != uploadSession.Size {
+		return fiber.StatusConflict, nil, fmt.Errorf("the uploaded file size doesnt match with the uploaded file: server %v, client %v", finalFilePathInfo.Size(), uploadSession.Size)
 	}
 
 	// create file

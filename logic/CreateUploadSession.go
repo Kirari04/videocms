@@ -27,7 +27,7 @@ This functions shouldn't be run concurrent
 else the user would be able to spam the endpoint and
 use the split delay in the db lookup to have more concurrent upload sessions then defined
 */
-func CreateUploadSession(fileHash string, toFolder uint, fileName string, uploadSessionUUID string, fileSize int64, userId uint) (status int, response *CreateUploadSessionResponse, err error) {
+func CreateUploadSession(toFolder uint, fileName string, uploadSessionUUID string, fileSize int64, userId uint) (status int, response *CreateUploadSessionResponse, err error) {
 
 	if helpers.UserRequestAsyncObj.Blocked(userId) {
 		return fiber.StatusTooManyRequests, nil, errors.New("wait until the previous delete request finished")
@@ -74,7 +74,6 @@ func CreateUploadSession(fileHash string, toFolder uint, fileName string, upload
 	newSession := models.UploadSession{
 		Name:           fileName,
 		UUID:           uploadSessionUUID,
-		Hash:           fileHash,
 		Size:           fileSize,
 		ChunckCount:    int(chunckCount),
 		SessionFolder:  sessionFolder,
