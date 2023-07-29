@@ -818,6 +818,7 @@
                     button_continue.classList.add("settingsItem");
                     button_continue.append(document.createTextNode("Continue"));
                     button_continue.onclick = () => {
+                        onclose();
                         settingOverlayContainer.remove();
                         active_video_el.currentTime = oldPosition;
                         active_video_el.play();
@@ -826,15 +827,49 @@
                     button_restart.classList.add("settingsItem");
                     button_restart.append(document.createTextNode("Restart"));
                     button_restart.onclick = () => {
+                        onclose();
                         settingOverlayContainer.remove();
                         active_video_el.currentTime = 0;
                         active_video_el.play();
                     };
 
+                    const button_close = document.createElement("div");
+                    button_close.classList.add("settingsItem");
+                    button_close.innerHTML = `Close`;
+                    button_close.onclick = () => {
+                        onclose();
+                        settingOverlayContainer.remove();
+                        active_video_el.play();
+                    };
+
+                    let autoCloseSeconds = 15;
+                    const autoclose_info = document.createElement("div");
+                    autoclose_info.classList.add("settingsItem");
+                    autoclose_info.innerHTML = `closes in ${autoCloseSeconds} seconds`;
+
+                    // add items to list
                     settingOverlayContainer.append(button_continue);
                     settingOverlayContainer.append(button_restart);
+                    settingOverlayContainer.append(button_close);
+                    settingOverlayContainer.append(autoclose_info);
 
+                    // add list to menu
                     videoPlayerContainer.append(settingOverlayContainer);
+
+                    // autoclose logic
+                    const timeToCloseIntv = setInterval(() => {
+                        autoCloseSeconds--;
+                        autoclose_info.innerHTML = `closes in ${autoCloseSeconds} seconds`;
+                    }, 1000);
+                    setTimeout(
+                        () => settingOverlayContainer.remove(),
+                        autoCloseSeconds * 1000
+                    );
+
+                    // callbacks
+                    function onclose() {
+                        clearInterval(timeToCloseIntv);
+                    }
                 }
             }
 
