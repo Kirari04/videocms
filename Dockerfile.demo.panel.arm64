@@ -62,7 +62,7 @@ ENV MaxRunningEncodes=1
 ENV MaxRunningEncodes_sub=1
 ENV MaxRunningEncodes_audio=1
 
-# RUN ./console.bin database:fresh seed:adminuser seed:video
+# RUN ./console.bin fresh:database seed:adminuser seed:video
 
 EXPOSE 3000
 
