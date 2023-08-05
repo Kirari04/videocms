@@ -1,1 +1,1 @@
-go run console/console.go database:fresh seed:adminuser
+go run console/console.go fresh:database seed:adminuser
