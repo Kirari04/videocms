@@ -5,6 +5,7 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
+	"fmt"
 	"log"
 
 	"github.com/gofiber/fiber/v2"
@@ -17,7 +18,13 @@ func AuthLogin(c *fiber.Ctx) error {
 	}
 
 	// validate captcha
-	// success, err := helpers.CaptchaValid(c)
+	success, err := helpers.CaptchaValid(c)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprint("Captcha error: ", err.Error()))
+	}
+	if !success {
+		return c.Status(fiber.StatusBadRequest).SendString("Captcha incorrect")
+	}
 
 	var user models.User
 	res := inits.DB.Model(&models.User{}).Where(&models.User{
