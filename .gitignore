@@ -3,3 +3,5 @@
 .env
 *_bin
 videos/*
+build/cmd
+build/svelte

@@ -11,19 +11,10 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o /tmp/app/main.bin ./main.go
-RUN go build -o /tmp/app/console.bin ./console/console.go
-
-FROM node:16.18.1 AS build_base_node
-
-WORKDIR /usr/src/app
-RUN apt update
-RUN apt install git -y
-RUN git clone https://github.com/02Gqbriel/videocms-svelte.git .
-RUN npm i -g pnpm
-RUN pnpm i
-RUN echo "VITE_API_URL=" > ./.env
-RUN pnpm run build
+# RUN go build -o /tmp/app/main.bin ./main.go
+COPY ./build/cmd/main_linux_arm64.bin /tmp/app/main.bin
+# RUN go build -o /tmp/app/console.bin ./console/console.go
+COPY ./build/cmd/console_linux_arm64.bin /tmp/app/console.bin
 
 # Start fresh from a smaller image
 FROM debian
@@ -36,7 +27,7 @@ VOLUME /app/database
 RUN apt update && apt upgrade -y
 RUN apt install ffmpeg -y
 
-COPY --from=build_base_node /usr/src/app/build ./public/
+COPY ./build/svelte/build ./public/
 
 COPY --from=build_base /tmp/app/main.bin ./
 COPY --from=build_base /tmp/app/console.bin ./

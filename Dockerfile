@@ -9,8 +9,11 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o /tmp/app/main.bin ./main.go
-RUN go build -o /tmp/app/console.bin ./console/console.go
+# RUN go build -o /tmp/app/main.bin ./main.go
+COPY ./build/cmd/main_linux_amd64.bin /tmp/app/main.bin
+# RUN go build -o /tmp/app/console.bin ./console/console.go
+COPY ./build/cmd/console_linux_amd64.bin /tmp/app/console.bin
+
 
 # Start fresh from a smaller image
 FROM debian
