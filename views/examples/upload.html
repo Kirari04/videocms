@@ -26,6 +26,9 @@
                 max="12"
             />
         </div>
+        <div>
+            <input id="origin" type="url" value="//localhost:3000" />
+        </div>
         <br />
         <div>
             <button onclick="upload()">Upload</button>
@@ -37,6 +40,10 @@
             const fileinput = document.getElementById("file");
             const progress = document.getElementById("progress");
             const logfield = document.querySelector(".log");
+            const origininput = document.getElementById("origin");
+            if (origininput.value === "") {
+                origininput.value = window.location.origin;
+            }
 
             const log = (msg) =>
                 (logfield.innerHTML = `[${new Date().toLocaleString()}] ${msg}\n${
@@ -50,24 +57,33 @@
             setInterval(async () => {
                 if (
                     token !== "" &&
-                    timeout.getTime() - 10000 < new Date().getTime()
+                    timeout.getTime() - 10_000 < new Date().getTime()
                 ) {
-                    log(`Refreshing auth token`);
+                    log(`Try Refreshing auth token`);
                     if (refreshing) return;
+                    log(`Refreshing auth token`);
                     refreshing = true;
-                    const authHeaders = new Headers();
-                    authHeaders.append("Authorization", `Bearer ${token}`);
+                    try {
+                        const authHeaders = new Headers();
+                        authHeaders.append("Authorization", `Bearer ${token}`);
 
-                    const authRefresh = await fetch("/api/auth/refresh", {
-                        method: "get",
-                        headers: authHeaders,
-                        redirect: "follow",
-                    }).then((response) => response.json());
+                        const authRefresh = await fetch(
+                            origininput.value + "/api/auth/refresh",
+                            {
+                                method: "get",
+                                headers: authHeaders,
+                                redirect: "follow",
+                            }
+                        ).then((response) => response.json());
 
-                    token = authRefresh.token;
-                    timeout = new Date(authRefresh.exp);
+                        token = authRefresh.token;
+                        timeout = new Date(authRefresh.exp);
+                        log(`New auth token has been generated`);
+                    } catch (error) {
+                        log(`Failed to generate mew auth token: ${error}`);
+                        return;
+                    }
                     refreshing = false;
-                    log(`New auth token has been generated`);
                 }
             }, 1000);
 
@@ -83,36 +99,57 @@
                 var formdata = new FormData();
                 formdata.append("username", "admin");
                 formdata.append("password", "12345678");
-                const result = await fetch("/api/auth/login", {
-                    method: "POST",
-                    body: formdata,
-                    redirect: "follow",
-                }).then((response) => response.json());
-
-                log(
-                    `login response: ${JSON.stringify(result).substring(0, 50)}`
-                );
-
-                token = result.token;
-                timeout = new Date(result.exp);
+                try {
+                    const result = await fetch(
+                        origininput.value + "/api/auth/login",
+                        {
+                            method: "POST",
+                            body: formdata,
+                            redirect: "follow",
+                        }
+                    ).then((response) => response.json());
+                    log(
+                        `login response: ${JSON.stringify(result).substring(
+                            0,
+                            50
+                        )}`
+                    );
+                    token = result.token;
+                    timeout = new Date(result.exp);
+                } catch (error) {
+                    log(`Failed to login`);
+                    return;
+                }
                 const percentalProgress = () =>
                     Math.round(
                         (100 / file.size) * (loopCounter * 65536) * 1000
                     ) / 1000;
                 log(`Create upload session`);
-                const authHeaders = new Headers();
-                authHeaders.append("Authorization", `Bearer ${token}`);
+                const authHeaders = () => {
+                    const x = new Headers();
+                    x.append("Authorization", `Bearer ${token}`);
+                    return x;
+                };
 
                 var formdata = new FormData();
                 formdata.append("Name", file.name);
                 formdata.append("Size", file.size);
 
-                const uploadsession = await fetch("/api/pcu/session", {
-                    method: "POST",
-                    headers: authHeaders,
-                    body: formdata,
-                    redirect: "follow",
-                }).then((response) => response.json());
+                let uploadsession;
+                try {
+                    uploadsession = await fetch(
+                        origininput.value + "/api/pcu/session",
+                        {
+                            method: "POST",
+                            headers: authHeaders(),
+                            body: formdata,
+                            redirect: "follow",
+                        }
+                    ).then((response) => response.json());
+                } catch (error) {
+                    log(`Failed to generate upload session: ${error}`);
+                    return;
+                }
 
                 log(
                     `uploadsession response: ${JSON.stringify(
@@ -133,12 +170,24 @@
                     formdata.append("Index", i);
                     formdata.append("SessionJwtToken", uploadsession.Token);
 
-                    const chunckRes = await fetch("/api/pcu/chunck", {
-                        method: "POST",
-                        headers: authHeaders,
-                        body: formdata,
-                        redirect: "follow",
-                    }).then((response) => response.text());
+                    const chunckRes = await fetch(
+                        origininput.value + "/api/pcu/chunck",
+                        {
+                            method: "POST",
+                            headers: authHeaders(),
+                            body: formdata,
+                            redirect: "follow",
+                        }
+                    ).then((response) => {
+                        if (
+                            response.status !== 200 &&
+                            response.status !== 404
+                        ) {
+                            log(`Retry Chunck ${i}`);
+                            uploadChunck(fileChunck, i);
+                        }
+                        return response.text();
+                    });
                     log(`Chunck ${i} response: ${chunckRes}`);
                 };
 
@@ -173,13 +222,21 @@
                 log(`Finalizing Upload`);
                 formdata = new FormData();
                 formdata.append("SessionJwtToken", uploadsession.Token);
-
-                const uploadedFile = await fetch("/api/pcu/file", {
-                    method: "POST",
-                    headers: authHeaders,
-                    body: formdata,
-                    redirect: "follow",
-                }).then((response) => response.json());
+                let uploadedFile;
+                try {
+                    uploadedFile = await fetch(
+                        origininput.value + "/api/pcu/file",
+                        {
+                            method: "POST",
+                            headers: authHeaders(),
+                            body: formdata,
+                            redirect: "follow",
+                        }
+                    ).then((response) => response.json());
+                } catch (error) {
+                    log(`Failed to finalize upload: ${error}`);
+                    return;
+                }
                 log(
                     `uploadedFile response: ${JSON.stringify(
                         uploadedFile
