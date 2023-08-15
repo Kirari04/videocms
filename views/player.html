@@ -224,7 +224,7 @@
             const UUID = "{{.UUID}}";
             const PROJECTURL = "{{.PROJECTURL}}";
             const TITLE = "{{.Title}}";
-            const StreamIsReady = "{{.StreamIsReady}}" == "true";
+            const StreamIsReady = ("{{.StreamIsReady}}" === "true");
             const FOLDER = "{{.Folder}}";
             const HLSENABLED = Hls.isSupported();
             const THUMB = "{{ .Thumbnail }}";
@@ -334,7 +334,7 @@
 
             window.onload = () => main();
             function main() {
-                if (Qualitys.length === 0) {
+                if (!StreamIsReady) {
                     const msgdiv = document.createElement("div");
                     msgdiv.classList.add("msgdiv");
                     msgdiv.append(
