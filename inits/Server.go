@@ -77,7 +77,13 @@ func Server() {
 			}
 
 			if code == fiber.StatusInternalServerError {
-				log.Printf("InternalServerError: %v \n{%v}{%v}\n%v\n\n", err, c.IP(), c.Request().URI(), string(c.Request().Body()))
+				body := "\nBody hidden because too big"
+				if len(c.Request().Body()) <= 5000 {
+					body = string(c.Request().Body())
+				} else {
+					body = string(c.Request().Body()[0:5000])
+				}
+				log.Printf("InternalServerError: %v \n{%v}{%v}\n%v\n\n", err, c.IP(), c.Request().URI(), body)
 			}
 
 			return c.SendStatus(code)
