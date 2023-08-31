@@ -16,6 +16,7 @@
                 "UploadEnabled": "true",
                 "MaxRunningEncodes_sub": "4",
                 "MaxRunningEncodes_audio": "4",
+                "MaxUploadSessions": "999",
             }
         }
     ]
