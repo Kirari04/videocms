@@ -35,12 +35,12 @@ func main() {
 			} else {
 				log.Println("success seed:adminuser")
 			}
-		case "migrate:usersettings":
-			log.Println("running migrate:usersettings")
-			if err := console_helpers.MigrateUserSettings(); err != nil {
+		case "migrate":
+			log.Println("running migrate")
+			if err := console_helpers.Migrate(); err != nil {
 				log.Println(err)
 			} else {
-				log.Println("success migrate:usersettings")
+				log.Println("success migrate")
 			}
 		case "fresh:database":
 			log.Println("running fresh:database")
@@ -61,5 +61,5 @@ func functions() {
 	log.Println("Available commands:")
 	log.Println("seed:adminuser")
 	log.Println("fresh:database")
-	log.Println("migrate:usersettings")
+	log.Println("migrate")
 }
