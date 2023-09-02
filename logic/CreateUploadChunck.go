@@ -16,7 +16,7 @@ import (
 func CreateUploadChunck(index uint, sessionToken string, fromFile string, userId uint) (status int, response string, err error) {
 	// validate token
 	token, claims, err := helpers.VerifyDynamicJWT(sessionToken, &models.UploadSessionClaims{})
-	if err != nil && claims != nil {
+	if err != nil || claims == nil {
 		log.Printf("err: %v", err)
 		return fiber.StatusBadRequest, "", errors.New("broken upload session token")
 	}
