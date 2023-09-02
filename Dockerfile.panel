@@ -1,40 +1,20 @@
-FROM golang:latest AS build_base
-
-WORKDIR /tmp/app
-
-COPY go.mod .
-COPY go.sum .
-
-RUN go mod download
-
-COPY . .
-
-# RUN go build -o /tmp/app/main.bin ./main.go
-COPY ./build/cmd/main_linux_amd64.bin /tmp/app/main.bin
-# RUN go build -o /tmp/app/console.bin ./console/console.go
-COPY ./build/cmd/console_linux_amd64.bin /tmp/app/console.bin
-
-# Start fresh from a smaller image
-FROM debian
+FROM alpine:3.14
 
 WORKDIR /app
 VOLUME /app/videos
 VOLUME /app/public
 VOLUME /app/database
 
-RUN apt update && apt upgrade -y
-RUN apt install ffmpeg -y
 
 COPY ./build/svelte/build ./public/
 
-COPY --from=build_base /tmp/app/main.bin ./
-COPY --from=build_base /tmp/app/console.bin ./
-COPY --from=build_base /tmp/app/views ./views/
-COPY --from=build_base /tmp/app/public ./public/
-
-# Copy Database and video too
-COPY --from=build_base /tmp/app/database ./database
-COPY --from=build_base /tmp/app/videos ./videos
+RUN apk add --no-cache ffmpeg bash
+COPY ./build/cmd/main_linux_amd64.bin ./
+RUN mv ./main_linux_amd64.bin ./main.bin
+COPY ./build/cmd/console_linux_amd64.bin ./
+RUN mv ./console_linux_amd64.bin ./console.bin
+COPY ./views ./views/
+COPY ./public ./public/
 
 ENV AppName=VideoCMS
 ENV Host=:3000
@@ -49,7 +29,7 @@ ENV MaxRunningEncodes=1
 ENV MaxRunningEncodes_sub=1
 ENV MaxRunningEncodes_audio=1
 
-RUN ./console.bin fresh:database seed:adminuser
+RUN ./console.bin fresh:database
 
 EXPOSE 3000
 
