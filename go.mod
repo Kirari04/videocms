@@ -24,8 +24,8 @@ require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/gofiber/fiber/v2 v2.48.0
-	github.com/google/uuid v1.3.0
+	github.com/gofiber/fiber/v2 v2.49.1
+	github.com/google/uuid v1.3.1
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/kirari04/go-hcaptcha v0.0.0-20230322135436-9fe4847aa674
@@ -39,7 +39,7 @@ require (
 	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/tinylib/msgp v1.1.8 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasthttp v1.48.0 // indirect
+	github.com/valyala/fasthttp v1.49.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
 	golang.org/x/crypto v0.12.0
 	golang.org/x/sys v0.11.0 // indirect
