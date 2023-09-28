@@ -128,9 +128,9 @@ func Setup() {
 
 	ENV.ReloadHtml = getEnv_bool("ReloadHtml", boolPtr(false))
 	ENV.PanelEnabled = getEnv_bool("PanelEnabled", boolPtr(false))
-	ENV.EncodingEnabled = getEnv_bool("EncodingEnabled", boolPtr(false))
-	ENV.UploadEnabled = getEnv_bool("UploadEnabled", boolPtr(false))
-	ENV.RatelimitEnabled = getEnv_bool("RatelimitEnabled", boolPtr(true))
+	ENV.EncodingEnabled = getEnv_bool("EncodingEnabled", boolPtr(true))
+	ENV.UploadEnabled = getEnv_bool("UploadEnabled", boolPtr(true))
+	ENV.RatelimitEnabled = getEnv_bool("RatelimitEnabled", boolPtr(false))
 	ENV.CloudflareEnabled = getEnv_bool("CloudflareEnabled", boolPtr(false))
 
 	ENV.MaxItemsMultiDelete = getEnv_int64("MaxItemsMultiDelete", 1000)
@@ -138,7 +138,7 @@ func Setup() {
 
 	ENV.MaxUploadFilesize = getEnv_int64("MaxUploadFilesize", 5*1024*1024*1024) // 5gb
 	ENV.MaxUploadChuncksize = getEnv_int64("MaxUploadChuncksize", 20*1024*1024) // 20mb
-	ENV.MaxUploadSessions = getEnv_int64("MaxUploadSessions", 2)
+	ENV.MaxUploadSessions = getEnv_int64("MaxUploadSessions", 10)
 	ENV.MaxPostSize = getEnv_int64("MaxPostSize", 100*1024*1024) // 100mb
 
 	ENV.FolderVideoQualitysPriv = getEnv("FolderVideoQualitysPriv", "./videos/qualitys")
