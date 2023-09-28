@@ -229,6 +229,8 @@ func runEncodeQuality(encodingTask models.Quality) {
 			"-sn " + // disable subtitle
 			ffmpegAudio +
 			"-c:v libx264 " + // setting video codec libx264 | libaom-av1
+			"-pix_fmt yuv420p " + // YUV 4:2:0
+			"-profile:v high " + // force 8 bit
 			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
 			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
 			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
