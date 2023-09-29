@@ -249,6 +249,8 @@ func runEncodeQuality(encodingTask models.Quality) {
 		ffmpegCommand = "ffmpeg " + // starting pass 1
 			fmt.Sprintf("-i %s ", absFileInput) + // input file
 			"-c:v libvpx-vp9 " +
+			"-pix_fmt yuv420p " + // YUV 4:2:0
+			"-profile:v high " + // force 8 bit
 			"-b:v 0 " +
 			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
 			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
@@ -282,6 +284,8 @@ func runEncodeQuality(encodingTask models.Quality) {
 				ffmpegAudio +
 				`-af aformat=channel_layouts="7.1|5.1|stereo" ` + // audio channel layouts
 				"-c:v libx264 " + // setting video codec libx264 | libaom-av1
+				"-pix_fmt yuv420p " + // YUV 4:2:0
+				"-profile:v high " + // force 8 bit
 				fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
 				fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
 				fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
@@ -299,6 +303,8 @@ func runEncodeQuality(encodingTask models.Quality) {
 		ffmpegCommand = "ffmpeg " + // starting pass 1
 			fmt.Sprintf("-i %s ", absFileInput) + // input file
 			"-c:v libaom-av1 " +
+			"-pix_fmt yuv420p " + // YUV 4:2:0
+			"-profile:v high " + // force 8 bit
 			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
 			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
 			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
@@ -309,6 +315,8 @@ func runEncodeQuality(encodingTask models.Quality) {
 			ffmpegAudio +
 			`-af aformat=channel_layouts="7.1|5.1|stereo" ` + // audio channel layouts
 			"-c:v libaom-av1 " + // setting video codec libx264 | libaom-av1
+			"-pix_fmt yuv420p " + // YUV 4:2:0
+			"-profile:v high " + // force 8 bit
 			"-pass 2 " + // setting pass 2 flag
 			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
 			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
