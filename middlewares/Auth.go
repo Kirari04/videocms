@@ -9,10 +9,10 @@ import (
 
 func Auth(c *fiber.Ctx) error {
 	bearer := c.GetReqHeaders()["Authorization"]
-	if bearer == "" {
+	if len(bearer) == 0 || bearer[0] == "" {
 		return c.Status(fiber.StatusForbidden).SendString("No JWT Token")
 	}
-	bearerHeader := strings.Split(bearer, " ")
+	bearerHeader := strings.Split(bearer[0], " ")
 	tokenString := bearerHeader[len(bearerHeader)-1]
 	token, claims, err := auth.VerifyJWT(tokenString)
 	if err != nil {

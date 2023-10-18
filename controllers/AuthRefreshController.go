@@ -9,10 +9,10 @@ import (
 
 func AuthRefresh(c *fiber.Ctx) error {
 	bearer := c.GetReqHeaders()["Authorization"]
-	if bearer == "" {
+	if len(bearer) == 0 || bearer[0] == "" {
 		return c.SendStatus(fiber.StatusForbidden)
 	}
-	bearerHeader := strings.Split(bearer, " ")
+	bearerHeader := strings.Split(bearer[0], " ")
 	tokenString := bearerHeader[len(bearerHeader)-1]
 	newTokenString, expirationTime, err := auth.RefreshJWT(tokenString)
 	if err != nil {
