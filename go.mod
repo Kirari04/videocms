@@ -17,7 +17,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
 	github.com/gofiber/template v1.8.2 // indirect
 	github.com/gofiber/utils v1.1.0 // indirect
-	golang.org/x/net v0.12.0 // indirect
+	golang.org/x/net v0.17.0 // indirect
 )
 
 require (
