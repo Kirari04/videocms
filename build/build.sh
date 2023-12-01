@@ -49,24 +49,33 @@ read -p "Do you want to run the Panel Build Script? (yes/no): " answer
 if [ "$answer" = "yes" ]; then
     rm -fr ./build/svelte
     # PANEL
-    git clone https://github.com/02Gqbriel/videocms-svelte.git ./build/svelte
+    git clone git@github.com:Kirari04/videocms-frontend.git ./build/svelte
     cd ./build/svelte
-    yarn install
-    echo "VITE_API_URL=" > ./.env
-    yarn build
+    bun install
+    cat > ./.env <<- EOF
+NUXT_PUBLIC_API_URL=http://localhost/api
+NUXT_PUBLIC_BASE_URL=http://localhost
+NUXT_PUBLIC_DOCKER_HUB_TAG=localhost
+NUXT_PUBLIC_API_DOCS=http://localhost
+NUXT_PUBLIC_TUTORIAL=http://localhost
+EOF
+    
+    bun run generate
+    mkdir exportdata
+    mv -r ./dist ./exportdata
     cd ../../
 fi
 
 # DOCKER
 export DOCKER_BUILDKIT=1
-echo RUNNING DOCKER BUILD AMD64
-docker build . --platform linux/amd64 -f Dockerfile -t kirari04/videocms:alpha-1 --push
-echo RUNNING DOCKER BUILD ARM64
-docker build . --platform linux/arm64 -f Dockerfile.arm64 -t kirari04/videocms:alpha-1_arm64 --push
+# echo RUNNING DOCKER BUILD AMD64
+# docker build . --platform linux/amd64 -f Dockerfile -t kirari04/videocms:alpha-1 --push
+# echo RUNNING DOCKER BUILD ARM64
+# docker build . --platform linux/arm64 -f Dockerfile.arm64 -t kirari04/videocms:alpha-1_arm64 --push
 
 echo RUNNING DOCKER BUILD AMD64 PANEL
 docker build . --platform linux/amd64 -f Dockerfile.panel -t kirari04/videocms:panel --push
-echo RUNNING DOCKER BUILD ARM64 PANEL
-docker build . --platform linux/arm64 -f Dockerfile.panel.arm64 -t kirari04/videocms:panel_arm64 --push
+# echo RUNNING DOCKER BUILD ARM64 PANEL
+# docker build . --platform linux/arm64 -f Dockerfile.panel.arm64 -t kirari04/videocms:panel_arm64 --push
 
 echo "DONE"

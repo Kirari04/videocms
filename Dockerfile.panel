@@ -6,7 +6,7 @@ VOLUME /app/public
 VOLUME /app/database
 
 
-COPY ./build/svelte/build ./public/
+COPY ./build/svelte/exportdata ./public/
 
 RUN apk add --no-cache ffmpeg bash
 COPY ./build/cmd/main_linux_amd64.bin ./
