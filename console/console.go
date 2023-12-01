@@ -35,6 +35,13 @@ func main() {
 			} else {
 				log.Println("success create:adminuser")
 			}
+		case "delete:adminuser":
+			log.Println("running delete:adminuser")
+			if err := console_helpers.DeleteAdminUser(); err != nil {
+				log.Println(err)
+			} else {
+				log.Println("success delete:adminuser")
+			}
 		case "migrate":
 			log.Println("running migrate")
 			if err := console_helpers.Migrate(); err != nil {
@@ -60,6 +67,7 @@ func functions() {
 	log.Println("")
 	log.Println("Available commands:")
 	log.Println("create:adminuser")
+	log.Println("delete:adminuser")
 	log.Println("fresh:database")
 	log.Println("migrate")
 }
