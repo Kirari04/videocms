@@ -17,8 +17,8 @@ func FreshDatabase() error {
 	if err != nil {
 		return err
 	}
-	if string(msg) != "DELETEALL" {
-		fmt.Println("Skipping")
+	if msg != "DELETEALL\n" {
+		fmt.Printf("Skipping because '%s' doesnt match 'DELETEALL'\n", msg)
 		return nil
 	}
 	os.Remove("./database/database.sqlite")
