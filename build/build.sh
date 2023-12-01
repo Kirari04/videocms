@@ -17,12 +17,12 @@ if [ "$answerbin" = "yes" ]; then
     echo RUNNING GO BUILD linux amd64
     CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-linkmode external -extldflags -static" -a -installsuffix cgo -o build/cmd/main_linux_amd64.bin main.go
     sha256sum build/cmd/main_linux_amd64.bin > build/cmd/main_linux_amd64.bin.sha256sum
-    gpg --detach-sig --armor build/cmd/main_linux_amd64.bin
+    # gpg --detach-sig --armor build/cmd/main_linux_amd64.bin
     ## arm64
     echo RUNNING GO BUILD linux arm64
     CGO_ENABLED=1 CC=aarch64-linux-gnu-gcc-11 CC_FOR_TARGET=gcc-11-aarch64-linux-gnu GOOS=linux GOARCH=arm64 go build -ldflags "-linkmode external -extldflags -static" -a -installsuffix cgo -o build/cmd/main_linux_arm64.bin main.go
     sha256sum build/cmd/main_linux_arm64.bin > build/cmd/main_linux_arm64.bin.sha256sum
-    gpg --detach-sig --armor build/cmd/main_linux_arm64.bin
+    # gpg --detach-sig --armor build/cmd/main_linux_arm64.bin
 
     # Console
     echo RUNNING GO BUILD CONSOLE
@@ -34,12 +34,12 @@ if [ "$answerbin" = "yes" ]; then
     echo RUNNING GO BUILD linux amd64
     CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-linkmode external -extldflags -static" -a -installsuffix cgo -o build/cmd/console_linux_amd64.bin console/console.go
     sha256sum build/cmd/console_linux_amd64.bin > build/cmd/console_linux_amd64.bin.sha256sum
-    gpg --detach-sig --armor build/cmd/console_linux_amd64.bin
+    # gpg --detach-sig --armor build/cmd/console_linux_amd64.bin
     ## arm64
     echo RUNNING GO BUILD linux arm64
     CGO_ENABLED=1 CC=aarch64-linux-gnu-gcc-11 CC_FOR_TARGET=gcc-11-aarch64-linux-gnu GOOS=linux GOARCH=arm64 go build -ldflags "-linkmode external -extldflags -static" -a -installsuffix cgo -o build/cmd/console_linux_arm64.bin console/console.go
     sha256sum build/cmd/console_linux_arm64.bin > build/cmd/console_linux_arm64.bin.sha256sum
-    gpg --detach-sig --armor build/cmd/console_linux_arm64.bin
+    # gpg --detach-sig --armor build/cmd/console_linux_arm64.bin
 fi
 
 # Prompt the user for confirmation
