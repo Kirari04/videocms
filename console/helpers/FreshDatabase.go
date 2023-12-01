@@ -20,9 +20,5 @@ func FreshDatabase() error {
 	inits.Database()
 	inits.Models()
 
-	if err := SeedAdminUser(); err != nil {
-		return err
-	}
-
 	return nil
 }

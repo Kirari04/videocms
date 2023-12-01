@@ -28,12 +28,12 @@ func main() {
 	// loop over arguments and exec all matching functions
 	for _, v := range argsWithoutProg {
 		switch v {
-		case "seed:adminuser":
-			log.Println("running seed:adminuser")
-			if err := console_helpers.SeedAdminUser(); err != nil {
+		case "create:adminuser":
+			log.Println("running create:adminuser")
+			if err := console_helpers.CreateAdminUser(); err != nil {
 				log.Println(err)
 			} else {
-				log.Println("success seed:adminuser")
+				log.Println("success create:adminuser")
 			}
 		case "migrate":
 			log.Println("running migrate")
@@ -59,7 +59,7 @@ func main() {
 func functions() {
 	log.Println("")
 	log.Println("Available commands:")
-	log.Println("seed:adminuser")
+	log.Println("create:adminuser")
 	log.Println("fresh:database")
 	log.Println("migrate")
 }
