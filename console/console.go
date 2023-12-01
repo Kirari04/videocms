@@ -49,6 +49,13 @@ func main() {
 			} else {
 				log.Println("success migrate")
 			}
+		case "config":
+			log.Println("running config")
+			if err := console_helpers.Config(); err != nil {
+				log.Println(err)
+			} else {
+				log.Println("success config")
+			}
 		case "fresh:database":
 			log.Println("running fresh:database")
 			if err := console_helpers.FreshDatabase(); err != nil {
@@ -70,4 +77,5 @@ func functions() {
 	log.Println("delete:adminuser")
 	log.Println("fresh:database")
 	log.Println("migrate")
+	log.Println("config")
 }
