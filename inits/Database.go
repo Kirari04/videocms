@@ -12,7 +12,9 @@ var DB *gorm.DB
 
 func Database() {
 	newDb, err := gorm.Open(sqlite.Open("./database/database.sqlite"), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
+		Logger:                                   logger.Default.LogMode(logger.Silent),
+		DisableForeignKeyConstraintWhenMigrating: true,
+		IgnoreRelationshipsWhenMigrating:         true,
 	})
 	if err != nil {
 		log.Panicf("Failed to connect database: %s", err.Error())

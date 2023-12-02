@@ -21,12 +21,12 @@ func FreshDatabase() error {
 		fmt.Printf("Skipping because '%s' doesnt match 'DELETEALL'\n", msg)
 		return nil
 	}
+
 	os.Remove("./database/database.sqlite")
 	os.RemoveAll(config.ENV.FolderVideoQualitysPriv)
 	os.RemoveAll(config.ENV.FolderVideoUploadsPriv)
 	os.MkdirAll(config.ENV.FolderVideoQualitysPriv, 0776)
 	os.MkdirAll(config.ENV.FolderVideoUploadsPriv, 0776)
-	os.Create("./database/database.sqlite")
 
 	// migrate
 	inits.Folders()

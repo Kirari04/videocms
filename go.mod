@@ -10,7 +10,7 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	golang.org/x/term v0.13.0
 	gopkg.in/vansante/go-ffprobe.v2 v2.1.1
-	gorm.io/driver/sqlite v1.5.4
+	gorm.io/driver/sqlite v1.5.3
 	gorm.io/gorm v1.25.4
 )
 
