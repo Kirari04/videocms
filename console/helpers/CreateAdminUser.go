@@ -7,6 +7,7 @@ import (
 	"ch/kirari04/videocms/models"
 	"fmt"
 	"os"
+	"strings"
 	"syscall"
 
 	"golang.org/x/term"
@@ -28,6 +29,7 @@ func CreateAdminUser() error {
 	}
 
 	password := string(bytePassword)
+	username = strings.TrimSpace(username)
 
 	hash, _ := helpers.HashPassword(password)
 	if res := inits.DB.Create(&models.User{
