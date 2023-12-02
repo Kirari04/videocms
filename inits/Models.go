@@ -1,16 +1,28 @@
 package inits
 
-import "ch/kirari04/videocms/models"
+import (
+	"ch/kirari04/videocms/models"
+	"log"
+)
 
 func Models() {
-	DB.AutoMigrate(&models.User{})
-	DB.AutoMigrate(&models.Folder{})
-	DB.AutoMigrate(&models.File{})
-	DB.AutoMigrate(&models.Link{})
-	DB.AutoMigrate(&models.Quality{})
-	DB.AutoMigrate(&models.Subtitle{})
-	DB.AutoMigrate(&models.Audio{})
-	DB.AutoMigrate(&models.UploadSession{})
-	DB.AutoMigrate(&models.UploadChunck{})
-	DB.AutoMigrate(&models.Webhook{})
+	if DB == nil {
+		log.Fatalln("DB is nil while attempting to migrate")
+	}
+	mustRun(DB.AutoMigrate(&models.User{}))
+	mustRun(DB.AutoMigrate(&models.Folder{}))
+	mustRun(DB.AutoMigrate(&models.File{}))
+	mustRun(DB.AutoMigrate(&models.Link{}))
+	mustRun(DB.AutoMigrate(&models.Quality{}))
+	mustRun(DB.AutoMigrate(&models.Subtitle{}))
+	mustRun(DB.AutoMigrate(&models.Audio{}))
+	mustRun(DB.AutoMigrate(&models.UploadSession{}))
+	mustRun(DB.AutoMigrate(&models.UploadChunck{}))
+	mustRun(DB.AutoMigrate(&models.Webhook{}))
+}
+
+func mustRun(err error) {
+	if err != nil {
+		log.Fatalln("Failed to migrate: ", err)
+	}
 }
