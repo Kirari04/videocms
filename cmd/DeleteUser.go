@@ -10,8 +10,9 @@ import (
 )
 
 func DeleteUser() {
-	reader := bufio.NewReader(os.Stdin)
+	Init()
 
+	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("Enter Username: ")
 	username, err := reader.ReadString('\n')
 	if err != nil {

@@ -6,28 +6,11 @@ import (
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/routes"
 	"ch/kirari04/videocms/services"
-	"log"
 )
 
 func ServeMain() {
-	// for setting up configuration file from env
-	config.Setup()
-	// setting up required folders and config files
-	inits.Folders()
-	// checking env
-	if errors := helpers.ValidateStruct(config.ENV); len(errors) > 0 {
-		log.Println("Invalid Env configuration;")
-		for _, err := range errors {
-			log.Printf("%v", err)
-		}
-		log.Panic("")
-	}
-	//setup captcha
-	inits.Captcha()
-	// for setting up the database connection
-	inits.Database()
-	// for migrating all the models
-	inits.Models()
+	Init()
+
 	// sync UserRequestAsync
 	helpers.UserRequestAsyncObj.Sync(true)
 

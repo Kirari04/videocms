@@ -7,6 +7,8 @@ import (
 )
 
 func Config() {
+	Init()
+
 	// for setting up configuration file from env
 	config.Setup()
 

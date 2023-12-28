@@ -14,6 +14,8 @@ import (
 )
 
 func CreateUser() {
+	Init()
+
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Print("Enter Username: ")
@@ -30,7 +32,7 @@ func CreateUser() {
 		os.Exit(1)
 	}
 
-	fmt.Print("Enter IsAdmin[yes|no]: ")
+	fmt.Print("\nEnter IsAdmin[yes|no]: ")
 	isAdminRaw, err := reader.ReadString('\n')
 	if err != nil {
 		fmt.Println(err)
