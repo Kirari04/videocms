@@ -1,58 +1,51 @@
 package main
 
 import (
-	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
-	"ch/kirari04/videocms/routes"
-	"ch/kirari04/videocms/services"
-	"log"
+	"ch/kirari04/videocms/cmd"
+	"fmt"
+
+	"github.com/thatisuday/commando"
 )
 
 func main() {
-	// for setting up configuration file from env
-	config.Setup()
-	// setting up required folders and config files
-	inits.Folders()
-	// checking env
-	if errors := helpers.ValidateStruct(config.ENV); len(errors) > 0 {
-		log.Println("Invalid Env configuration;")
-		for _, err := range errors {
-			log.Printf("%v", err)
-		}
-		log.Panic("")
-	}
-	//setup captcha
-	inits.Captcha()
-	// for setting up the database connection
-	inits.Database()
-	// for migrating all the models
-	inits.Models()
-	// sync UserRequestAsync
-	helpers.UserRequestAsyncObj.Sync(true)
+	commando.
+		SetExecutableName("videocms").
+		SetVersion("v1.0.0").
+		SetDescription("Videocms cli - To manage your instances.")
 
-	// start encoding process
-	if *config.ENV.EncodingEnabled {
+	commando.
+		Register(nil).
+		SetAction(func(args map[string]commando.ArgValue, flags map[string]commando.FlagValue) {
+			fmt.Println("try the help command")
+		})
 
-		services.ResetEncodingState()
-		go services.Encoder()
+	commando.
+		Register("serve:main").
+		SetShortDescription("starts the main server").
+		SetAction(func(args map[string]commando.ArgValue, flags map[string]commando.FlagValue) {
+			cmd.ServeMain()
+		})
 
-		// start cleanup process
-		go services.EncoderCleanup()
-		go services.Deleter()
-	}
+	commando.
+		Register("config").
+		SetShortDescription("prints the current configuration").
+		SetAction(func(args map[string]commando.ArgValue, flags map[string]commando.FlagValue) {
+			cmd.Config()
+		})
 
-	WebServer()
-}
+	commando.
+		Register("create:user").
+		SetShortDescription("creates a new user").
+		SetAction(func(args map[string]commando.ArgValue, flags map[string]commando.FlagValue) {
+			cmd.CreateUser()
+		})
 
-func WebServer() {
-	// for setting up the webserver
-	inits.Server()
+	commando.
+		Register("delete:user").
+		SetShortDescription("delete a user").
+		SetAction(func(args map[string]commando.ArgValue, flags map[string]commando.FlagValue) {
+			cmd.DeleteUser()
+		})
 
-	// for loading the webservers routes
-	routes.Api()
-	routes.Web()
-
-	// for starting the webserver
-	inits.ServerStart()
+	commando.Parse(nil)
 }

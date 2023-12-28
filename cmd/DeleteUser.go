@@ -1,4 +1,4 @@
-package console_helpers
+package cmd
 
 import (
 	"bufio"
@@ -6,24 +6,29 @@ import (
 	"ch/kirari04/videocms/models"
 	"fmt"
 	"os"
+	"strings"
 )
 
-func DeleteAdminUser() error {
+func DeleteUser() {
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Print("Enter Username: ")
 	username, err := reader.ReadString('\n')
 	if err != nil {
-		return err
+		fmt.Println(err)
+		os.Exit(1)
 	}
+
+	username = strings.TrimSpace(username)
 
 	if res := inits.DB.
 		Where(&models.User{
 			Username: username,
 		}).
 		Delete(&models.User{}); res.Error != nil {
-		return fmt.Errorf("error while deleting admin user: %s", res.Error.Error())
+		fmt.Printf("error while deleting admin user: %s\n", res.Error.Error())
+		os.Exit(1)
 	}
 
-	return nil
+	fmt.Println("Deleted User: ", username)
 }
