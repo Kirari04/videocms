@@ -9,8 +9,6 @@ RUN apk add --no-cache ffmpeg bash
 
 COPY ./build/cmd/main_linux_amd64.bin ./
 RUN mv ./main_linux_amd64.bin ./main.bin
-COPY ./build/cmd/console_linux_amd64.bin ./
-RUN mv ./console_linux_amd64.bin ./console.bin
 
 COPY ./views ./views/
 COPY ./public ./public/
@@ -26,8 +24,6 @@ ENV MaxItemsMultiDelete=1000
 ENV MaxRunningEncodes=1
 ENV MaxRunningEncodes_sub=1
 ENV MaxRunningEncodes_audio=1
-
-RUN ./console.bin fresh:database
 
 EXPOSE 3000
 
