@@ -120,9 +120,9 @@ func Setup() {
 	ENV.AppName = getEnv("AppName", "VideoCMS")
 	ENV.Host = getEnv("Host", ":3000")
 
-	ENV.Project = getEnv("Project", "https://github.com/Kirari04/videocms")
-	ENV.ProjectDocumentation = getEnv("ProjectDocumentation", "https://documenter.getpostman.com/view/15650779/2s93CPrY2w")
-	ENV.ProjectDownload = getEnv("ProjectDownload", "https://documenter.getpostman.com/view/15650779/2s93CPrY2w")
+	ENV.Project = getEnv("Project", "https://github.com/notfound")
+	ENV.ProjectDocumentation = getEnv("ProjectDocumentation", "https://github.com/notfound")
+	ENV.ProjectDownload = getEnv("ProjectDownload", "https://github.com/notfound")
 
 	ENV.JwtSecretKey = getEnv("JwtSecretKey", "secretkey")
 
@@ -165,7 +165,7 @@ func Setup() {
 	ENV.EncodeHls2160p = getEnv_bool("EncodeHls2160p", boolPtr(false))
 	ENV.EncodeAv1 = getEnv_bool("EncodeAv1", boolPtr(false))
 	ENV.EncodeVp9 = getEnv_bool("EncodeVp9", boolPtr(false))
-	ENV.EncodeH264 = getEnv_bool("EncodeH264", boolPtr(true))
+	ENV.EncodeH264 = getEnv_bool("EncodeH264", boolPtr(false))
 
 	ENV.FFmpegAv1AudioCodec = getEnv("FFmpegAv1AudioCodec", "aac")
 	ENV.FFmpegVp9AudioCodec = getEnv("FFmpegVp9AudioCodec", "libopus")
@@ -260,6 +260,7 @@ func Setup() {
 			OutputFile: "out.m3u8",
 			Enabled:    *ENV.EncodeHls2160p,
 		},
+		// downloads
 		{
 			Name:       "av1",
 			FolderName: "av1",
