@@ -36,18 +36,18 @@ if [ "$answer" = "yes" ]; then
     cd ./build/svelte
     bun install
     cat > ./.env <<- EOF
-NUXT_PUBLIC_API_URL=http://127.0.0.1:3000/api
-NUXT_PUBLIC_BASE_URL=http://127.0.0.1:3000
+NUXT_PUBLIC_API_URL=https://videocms.senpai.one/api
+NUXT_PUBLIC_BASE_URL=https://videocms.senpai.one
 NUXT_PUBLIC_DOCKER_HUB_TAG=localhost
-NUXT_PUBLIC_API_DOCS=http://127.0.0.1:3000
-NUXT_PUBLIC_TUTORIAL=http://127.0.0.1:3000
-NUXT_PUBLIC_NAME=Video
+NUXT_PUBLIC_API_DOCS=https://videocms.senpai.one
+NUXT_PUBLIC_TUTORIAL=https://videocms.senpai.one
+NUXT_PUBLIC_NAME=VideoCMS
 EOF
     
     bun run generate
-    mkdir exportdata
-    mv -r ./dist ./exportdata
     cd ../../
+    mkdir -p build/svelte/exportdata
+    cp -r build/svelte/.output/public/* build/svelte/exportdata/
 fi
 
 # DOCKER
