@@ -25,31 +25,6 @@ if [ "$answerbin" = "yes" ]; then
     # gpg --detach-sig --armor build/cmd/main_linux_arm64.bin
 fi
 
-# Prompt the user for confirmation
-read -p "Do you want to run the Panel Build Script? (yes/no): " answer
-
-# Proceed with the script only if the answer is "yes"
-if [ "$answer" = "yes" ]; then
-    rm -fr ./build/svelte
-    # PANEL
-    git clone git@github.com:Kirari04/videocms-frontend.git ./build/svelte
-    cd ./build/svelte
-    bun install
-    cat > ./.env <<- EOF
-NUXT_PUBLIC_API_URL=https://videocms.senpai.one/api
-NUXT_PUBLIC_BASE_URL=https://videocms.senpai.one
-NUXT_PUBLIC_DOCKER_HUB_TAG=localhost
-NUXT_PUBLIC_API_DOCS=https://videocms.senpai.one
-NUXT_PUBLIC_TUTORIAL=https://videocms.senpai.one
-NUXT_PUBLIC_NAME=VideoCMS
-EOF
-    
-    bun run generate
-    cd ../../
-    mkdir -p build/svelte/exportdata
-    cp -r build/svelte/.output/public/* build/svelte/exportdata/
-fi
-
 # DOCKER
 export DOCKER_BUILDKIT=1
 # echo RUNNING DOCKER BUILD AMD64
