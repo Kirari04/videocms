@@ -59,7 +59,6 @@ Default username & password are `admin` and `12345678`
   "ProjectDownload": "https://documenter.getpostman.com/view/15650779/2s93CPrY2w",
   "JwtSecretKey": "secretkey",
   "ReloadHtml": false,
-  "PanelEnabled": false,
   "EncodingEnabled": true,
   "UploadEnabled": true,
   "RatelimitEnabled": false,

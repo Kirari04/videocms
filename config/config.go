@@ -18,7 +18,6 @@ type Config struct {
 	JwtSecretKey string `validate:"required,min=8,max=512"`
 
 	ReloadHtml        *bool `validate:"required,boolean"`
-	PanelEnabled      *bool `validate:"required,boolean"`
 	EncodingEnabled   *bool `validate:"required,boolean"`
 	UploadEnabled     *bool `validate:"required,boolean"`
 	RatelimitEnabled  *bool `validate:"required,boolean"`
@@ -127,7 +126,6 @@ func Setup() {
 	ENV.JwtSecretKey = getEnv("JwtSecretKey", "secretkey")
 
 	ENV.ReloadHtml = getEnv_bool("ReloadHtml", boolPtr(false))
-	ENV.PanelEnabled = getEnv_bool("PanelEnabled", boolPtr(false))
 	ENV.EncodingEnabled = getEnv_bool("EncodingEnabled", boolPtr(true))
 	ENV.UploadEnabled = getEnv_bool("UploadEnabled", boolPtr(true))
 	ENV.RatelimitEnabled = getEnv_bool("RatelimitEnabled", boolPtr(false))
