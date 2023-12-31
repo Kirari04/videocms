@@ -4,7 +4,7 @@ This project is a cms for hosting your videos.
 
 ## Questions & Feature Requests
 
-You can ask project related questions & feature requests on <a href="https://videocms.tawk.help/" target="_blank"> Tawk </a>.
+You can ask project related questions & feature requests on <a href="https://discord.gg/PKfSxwV6" target="_blank"> Discord </a>.
 
 ## Api-Doc
 
@@ -14,13 +14,13 @@ View the latest documentation on <a href="https://documenter.getpostman.com/view
 
 ### Alpha
 
-The Alpha image contains the latest code with the full funtionallity.<br>
+The Alpha image contains the latest code with the full api funtionallity.<br>
 Deploy with docker: `docker run -p 3000:3000 kirari04/videocms:alpha` <br>
 
 ## Images For Arm64 CPU's Like Raspberry Pi
 
 just use the same images like before just add `_arm64` to the end of the tag. <br>
-Here some examples
+Here some examples:
 
 ```
 docker run -p 3000:3000 kirari04/videocms:alpha_arm64
