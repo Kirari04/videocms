@@ -17,13 +17,21 @@ View the latest documentation on <a href="https://documenter.getpostman.com/view
 The Alpha image contains the latest code with the full api funtionallity.<br>
 Deploy with docker: `docker run -p 3000:3000 kirari04/videocms:alpha` <br>
 
-## Images For Arm64 CPU's Like Raspberry Pi
+### Images For Arm64 CPU's Like Raspberry Pi
 
 just use the same images like before just add `_arm64` to the end of the tag. <br>
 Here some examples:
 
-```
+```bash
 docker run -p 3000:3000 kirari04/videocms:alpha_arm64
+```
+
+### Frontend
+
+Use the `panel` container for that:
+
+```bash
+docker run -p 3000:3000 kirari04/videocms:panel
 ```
 
 ## Authentication / Default Admin
@@ -31,6 +39,25 @@ docker run -p 3000:3000 kirari04/videocms:alpha_arm64
 Create a new user by running the command `./main.bin create:user` inside the container.
 
 ## Configuration
+
+### Frontend
+
+Those are the env configs for the `panel` image.
+
+```bash
+NODE_ENV=production
+NUXT_PUBLIC_API_URL=https://videocms.senpai.one/api
+NUXT_PUBLIC_BASE_URL=https://videocms.senpai.one
+NUXT_PUBLIC_DOCKER_HUB_TAG=kirari04/videocms:alpha
+NUXT_PUBLIC_API_DOCS=https://documenter.getpostman.com/view/15650779/2s93CPrY2w
+NUXT_PUBLIC_TUTORIAL=https://videocms.tawk.help/category/tutorial
+NUXT_PUBLIC_NAME=VideoCMS
+NUXT_PUBLIC_DEMO=false
+```
+
+### API
+
+When running `./main config` the following will be printed out:
 
 ```json
 {
@@ -87,3 +114,26 @@ Create a new user by running the command `./main.bin create:user` inside the con
   "FFmpegH264Width": 854
 }
 ```
+
+
+## Screenshots
+
+### Simple Panel
+![Alt text](./docs/image.png)
+
+### Advanced File Information
+![Alt text](./docs/image2.png)
+![Alt text](./docs/image5.png)
+
+### Easy Export
+![Alt text](./docs/image3.png)
+![Alt text](./docs/image4.png)
+
+### Multiple Qualities
+![Alt text](./docs/image6.png)
+
+### Multiple Subtitles
+![Alt text](./docs/image7.png)
+
+### Multiple Audio Channels
+![Alt text](./docs/image8.png)
