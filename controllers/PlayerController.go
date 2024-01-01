@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"ch/kirari04/videocms/auth"
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
@@ -114,6 +115,13 @@ func PlayerController(c *fiber.Ctx) error {
 	}
 	rawWebhooks, _ := json.Marshal(jsonWebhooks)
 
+	// generate jwt token that allows the user to access the stream
+	tkn, _, err := auth.GenerateJWTStream(dbLink.UUID)
+	if err != nil {
+		log.Printf("Failed to generate jwt stream token: %v", err)
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
 	return c.Render("player", fiber.Map{
 		"Title":         fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
 		"Description":   fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),
@@ -128,5 +136,6 @@ func PlayerController(c *fiber.Ctx) error {
 		"UUID":          requestValidation.UUID,
 		"PROJECTURL":    config.ENV.Project,
 		"Folder":        config.ENV.FolderVideoQualitysPub,
+		"JWT":           tkn,
 	})
 }
