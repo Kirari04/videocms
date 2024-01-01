@@ -28,6 +28,7 @@ func ListFiles(fromFolder uint, userId uint) (status int, response *[]models.Lin
 			ParentFolderID: fromFolder,
 			UserID:         userId,
 		}, "ParentFolderID", "UserID").
+		Order("name ASC").
 		Find(&links)
 	if res.Error != nil {
 		log.Printf("Failed to query file list: %v", res.Error)

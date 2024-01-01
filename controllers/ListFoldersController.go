@@ -44,6 +44,7 @@ func ListFolders(c *fiber.Ctx) error {
 			ParentFolderID: folderValidation.ParentFolderID,
 			UserID:         c.Locals("UserID").(uint),
 		}, "ParentFolderID", "UserID").
+		Order("name ASC").
 		Find(&folders)
 	if res.Error != nil {
 		log.Printf("Failed to query folder list: %v", res.Error)
