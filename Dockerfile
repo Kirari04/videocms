@@ -27,4 +27,4 @@ ENV MaxRunningEncodes_audio=1
 
 EXPOSE 3000
 
-CMD ["./main.bin"]
+CMD ["./main.bin", "serve:main"]
