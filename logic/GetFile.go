@@ -37,6 +37,7 @@ type GetFileRespAudio struct {
 type GetFileResp struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	ID             uint
 	UUID           string
 	Name           string
 	Thumbnail      string
@@ -108,6 +109,7 @@ func GetFile(LinkID uint, userID uint) (status int, fileData *GetFileResp, err e
 	response := GetFileResp{
 		CreatedAt:      *link.CreatedAt,
 		UpdatedAt:      *link.UpdatedAt,
+		ID:             link.ID,
 		UUID:           link.UUID,
 		Name:           link.Name,
 		Thumbnail:      fmt.Sprintf("%s/%s/image/thumb/%s", config.ENV.FolderVideoQualitysPub, link.UUID, link.File.Thumbnail),
