@@ -42,6 +42,8 @@ func Api() {
 	protectedApi.Delete("/files", controllers.DeleteFilesController)
 
 	protectedApi.Get("/account", controllers.GetAccount)
+	protectedApi.Get("/account/settings", controllers.GetUserSettingsController)
+	protectedApi.Put("/account/settings", controllers.UpdateUserSettingsController)
 
 	protectedApi.Post("/webhook", controllers.CreateWebhook)
 	protectedApi.Put("/webhook", controllers.UpdateWebhook)

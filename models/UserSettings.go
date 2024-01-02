@@ -8,9 +8,10 @@ import (
 )
 
 type UserSettings struct {
-	WebhooksEnabled   bool
-	WebhooksMax       int
-	UploadSessionsMax int64
+	WebhooksEnabled     bool
+	WebhooksMax         int
+	UploadSessionsMax   int64
+	EnablePlayerCaptcha bool
 }
 
 // Scan scan value into Jsonb, implements sql.Scanner interface
@@ -33,4 +34,8 @@ func (j UserSettings) Value() (driver.Value, error) {
 		return nil, err
 	}
 	return json.RawMessage(v).MarshalJSON()
+}
+
+type UserSettingsUpdateValidation struct {
+	EnablePlayerCaptcha *bool `validate:"required,boolean"`
 }
