@@ -46,6 +46,7 @@ func Api() {
 	protectedApi.Put("/account/settings", controllers.UpdateUserSettingsController)
 
 	protectedApi.Post("/server", middlewares.IsAdmin, controllers.CreateServer)
+	protectedApi.Delete("/server", middlewares.IsAdmin, controllers.DeleteServer)
 	protectedApi.Get("/servers", middlewares.IsAdmin, controllers.ListServers)
 
 	protectedApi.Post("/webhook", controllers.CreateWebhook)
