@@ -24,11 +24,11 @@ func GetThumbnailData(c *fiber.Ctx) error {
 
 	status, filePath, err := logic.GetThumbnailData(requestValidation.FILE, requestValidation.UUID)
 	if err != nil {
-		return c.Status(status).SendString(err.Error())
+		return c.Type(".txt").SendStatus(fiber.StatusNotFound)
 	}
 
 	if err := c.Status(status).SendFile(*filePath); err != nil {
-		return c.Status(fiber.StatusNotFound).SendString("Thumbnail doesn't exist")
+		return c.SendStatus(fiber.StatusNotFound)
 	}
 	return nil
 }
