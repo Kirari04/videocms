@@ -20,6 +20,7 @@ func Models() {
 	mustRun(DB.AutoMigrate(&models.UploadChunck{}))
 	mustRun(DB.AutoMigrate(&models.Webhook{}))
 	mustRun(DB.AutoMigrate(&models.Server{}))
+	mustRun(DB.AutoMigrate(&models.WebPage{}))
 }
 
 func mustRun(err error) {
