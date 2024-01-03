@@ -24,6 +24,8 @@ func Api() {
 	// Routes that dont require authentication
 	inits.Api.Get("/config", controllers.GetConfig)
 	inits.Api.Get("/file/example", controllers.GetFileExample)
+	inits.Api.Get("/p/pages", controllers.ListPublicWebPage)
+	inits.Api.Get("/p/page", controllers.GetPublicWebPage)
 
 	// Routes that require to be authenticated
 	protectedApi := inits.Api.Group("", middlewares.Auth)
@@ -48,6 +50,8 @@ func Api() {
 	protectedApi.Post("/server", middlewares.IsAdmin, controllers.CreateServer)
 	protectedApi.Delete("/server", middlewares.IsAdmin, controllers.DeleteServer)
 	protectedApi.Get("/servers", middlewares.IsAdmin, controllers.ListServers)
+
+	protectedApi.Post("/page", middlewares.IsAdmin, controllers.CreateWebPage)
 
 	protectedApi.Post("/webhook", controllers.CreateWebhook)
 	protectedApi.Put("/webhook", controllers.UpdateWebhook)
