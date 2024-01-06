@@ -28,3 +28,7 @@ type UploadSessionValidation struct {
 	Size           int64  `validate:"required,number,min=1"`
 	ParentFolderID uint   `validate:"number"`
 }
+
+type DeleteUploadSessionValidation struct {
+	UploadSessionUUID string `validate:"required,uuid_rfc4122"`
+}

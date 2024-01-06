@@ -58,7 +58,9 @@ func Api() {
 	protectedApi.Delete("/webhook", controllers.DeleteWebhook)
 	protectedApi.Get("/webhooks", controllers.ListWebhooks)
 
+	protectedApi.Get("/pcu/sessions", controllers.GetUploadSessions)
 	protectedApi.Post("/pcu/session", controllers.CreateUploadSession)
+	protectedApi.Delete("/pcu/session", controllers.DeleteUploadSession)
 	protectedApi.Post("/pcu/chunck", controllers.CreateUploadChunck)
 	protectedApi.Post("/pcu/file", controllers.CreateUploadFile)
 }
