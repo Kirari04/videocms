@@ -114,6 +114,9 @@ func (c Config) PublicConfig() PublicConfig {
 type ConfigMap map[string]string
 
 var ENV Config
+var EXTENSIONS []string = []string{
+	"mp4", "mkv", "webm", "avi", "mov",
+}
 
 func Setup() {
 	ENV.AppName = getEnv("AppName", "VideoCMS")
