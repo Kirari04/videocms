@@ -46,7 +46,7 @@ func CreateFile(c *fiber.Ctx) error {
 	}
 
 	// business logic
-	status, dbLink, cloned, err := logic.CreateFile(filePath, fileValidation.ParentFolderID, file.Filename, fileId, file.Size, c.Locals("UserID").(uint))
+	status, dbLink, cloned, err := logic.CreateFile(&filePath, fileValidation.ParentFolderID, file.Filename, fileId, file.Size, c.Locals("UserID").(uint))
 	if err != nil {
 		return c.Status(status).SendString(err.Error())
 	}

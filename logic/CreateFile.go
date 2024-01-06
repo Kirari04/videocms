@@ -10,6 +10,9 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"os"
+	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -20,7 +23,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint) (status int, newFile *models.Link, cloned bool, err error) {
+func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint) (status int, newFile *models.Link, cloned bool, err error) {
 	//check if requested folder exists (if set)
 	if toFolder > 0 {
 		res := inits.DB.First(&models.Folder{}, toFolder)
@@ -30,7 +33,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 	}
 
 	// obtain hash from file
-	FileHash, err := helpers.HashFile(fromFile)
+	FileHash, err := helpers.HashFile(*fromFile)
 	if err != nil {
 		log.Printf("Failed to create hash from file: %v", err)
 		return fiber.StatusInternalServerError, nil, false, fiber.ErrInternalServerError
@@ -42,12 +45,42 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 		return status, newLink, true, err
 	}
 
+	// run file through ffmpeg so the metadata is more accurate
+	nameSplits := strings.Split(fileName, ".")
+	fileExt := nameSplits[len(nameSplits)-1]
+	oldOutPath := *fromFile
+	newOutPath := fmt.Sprintf("%s.%s", *fromFile, fileExt)
+	fromFile = &newOutPath
+
+	// check if file extension is supported
+	if !slices.Contains(config.EXTENSIONS, strings.ToLower(fileExt)) {
+		return fiber.StatusBadRequest, nil, false, errors.New("Video extension is not supported")
+	}
+
+	ffmpegCommand := "ffmpeg " +
+		fmt.Sprintf(`-i "%s" `, oldOutPath) + // input file
+		"-map 0 -c copy " +
+		fmt.Sprintf(`"%s"`, newOutPath) // output file
+
+	cmd := exec.Command(
+		"bash",
+		"-c",
+		ffmpegCommand)
+	if err := cmd.Run(); err != nil {
+		log.Printf("Error happend while copy encoding: %v\n", err.Error())
+		log.Println(ffmpegCommand)
+		return fiber.StatusInternalServerError, nil, false, fiber.ErrInternalServerError
+	}
+	if err := os.Remove(oldOutPath); err != nil {
+		log.Printf("Failed to delete oldInputEncoding File %s: %v\n", oldOutPath, err.Error())
+	}
+
 	// ffprobe context
 	ctx, cancelFn := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelFn()
 
 	// probe file
-	data, err := ffprobe.ProbeURL(ctx, fromFile)
+	data, err := ffprobe.ProbeURL(ctx, *fromFile)
 	if err != nil {
 		log.Printf("Error getting data using ffprobe: %v", err)
 		return fiber.StatusInternalServerError, nil, false, fiber.ErrInternalServerError
@@ -137,7 +170,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 	go func() {
 		if _, err := CreateThumbnail(
 			4,
-			fromFile,
+			*fromFile,
 			1080,
 			thumbnailFileName,
 			fmt.Sprintf("%s/%s", config.ENV.FolderVideoQualitysPriv, fileId),
@@ -156,7 +189,7 @@ func CreateFile(fromFile string, toFolder uint, fileName string, fileId string, 
 			UUID:         fileId,
 			Hash:         FileHash,
 			Thumbnail:    thumbnailFileName,
-			Path:         fromFile,
+			Path:         *fromFile,
 			Folder:       fmt.Sprintf("%s/%s", config.ENV.FolderVideoQualitysPriv, fileId),
 			UserID:       userId,
 			Height:       int64(videoHeight),

@@ -67,8 +67,8 @@ func CreateUploadFile(sessionToken string, userId uint) (status int, response *m
 		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
 	}
 
+	// copy uploaded chuncks into final file
 	var written int64
-
 	for _, uploadChunck := range uploadChuncks {
 		openedChunck, err := os.Open(uploadChunck.Path)
 		if err != nil {
@@ -109,7 +109,7 @@ func CreateUploadFile(sessionToken string, userId uint) (status int, response *m
 		log.Printf("Failed to copy final file to destination: %v", err)
 		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
 	}
-	status, dbLink, cloned, err := CreateFile(filePath, uploadSession.ParentFolderID, uploadSession.Name, fileId, uploadSession.Size, userId)
+	status, dbLink, cloned, err := CreateFile(&filePath, uploadSession.ParentFolderID, uploadSession.Name, fileId, uploadSession.Size, userId)
 	if err != nil {
 		os.Remove(filePath)
 		return status, nil, err
