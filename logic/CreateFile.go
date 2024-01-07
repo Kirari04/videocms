@@ -119,7 +119,7 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 	}
 
 	// check average framerate
-	if avgFramerate < 1 || avgFramerate > 120 {
+	if avgFramerate > 120 || avgFramerate < 0 {
 		return fiber.StatusBadRequest, nil, false, errors.New("invalid video framerate")
 	}
 
@@ -153,16 +153,18 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 
 	thumbnailFileName := "4x4.webp"
 	go func() {
-		if _, err := CreateThumbnail(
-			4,
-			*fromFile,
-			1080,
-			thumbnailFileName,
-			fmt.Sprintf("%s/%s", config.ENV.FolderVideoQualitysPriv, fileId),
-			videoDuration,
-			avgFramerate,
-		); err != nil {
-			log.Printf("Failed to generate thumbnail from file %v: %v", fromFile, err)
+		if avgFramerate > 0 {
+			if _, err := CreateThumbnail(
+				4,
+				*fromFile,
+				1080,
+				thumbnailFileName,
+				fmt.Sprintf("%s/%s", config.ENV.FolderVideoQualitysPriv, fileId),
+				videoDuration,
+				avgFramerate,
+			); err != nil {
+				log.Printf("Failed to generate thumbnail from file %v: %v", fromFile, err)
+			}
 		}
 	}()
 	var dbFile models.File
