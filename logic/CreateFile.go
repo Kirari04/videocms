@@ -11,7 +11,6 @@ import (
 	"log"
 	"math"
 	"os"
-	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
@@ -57,21 +56,7 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 		return fiber.StatusBadRequest, nil, false, errors.New("Video extension is not supported")
 	}
 
-	ffmpegCommand := "ffmpeg " +
-		fmt.Sprintf(`-i "%s" `, oldOutPath) + // input file
-		"-map 0 -c copy " +
-		fmt.Sprintf(`"%s"`, newOutPath) // output file
-
-	cmd := exec.Command(
-		"bash",
-		"-c",
-		ffmpegCommand)
-	if err := cmd.Run(); err != nil {
-		log.Printf("Error happend while copy encoding: %v\n", err.Error())
-		log.Println(ffmpegCommand)
-		return fiber.StatusInternalServerError, nil, false, fiber.ErrInternalServerError
-	}
-	if err := os.Remove(oldOutPath); err != nil {
+	if err := os.Rename(oldOutPath, newOutPath); err != nil {
 		log.Printf("Failed to delete oldInputEncoding File %s: %v\n", oldOutPath, err.Error())
 	}
 
