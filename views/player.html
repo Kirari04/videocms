@@ -278,7 +278,7 @@
                         name: "Disabled",
                         active: false,
                         click: () => {
-                            active_src = `${FOLDER}/${UUID}/stream/muted/master.m3u8`;
+                            active_src = `${FOLDER}/${UUID}/stream/muted/master.m3u8?jwt=${JWT}`;
                             let oldPosition = active_video_el.currentTime;
                             loadResource();
                             active_video_el.currentTime = oldPosition;
@@ -291,7 +291,7 @@
                         name: `${Audio.name} - ${Audio.lang}`,
                         active: false,
                         click: () => {
-                            active_src = `${FOLDER}/${UUID}/${Audio.uuid}/stream/master.m3u8`;
+                            active_src = `${FOLDER}/${UUID}/${Audio.uuid}/stream/master.m3u8?jwt=${JWT}`;
                             let oldPosition = active_video_el.currentTime;
                             loadResource();
                             active_video_el.currentTime = oldPosition;
