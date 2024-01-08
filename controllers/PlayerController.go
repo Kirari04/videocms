@@ -121,7 +121,16 @@ func PlayerController(c *fiber.Ctx) error {
 		log.Printf("Failed to generate jwt stream token: %v", err)
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
-
+	// "{{.UUID}}={{.JWT}}; path=/; domain=" + window.location.hostname + ";SameSite=None; Secure; HttpOnly"
+	c.Cookie(&fiber.Cookie{
+		Name:        requestValidation.UUID,
+		Value:       tkn,
+		Path:        "/",
+		Secure:      true,
+		SameSite:    "none",
+		HTTPOnly:    false,
+		SessionOnly: true,
+	})
 	return c.Render("player", fiber.Map{
 		"Title":         fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
 		"Description":   fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),

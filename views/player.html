@@ -223,7 +223,6 @@
         if (Audios == null) Audios = [];
         let Webhooks = JSON.parse(decodeURI("{{.Webhooks}}"));
         if (Webhooks == null) Webhooks = [];
-        document.cookie = "{{.UUID}}={{.JWT}}; path=/; domain=" + window.location.hostname + ";SameSite=None; Secure; HttpOnly"
         const UUID = "{{.UUID}}";
         const PROJECTURL = "{{.PROJECTURL}}";
         const TITLE = "{{.Title}}";
