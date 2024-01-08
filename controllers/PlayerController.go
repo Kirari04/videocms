@@ -123,13 +123,13 @@ func PlayerController(c *fiber.Ctx) error {
 	}
 	// "{{.UUID}}={{.JWT}}; path=/; domain=" + window.location.hostname + ";SameSite=None; Secure; HttpOnly"
 	c.Cookie(&fiber.Cookie{
-		Name:        requestValidation.UUID,
-		Value:       tkn,
-		Path:        "/",
-		Secure:      true,
-		SameSite:    "none",
-		HTTPOnly:    false,
-		SessionOnly: true,
+		Name:     requestValidation.UUID,
+		Value:    tkn,
+		Path:     "/",
+		Secure:   true,
+		SameSite: "None",
+		Domain:   config.ENV.CookieDomain,
+		HTTPOnly: true,
 	})
 	return c.Render("player", fiber.Map{
 		"Title":         fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),

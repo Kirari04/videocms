@@ -12,8 +12,11 @@ func JwtStream(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Missing UUID parameter")
 	}
 	tknStr := c.Cookies(uuid, "")
-	if uuid == "" {
-		return c.Status(fiber.StatusBadRequest).SendString("UUID parameter match issue")
+	if tknStr == "" {
+		tknStr = c.Query("jwt", "")
+		if tknStr == "" {
+			return c.Status(fiber.StatusBadRequest).SendString("UUID parameter match issue")
+		}
 	}
 	token, claims, err := auth.VerifyJWTStream(tknStr)
 	if err != nil {

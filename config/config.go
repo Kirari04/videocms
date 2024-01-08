@@ -17,6 +17,8 @@ type Config struct {
 
 	JwtSecretKey string `validate:"required,min=8,max=512"`
 
+	CookieDomain string `validate:"required,min=8,max=225"`
+
 	ReloadHtml        *bool `validate:"required,boolean"`
 	EncodingEnabled   *bool `validate:"required,boolean"`
 	UploadEnabled     *bool `validate:"required,boolean"`
@@ -127,6 +129,8 @@ func Setup() {
 	ENV.ProjectDownload = getEnv("ProjectDownload", "https://github.com/notfound")
 
 	ENV.JwtSecretKey = getEnv("JwtSecretKey", "secretkey")
+
+	ENV.CookieDomain = getEnv("CookieDomain", "secretkey")
 
 	ENV.ReloadHtml = getEnv_bool("ReloadHtml", boolPtr(false))
 	ENV.EncodingEnabled = getEnv_bool("EncodingEnabled", boolPtr(true))

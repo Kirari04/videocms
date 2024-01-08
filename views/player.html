@@ -223,6 +223,7 @@
         if (Audios == null) Audios = [];
         let Webhooks = JSON.parse(decodeURI("{{.Webhooks}}"));
         if (Webhooks == null) Webhooks = [];
+        const JWT = "{{.JWT}}";
         const UUID = "{{.UUID}}";
         const PROJECTURL = "{{.PROJECTURL}}";
         const TITLE = "{{.Title}}";
@@ -238,7 +239,7 @@
         Subtitles = Subtitles.filter((e) =>
             iOS() || !HLSENABLED ? e.type !== "ass" : e.type == "ass"
         );
-        let active_src = `${FOLDER}/${UUID}/stream/muted/master.m3u8`;
+        let active_src = `${FOLDER}/${UUID}/stream/muted/master.m3u8?jwt=${JWT}`;
         let active_video_el = null;
         let active_hls = null;
         let active_subtitle_index = -1;
@@ -378,17 +379,17 @@
                         Audios[lastUsedIndex].lang,
                         Audios[lastUsedIndex].name
                     );
-                    active_src = `${FOLDER}/${UUID}/${Audios[lastUsedIndex].uuid}/stream/master.m3u8`;
+                    active_src = `${FOLDER}/${UUID}/${Audios[lastUsedIndex].uuid}/stream/master.m3u8?jwt=${JWT}`;
                     settingsListSetActive(2, lastUsedIndex + 1);
                 } else {
                     if (Audios.length > 0) {
-                        active_src = `${FOLDER}/${UUID}/${Audios[0].uuid}/stream/master.m3u8`;
+                        active_src = `${FOLDER}/${UUID}/${Audios[0].uuid}/stream/master.m3u8?jwt=${JWT}`;
                         settingsListSetActive(2, 1);
                     }
                 }
             } else {
                 if (Audios.length > 0) {
-                    active_src = `${FOLDER}/${UUID}/${Audios[0].uuid}/stream/master.m3u8`;
+                    active_src = `${FOLDER}/${UUID}/${Audios[0].uuid}/stream/master.m3u8?jwt=${JWT}`;
                     settingsListSetActive(2, 1);
                 }
             }
