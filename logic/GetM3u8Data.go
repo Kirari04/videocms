@@ -12,13 +12,15 @@ import (
 type GetM3u8DataRequest struct {
 	UUID      string `validate:"required,uuid_rfc4122"`
 	AUDIOUUID string `validate:"required,uuid_rfc4122"`
+	JWT       string `validate:"required,jwt"`
 }
 
 type GetM3u8DataRequestMuted struct {
 	UUID string `validate:"required,uuid_rfc4122"`
+	JWT  string `validate:"required,jwt"`
 }
 
-func GetM3u8Data(UUID string, AUDIOUUID string) (status int, m3u8Str *string, err error) {
+func GetM3u8Data(UUID string, AUDIOUUID string, JWT string) (status int, m3u8Str *string, err error) {
 	//translate link id to file id
 	var dbLink models.Link
 	if dbRes := inits.DB.
@@ -45,6 +47,6 @@ func GetM3u8Data(UUID string, AUDIOUUID string) (status int, m3u8Str *string, er
 			}
 		}
 	}
-	m3u8Response := helpers.GenM3u8Stream(&dbLink, &dbLink.File.Qualitys, dbAudioPtr)
+	m3u8Response := helpers.GenM3u8Stream(&dbLink, &dbLink.File.Qualitys, dbAudioPtr, JWT)
 	return fiber.StatusOK, &m3u8Response, nil
 }
