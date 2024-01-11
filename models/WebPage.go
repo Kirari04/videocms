@@ -15,6 +15,14 @@ type WebPageCreateValidation struct {
 	ListInFooter *bool  `validate:"required,boolean"`
 }
 
+type WebPageUpdateValidation struct {
+	WebPageID    uint   `validate:"required,number"`
+	Path         string `validate:"required,dirpath,min=2,max=50"`
+	Title        string `validate:"required,min=2,max=128"`
+	Html         string `validate:"required,min=0,max=50000"`
+	ListInFooter *bool  `validate:"required,boolean"`
+}
+
 type WebPageGetValidation struct {
 	Path string `validate:"required,dirpath,min=2,max=50"`
 }
