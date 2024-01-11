@@ -51,6 +51,7 @@ func Api() {
 	protectedApi.Delete("/server", middlewares.IsAdmin, controllers.DeleteServer)
 	protectedApi.Get("/servers", middlewares.IsAdmin, controllers.ListServers)
 
+	protectedApi.Get("/pages", middlewares.IsAdmin, controllers.ListWebPage)
 	protectedApi.Post("/page", middlewares.IsAdmin, controllers.CreateWebPage)
 	protectedApi.Put("/page", middlewares.IsAdmin, controllers.UpdateWebPage)
 
