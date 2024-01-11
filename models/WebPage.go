@@ -23,6 +23,10 @@ type WebPageUpdateValidation struct {
 	ListInFooter *bool  `validate:"required,boolean"`
 }
 
+type WebPageDeleteValidation struct {
+	WebPageID uint `validate:"required,number"`
+}
+
 type WebPageGetValidation struct {
 	Path string `validate:"required,dirpath,min=2,max=50"`
 }
