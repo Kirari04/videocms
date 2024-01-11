@@ -23,6 +23,9 @@ func ServeMain() {
 		// start cleanup process
 		go services.EncoderCleanup()
 		go services.Deleter()
+
+		// start system resource tracker
+		go services.Resources()
 	}
 
 	// for setting up the webserver
