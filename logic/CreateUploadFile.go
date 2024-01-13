@@ -19,7 +19,7 @@ import (
  */
 func CreateUploadFile(sessionToken string, userId uint) (status int, response *models.Link, err error) {
 	// validate token
-	token, claims, err := helpers.VerifyDynamicJWT(sessionToken, &models.UploadSessionClaims{})
+	token, claims, err := helpers.VerifyDynamicJWT(sessionToken, &models.UploadSessionClaims{}, []byte(config.ENV.JwtUploadSecretKey))
 	if err != nil && claims != nil {
 		log.Printf("err: %v", err)
 		return fiber.StatusBadRequest, nil, errors.New("broken upload session token")

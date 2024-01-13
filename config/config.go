@@ -15,7 +15,8 @@ type Config struct {
 	ProjectDocumentation string `validate:"required,min=1,max=512"`
 	ProjectDownload      string `validate:"required,min=1,max=512"`
 
-	JwtSecretKey string `validate:"required,min=8,max=512"`
+	JwtSecretKey       string `validate:"required,min=8,max=512"`
+	JwtUploadSecretKey string `validate:"required,min=8,max=512"`
 
 	CookieDomain string `validate:"required,min=8,max=225"`
 
@@ -129,6 +130,7 @@ func Setup() {
 	ENV.ProjectDownload = getEnv("ProjectDownload", "https://github.com/notfound")
 
 	ENV.JwtSecretKey = getEnv("JwtSecretKey", "secretkey")
+	ENV.JwtUploadSecretKey = getEnv("JwtUploadSecretKey", "secretkeyupload")
 
 	ENV.CookieDomain = getEnv("CookieDomain", "secretkey")
 

@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
@@ -13,9 +14,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func CreateUploadChunck(index uint, sessionToken string, fromFile string, userId uint) (status int, response string, err error) {
+func CreateUploadChunck(index uint, sessionToken string, fromFile string) (status int, response string, err error) {
 	// validate token
-	token, claims, err := helpers.VerifyDynamicJWT(sessionToken, &models.UploadSessionClaims{})
+	token, claims, err := helpers.VerifyDynamicJWT(sessionToken, &models.UploadSessionClaims{}, []byte(config.ENV.JwtUploadSecretKey))
 	if err != nil || claims == nil {
 		log.Printf("err: %v", err)
 		return fiber.StatusBadRequest, "", errors.New("broken upload session token")
@@ -23,9 +24,9 @@ func CreateUploadChunck(index uint, sessionToken string, fromFile string, userId
 	if !token.Valid {
 		return fiber.StatusBadRequest, "", errors.New("invalid upload session token")
 	}
-	if (*claims).UserID != userId {
-		return fiber.StatusForbidden, "", fiber.ErrForbidden
-	}
+	// if (*claims).UserID != userId {
+	// 	return fiber.StatusForbidden, "", fiber.ErrForbidden
+	// }
 
 	//check if session still active
 	uploadSession := models.UploadSession{}

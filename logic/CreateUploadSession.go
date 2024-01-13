@@ -100,7 +100,7 @@ func CreateUploadSession(toFolder uint, fileName string, uploadSessionUUID strin
 	}
 
 	maxUploadDuration := time.Hour * 2
-	token, expirationTime, err := helpers.GenerateDynamicJWT[models.UploadSessionClaims](&claims, maxUploadDuration)
+	token, expirationTime, err := helpers.GenerateDynamicJWT[models.UploadSessionClaims](&claims, maxUploadDuration, []byte(config.ENV.JwtUploadSecretKey))
 	if err != nil {
 		log.Printf("Failed to generate jwt token for upload session: %v", err)
 		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError

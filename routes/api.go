@@ -27,6 +27,9 @@ func Api() {
 	inits.Api.Get("/p/pages", controllers.ListPublicWebPage)
 	inits.Api.Get("/p/page", controllers.GetPublicWebPage)
 
+	// requires uploadsession jwt inside body
+	inits.Api.Post("/pcu/chunck", controllers.CreateUploadChunck)
+
 	// Routes that require to be authenticated
 	protectedApi := inits.Api.Group("", middlewares.Auth)
 	protectedApi.Post("/folder", controllers.CreateFolder)
@@ -66,6 +69,6 @@ func Api() {
 	protectedApi.Get("/pcu/sessions", controllers.GetUploadSessions)
 	protectedApi.Post("/pcu/session", controllers.CreateUploadSession)
 	protectedApi.Delete("/pcu/session", controllers.DeleteUploadSession)
-	protectedApi.Post("/pcu/chunck", controllers.CreateUploadChunck)
+	// protectedApi.Post("/pcu/chunck", controllers.CreateUploadChunck)
 	protectedApi.Post("/pcu/file", controllers.CreateUploadFile)
 }

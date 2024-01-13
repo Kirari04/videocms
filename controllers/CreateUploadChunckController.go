@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// this route is not securet with user jwt token so it doesnt invalidate the chunck because the session invalidated during the upload time
 func CreateUploadChunck(c *fiber.Ctx) error {
 	// parse & validate request
 	var validation models.UploadChunckValidation
@@ -43,7 +44,7 @@ func CreateUploadChunck(c *fiber.Ctx) error {
 	}
 
 	// business logic
-	status, response, err := logic.CreateUploadChunck(*validation.Index, validation.SessionJwtToken, filePath, c.Locals("UserID").(uint))
+	status, response, err := logic.CreateUploadChunck(*validation.Index, validation.SessionJwtToken, filePath)
 	if err != nil {
 		os.Remove(filePath)
 		return c.Status(status).SendString(err.Error())
