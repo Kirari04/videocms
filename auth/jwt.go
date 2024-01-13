@@ -18,12 +18,13 @@ type Claims struct {
 }
 
 var jwtKey []byte
+var sessionDuration = 15 * time.Minute
 
 func GenerateJWT(user models.User) (string, time.Time, error) {
 	jwtKey = []byte(config.ENV.JwtSecretKey)
 	// Declare the expiration time of the token
 	// here, we have kept it as 5 minutes
-	expirationTime := time.Now().Add(5 * time.Minute)
+	expirationTime := time.Now().Add(sessionDuration)
 	// Create the JWT claims, which includes the username and expiry time
 	claims := &Claims{
 		UserID:   user.ID,
@@ -78,12 +79,12 @@ func RefreshJWT(tknStr string) (string, time.Time, error) {
 	// We ensure that a new token is not issued until enough time has elapsed
 	// In this case, a new token will only be issued if the old token is within
 	// 30 seconds of expiry. Otherwise, return a bad request status
-	if time.Until(claims.ExpiresAt.Time) > 30*time.Second {
+	if time.Until(claims.ExpiresAt.Time) > 5*time.Minute {
 		return "", time.Now(), errors.New(fmt.Sprintf("Wait until time to expire: %v", claims.ExpiresAt.Time.String()))
 	}
 
 	// Now, create a n ew token for the current use, with a renewed expiration time
-	expirationTime := time.Now().Add(5 * time.Minute)
+	expirationTime := time.Now().Add(sessionDuration)
 	claims.ExpiresAt = jwt.NewNumericDate(expirationTime)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(jwtKey)
