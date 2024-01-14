@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"ch/kirari04/videocms/config"
+	"ch/kirari04/videocms/configdb"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"log"
@@ -21,10 +22,12 @@ func Init() {
 		}
 		os.Exit(1)
 	}
-	//setup captcha
-	inits.Captcha()
 	// for setting up the database connection
 	inits.Database()
 	// for migrating all the models
 	inits.Models()
+	// for setting up configuration from db
+	configdb.Setup()
+	//setup captcha
+	inits.Captcha()
 }
