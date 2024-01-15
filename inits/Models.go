@@ -22,6 +22,7 @@ func Models() {
 	mustRun(DB.AutoMigrate(&models.Server{}))
 	mustRun(DB.AutoMigrate(&models.WebPage{}))
 	mustRun(DB.AutoMigrate(&models.Setting{}))
+	mustRun(DB.AutoMigrate(&models.SystemResource{}))
 }
 
 func mustRun(err error) {

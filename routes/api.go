@@ -59,6 +59,8 @@ func Api() {
 	protectedApi.Put("/page", middlewares.IsAdmin, controllers.UpdateWebPage)
 	protectedApi.Delete("/page", middlewares.IsAdmin, controllers.DeleteWebPage)
 
+	protectedApi.Get("/stats", middlewares.IsAdmin, controllers.GetSystemStats)
+
 	protectedApi.Post("/webhook", controllers.CreateWebhook)
 	protectedApi.Put("/webhook", controllers.UpdateWebhook)
 	protectedApi.Delete("/webhook", controllers.DeleteWebhook)

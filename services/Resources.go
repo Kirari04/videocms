@@ -1,10 +1,11 @@
 package services
 
 import (
-	"fmt"
+	"ch/kirari04/videocms/inits"
+	"ch/kirari04/videocms/models"
+	"log"
 	"time"
 
-	"github.com/dustin/go-humanize"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
@@ -19,8 +20,18 @@ var diskWrite uint64 = 0
 var diskRead uint64 = 0
 
 func Resources() {
-	time.Sleep(resourcesInterval)
-	fmt.Printf("MEM\t\tCPU\t\tNET-OUT\t\tNET-IN\t\tDISK-W\t\tDISK-R\n")
+	go func() {
+		// delete stats older than 24h
+		for {
+			time.Sleep(time.Minute * 1)
+			if res := inits.DB.
+				Where("created_at < ?", time.Now().Add(time.Hour*24*-1)).
+				Unscoped().
+				Delete(&models.SystemResource{}); res.Error != nil {
+				log.Println("Failed to delete system resources")
+			}
+		}
+	}()
 	for {
 		v, _ := mem.VirtualMemory()
 		c, _ := cpu.Percent(time.Second*2, false)
@@ -60,15 +71,16 @@ func Resources() {
 			printDiskRead = d["nvme0n1"].ReadBytes - diskRead
 			diskRead = d["nvme0n1"].ReadBytes
 		}
-		fmt.Printf(
-			"%f%%\t%f%%\t%s/s   \t%s/s   \t%v/s   \t%v/s\n",
-			printRam,
-			printCpu,
-			humanize.Bytes(printNetSent/uint64(resourcesInterval.Seconds())),
-			humanize.Bytes(printNetRecv/uint64(resourcesInterval.Seconds())),
-			humanize.Bytes(printDiskWrite/uint64(resourcesInterval.Seconds())),
-			humanize.Bytes(printDiskRead/uint64(resourcesInterval.Seconds())),
-		)
+		if res := inits.DB.Create(&models.SystemResource{
+			Cpu:    printCpu,
+			Mem:    printRam,
+			NetOut: printNetSent / uint64(resourcesInterval.Seconds()),
+			NetIn:  printNetRecv / uint64(resourcesInterval.Seconds()),
+			DiskW:  printDiskWrite / uint64(resourcesInterval.Seconds()),
+			DiskR:  printDiskRead / uint64(resourcesInterval.Seconds()),
+		}); res.Error != nil {
+			log.Println("Failed to save system resources")
+		}
 		time.Sleep(resourcesInterval)
 	}
 }
