@@ -19,8 +19,8 @@ func GetSystemStats(c *fiber.Ctx) error {
 		DiskW     float64
 		DiskR     float64
 	}
-	amount := 240
-	duration := time.Minute
+	amount := 48
+	duration := time.Minute * 5
 	var response []StatItem
 	for i := 0; i < amount; i++ {
 		var resources StatItem
