@@ -40,6 +40,7 @@ func Resources() {
 
 		printCpu := c[0]
 		printRam := v.UsedPercent
+
 		var printNetSent uint64 = 0
 		if netSent == 0 {
 			netSent = n[0].BytesSent
