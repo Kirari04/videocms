@@ -18,7 +18,6 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/gofiber/template v1.8.2 // indirect

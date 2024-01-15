@@ -80,7 +80,7 @@ func Resources() {
 			DiskW:  printDiskWrite / uint64(resourcesInterval.Seconds()),
 			DiskR:  printDiskRead / uint64(resourcesInterval.Seconds()),
 		}); res.Error != nil {
-			log.Println("Failed to save system resources")
+			log.Println("Failed to save system resources", res.Error)
 		}
 		time.Sleep(resourcesInterval)
 	}
