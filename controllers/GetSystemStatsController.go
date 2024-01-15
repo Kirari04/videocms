@@ -19,13 +19,15 @@ func GetSystemStats(c *fiber.Ctx) error {
 		DiskW     float64
 		DiskR     float64
 	}
+	amount := 240
+	duration := time.Minute
 	var response []StatItem
-	for i := 0; i < 24; i++ {
+	for i := 0; i < amount; i++ {
 		var resources StatItem
-		addFromHours := time.Hour * time.Duration(24-(i)) * -1
-		from := time.Now().Add(addFromHours)
-		addUntilHours := time.Hour * time.Duration(24-(i+1)) * -1
-		until := time.Now().Add(addUntilHours)
+		addFrom := duration * time.Duration(amount-(i)) * -1
+		from := time.Now().Add(addFrom)
+		addUntil := duration * time.Duration(amount-(i+1)) * -1
+		until := time.Now().Add(addUntil)
 		if res := inits.DB.
 			Model(&models.SystemResource{}).
 			Select(
@@ -45,7 +47,7 @@ func GetSystemStats(c *fiber.Ctx) error {
 			return c.SendStatus(fiber.StatusInternalServerError)
 		}
 		response = append(response, StatItem{
-			CreatedAt: time.Now().Add(time.Hour * time.Duration(24-(i+1)) * -1),
+			CreatedAt: time.Now().Add(duration * time.Duration(amount-(i+1)) * -1),
 			Cpu:       resources.Cpu,
 			Mem:       resources.Mem,
 			NetOut:    resources.NetOut,
