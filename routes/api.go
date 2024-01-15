@@ -61,6 +61,7 @@ func Api() {
 
 	protectedApi.Get("/stats", middlewares.IsAdmin, controllers.GetSystemStats)
 	protectedApi.Get("/settings", middlewares.IsAdmin, controllers.GetSettings)
+	protectedApi.Put("/settings", middlewares.IsAdmin, controllers.UpdateSettings)
 
 	protectedApi.Post("/webhook", controllers.CreateWebhook)
 	protectedApi.Put("/webhook", controllers.UpdateWebhook)

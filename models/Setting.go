@@ -1,5 +1,10 @@
 package models
 
+type SettingValidation struct {
+	ID uint `validate:"required,number"`
+	Setting
+}
+
 type Setting struct {
 	Model
 	AppName string `validate:"required,min=1,max=120" gorm:"size:120;"`
