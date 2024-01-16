@@ -11,3 +11,7 @@ type SystemResource struct {
 	DiskW    uint64
 	DiskR    uint64
 }
+
+type SystemResourceGetValidation struct {
+	Interval string `query:"interval" validate:"required,oneof=5min 1h 7h"`
+}
