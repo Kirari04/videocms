@@ -81,6 +81,7 @@ func PlayerController(c *fiber.Ctx) error {
 
 	// List audios
 	var jsonAudios []map[string]string
+	var firstAudio string
 	for _, audioItem := range dbLink.File.Audios {
 		if audioItem.Ready {
 			jsonAudios = append(jsonAudios, map[string]string{
@@ -90,6 +91,7 @@ func PlayerController(c *fiber.Ctx) error {
 				"lang": audioItem.Lang,
 				"file": audioItem.OutputFile,
 			})
+			firstAudio = audioItem.UUID
 		}
 	}
 	rawAudios, _ := json.Marshal(jsonAudios)
@@ -140,6 +142,7 @@ func PlayerController(c *fiber.Ctx) error {
 		"Qualitys":      string(rawQuality),
 		"Subtitles":     string(rawSubtitles),
 		"Audios":        string(rawAudios),
+		"AudioUUID":     firstAudio,
 		"Webhooks":      string(rawWebhooks),
 		"StreamIsReady": streamIsReady,
 		"UUID":          requestValidation.UUID,
