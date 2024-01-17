@@ -443,10 +443,7 @@
         }
 
         function downloadFile(filePath) {
-            var link = document.createElement("a");
-            link.href = filePath;
-            link.download = TITLE;
-            link.click();
+            window.open(window.origin + filePath)
         }
 
         function createVideoPlayer() {

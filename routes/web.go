@@ -17,6 +17,7 @@ func Web() {
 	videoData.Get("/:UUID/image/thumb/:FILE", controllers.GetThumbnailData)
 	videoData.Get("/:UUID/:SUBUUID/subtitle/:FILE", middlewares.JwtStream, controllers.GetSubtitleData)
 	videoData.Get("/:UUID/:AUDIOUUID/stream/master.m3u8", middlewares.JwtStream, controllers.GetM3u8Data)
+	videoData.Get("/:UUID/:QUALITY/download/video.mkv", middlewares.JwtStream, controllers.DownloadVideoController)
 	// no jwt stream
 	videoData.Get("/:UUID/:QUALITY/:FILE", controllers.GetVideoData)
 	videoData.Get("/:UUID/:AUDIOUUID/audio/:FILE", controllers.GetAudioData)

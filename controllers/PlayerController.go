@@ -44,20 +44,26 @@ func PlayerController(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).Render("404", fiber.Map{})
 	}
 
+	// generate jwt token that allows the user to access the stream
+	tkn, _, err := auth.GenerateJWTStream(dbLink.UUID)
+	if err != nil {
+		log.Printf("Failed to generate jwt stream token: %v", err)
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
 	// List qualitys non hls & check if has some file is ready
 	var streamIsReady bool
 	var jsonQualitys []map[string]string
 	for _, qualiItem := range dbLink.File.Qualitys {
 		if qualiItem.Ready {
 			streamIsReady = true
-			if qualiItem.Type != "hls" {
-				jsonQualitys = append(jsonQualitys, map[string]string{
-					"url":    fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name, qualiItem.OutputFile),
-					"label":  qualiItem.Name,
-					"height": strconv.Itoa(int(qualiItem.Height)),
-					"width":  strconv.Itoa(int(qualiItem.Width)),
-				})
-			}
+			jsonQualitys = append(jsonQualitys, map[string]string{
+				"url":    fmt.Sprintf("%s/%s/%s/download/video.mkv?jwt=%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name, tkn),
+				"label":  qualiItem.Name,
+				"height": strconv.Itoa(int(qualiItem.Height)),
+				"width":  strconv.Itoa(int(qualiItem.Width)),
+			})
+
 		}
 	}
 	rawQuality, _ := json.Marshal(jsonQualitys)
@@ -117,12 +123,6 @@ func PlayerController(c *fiber.Ctx) error {
 	}
 	rawWebhooks, _ := json.Marshal(jsonWebhooks)
 
-	// generate jwt token that allows the user to access the stream
-	tkn, _, err := auth.GenerateJWTStream(dbLink.UUID)
-	if err != nil {
-		log.Printf("Failed to generate jwt stream token: %v", err)
-		return c.SendStatus(fiber.StatusInternalServerError)
-	}
 	// "{{.UUID}}={{.JWT}}; path=/; domain=" + window.location.hostname + ";SameSite=None; Secure; HttpOnly"
 	c.Cookie(&fiber.Cookie{
 		Name:     requestValidation.UUID,
