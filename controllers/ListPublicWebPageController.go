@@ -3,9 +3,10 @@ package controllers
 import (
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
-	"log"
+	"net/http"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
 type listPublicWebPageRes struct {
@@ -14,7 +15,7 @@ type listPublicWebPageRes struct {
 	ListInFooter bool
 }
 
-func ListPublicWebPage(c *fiber.Ctx) error {
+func ListPublicWebPage(c echo.Context) error {
 	var webPages []listPublicWebPageRes
 	if res := inits.DB.
 		Model(&models.WebPage{}).
@@ -24,9 +25,9 @@ func ListPublicWebPage(c *fiber.Ctx) error {
 			"list_in_footer",
 		).
 		Find(&webPages); res.Error != nil {
-		log.Println("Failed to list webpages", res.Error)
-		return c.SendStatus(fiber.StatusInternalServerError)
+		c.Logger().Error("Failed to list webpages", res.Error)
+		return c.NoContent(fiber.StatusInternalServerError)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(&webPages)
+	return c.JSON(http.StatusOK, &webPages)
 }
