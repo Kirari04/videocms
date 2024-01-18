@@ -7,23 +7,25 @@ import (
 	"ch/kirari04/videocms/models"
 	"fmt"
 	"log"
+	"net/http"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
-func AuthLogin(c *fiber.Ctx) error {
+func AuthLogin(c echo.Context) error {
 	var userValidation models.UserLoginValidation
-	if status, err := helpers.Validate(c, &userValidation, "body"); err != nil {
-		return c.Status(status).SendString(err.Error())
+	if status, err := helpers.Validate(c, &userValidation); err != nil {
+		return c.String(status, err.Error())
 	}
 
 	// validate captcha
 	success, err := helpers.CaptchaValid(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprint("Captcha error: ", err.Error()))
+		return c.String(http.StatusBadRequest, fmt.Sprint("Captcha error: ", err.Error()))
 	}
 	if !success {
-		return c.Status(fiber.StatusBadRequest).SendString("Captcha incorrect")
+		return c.String(http.StatusBadRequest, "Captcha incorrect")
 	}
 
 	var user models.User
@@ -31,20 +33,20 @@ func AuthLogin(c *fiber.Ctx) error {
 		Username: userValidation.Username,
 	}).First(&user)
 	if res.Error != nil {
-		return c.Status(fiber.StatusNotFound).SendString("User not found")
+		return c.String(http.StatusBadRequest, "User not found")
 	}
 
 	if !helpers.CheckPasswordHash(userValidation.Password, user.Hash) {
-		return c.Status(fiber.StatusBadRequest).SendString("Wrong password")
+		return c.String(http.StatusBadRequest, "Wrong password")
 	}
 
 	tokenString, expirationTime, err := auth.GenerateJWT(user)
 	if err != nil {
 		log.Printf("Failed to generate jwt for user %s: %v\n", user.Username, err)
-		return c.SendStatus(fiber.StatusInternalServerError)
+		return c.NoContent(fiber.StatusInternalServerError)
 	}
 
-	return c.JSON(fiber.Map{
+	return c.JSON(http.StatusOK, echo.Map{
 		"exp":   expirationTime,
 		"token": tokenString,
 	})
