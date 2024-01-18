@@ -5,7 +5,6 @@ import (
 	"ch/kirari04/videocms/models"
 	"net/http"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/labstack/echo/v4"
 )
 
@@ -26,7 +25,7 @@ func ListPublicWebPage(c echo.Context) error {
 		).
 		Find(&webPages); res.Error != nil {
 		c.Logger().Error("Failed to list webpages", res.Error)
-		return c.NoContent(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 
 	return c.JSON(http.StatusOK, &webPages)
