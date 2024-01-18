@@ -16,7 +16,7 @@ func LimiterWhitelistNext(c echo.Context) bool {
 		return true
 	}
 	// disable ratelimit by ip
-	if LimiterWhitelistIps[c.IP()] {
+	if LimiterWhitelistIps[c.RealIP()] {
 		return true
 	}
 
