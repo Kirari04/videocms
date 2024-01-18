@@ -6,7 +6,6 @@ import (
 	"ch/kirari04/videocms/models"
 	"net/http"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/thanhpk/randstr"
@@ -24,7 +23,7 @@ func CreateServer(c echo.Context) error {
 		Hostname: validatus.Hostname,
 	}).Count(&existing); res.Error != nil {
 		c.Logger().Error("Failed to count server", res.Error)
-		return c.NoContent(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 	if existing > 0 {
 		return c.String(http.StatusBadRequest, "Hostname already used")

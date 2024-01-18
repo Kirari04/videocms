@@ -11,7 +11,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
@@ -34,7 +33,7 @@ func CreateFile(c echo.Context) error {
 	src, err := file.Open()
 	if err != nil {
 		c.Logger().Error("Failed to open src file", err)
-		return c.NoContent(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 	defer src.Close()
 
@@ -47,12 +46,12 @@ func CreateFile(c echo.Context) error {
 	dst, err := os.Create(filePath)
 	if err != nil {
 		c.Logger().Error("Failed to open destination file", err)
-		return c.NoContent(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 	defer dst.Close()
 	if _, err = io.Copy(dst, src); err != nil {
 		c.Logger().Errorf("Failed to save file: %v", err)
-		return c.NoContent(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 
 	// business logic
