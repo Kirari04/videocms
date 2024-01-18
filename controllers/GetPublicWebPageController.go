@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 )
@@ -29,7 +28,7 @@ func GetPublicWebPage(c echo.Context) error {
 			return c.String(http.StatusNotFound, "Page not found")
 		}
 		c.Logger().Error("Failed to get webpage", res.Error)
-		return c.NoContent(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 
 	return c.String(http.StatusOK, webPage.Html)
