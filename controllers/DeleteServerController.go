@@ -4,29 +4,25 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
-	"fmt"
-	"log"
+	"net/http"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
-func DeleteServer(c *fiber.Ctx) error {
+func DeleteServer(c echo.Context) error {
 	// parse & validate request
 	var validatus models.ServerDeleteValidation
-	if err := c.BodyParser(&validatus); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
+	if status, err := helpers.Validate(c, &validatus); err != nil {
+		return c.String(status, err.Error())
 	}
 
-	if errors := helpers.ValidateStruct(validatus); len(errors) > 0 {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
-	}
 	res := inits.DB.Delete(&models.Server{}, validatus.ServerID)
 	if res.Error != nil {
-		log.Println("Failed to delete server", validatus.ServerID, res.Error)
-		return c.Status(fiber.StatusInternalServerError).SendString("Failed to delete server")
+		c.Logger().Error("Failed to delete server", validatus.ServerID, res.Error)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 	if res.RowsAffected == 0 {
-		return c.Status(fiber.StatusBadRequest).SendString("Server not found")
+		return c.String(http.StatusBadRequest, "Server not found")
 	}
-	return c.Status(fiber.StatusOK).SendString("ok")
+	return c.String(http.StatusOK, "ok")
 }
