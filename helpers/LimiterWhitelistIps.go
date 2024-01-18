@@ -3,14 +3,14 @@ package helpers
 import (
 	"ch/kirari04/videocms/config"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
 var LimiterWhitelistIps = map[string]bool{
 	"127.0.0.1": true,
 }
 
-func LimiterWhitelistNext(c *fiber.Ctx) bool {
+func LimiterWhitelistNext(c echo.Context) bool {
 	// disable ratelimit by env
 	if !*config.ENV.RatelimitEnabled {
 		return true
