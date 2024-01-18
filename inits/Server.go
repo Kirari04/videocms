@@ -75,16 +75,17 @@ func Server() {
 
 	app.IPExtractor = echo.ExtractIPFromXFFHeader(trustOptions...)
 	app.HTTPErrorHandler = func(err error, c echo.Context) {
-		// Status code defaults to 500
 		code := http.StatusInternalServerError
-
-		// Retrieve the custom status code if it's a *echo.HTTPError
 		if he, ok := err.(*echo.HTTPError); ok {
 			code = he.Code
 		}
-
-		if code == http.StatusInternalServerError {
-			c.Logger().Error(err)
+		c.Logger().Error(err)
+		if code == 404 {
+			if err := c.Render(code, "404.html", echo.Map{}); err != nil {
+				c.Logger().Error(err)
+			}
+		} else {
+			c.NoContent(code)
 		}
 	}
 

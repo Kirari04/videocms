@@ -24,7 +24,10 @@ func PlayerController(c echo.Context) error {
 	}
 	var requestValidation Request
 	if status, err := helpers.Validate(c, &requestValidation); err != nil {
-		return c.String(status, err.Error())
+		return c.Render(status, "error.html", echo.Map{
+			"Title": "Player Error",
+			"Error": err.Error(),
+		})
 	}
 
 	//check if requested folder exists
