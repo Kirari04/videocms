@@ -4,11 +4,11 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
-	"fmt"
 	"log"
+	"net/http"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
 type StatItem struct {
@@ -21,13 +21,10 @@ type StatItem struct {
 	DiskR     float64
 }
 
-func GetSystemStats(c *fiber.Ctx) error {
+func GetSystemStats(c echo.Context) error {
 	var validatus models.SystemResourceGetValidation
-	if err := c.QueryParser(&validatus); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
-	}
-	if errors := helpers.ValidateStruct(validatus); len(errors) > 0 {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
+	if status, err := helpers.Validate(c, &validatus); err != nil {
+		return c.String(status, err.Error())
 	}
 
 	amount := 48
@@ -67,7 +64,7 @@ func GetSystemStats(c *fiber.Ctx) error {
 			Where("server_id IS NULL").
 			Find(&resources); res.Error != nil {
 			log.Println("Failed to query stats", res.Error)
-			return c.SendStatus(fiber.StatusInternalServerError)
+			return c.NoContent(http.StatusInternalServerError)
 		}
 		response = append(response, StatItem{
 			CreatedAt: time.Now().Add(duration * time.Duration(amount-(i+1)) * -1),
@@ -80,5 +77,5 @@ func GetSystemStats(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(&response)
+	return c.JSON(http.StatusOK, &response)
 }
