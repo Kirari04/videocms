@@ -4,28 +4,23 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
-	"fmt"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
-func CreateWebhook(c *fiber.Ctx) error {
+func CreateWebhook(c echo.Context) error {
 	// parse & validate request
 
 	var webhookValidation models.WebhookCreateValidation
-	if err := c.BodyParser(&webhookValidation); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
+	if status, err := helpers.Validate(c, &webhookValidation); err != nil {
+		return c.String(status, err.Error())
 	}
 
-	if errors := helpers.ValidateStruct(webhookValidation); len(errors) > 0 {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
-	}
-
-	status, res, err := logic.CreateWebhook(&webhookValidation, c.Locals("UserID").(uint))
+	status, res, err := logic.CreateWebhook(&webhookValidation, c.Get("UserID").(uint))
 
 	if err != nil {
-		return c.Status(status).SendString(err.Error())
+		return c.String(status, err.Error())
 	}
 
-	return c.Status(status).SendString(res)
+	return c.String(status, res)
 }
