@@ -1,17 +1,21 @@
 package controllers
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
@@ -53,7 +57,7 @@ func DownloadVideoController(c echo.Context) error {
 				"%s/%s",
 				quality.Path,
 				quality.OutputFile,
-			), "-map", fmt.Sprint(streamIndex))
+			))
 			streamIndex++
 		}
 	}
@@ -64,7 +68,7 @@ func DownloadVideoController(c echo.Context) error {
 			"%s/%s",
 			audio.Path,
 			audio.OutputFile,
-		), "-map", fmt.Sprint(streamIndex))
+		))
 		streamIndex++
 	}
 
@@ -74,30 +78,55 @@ func DownloadVideoController(c echo.Context) error {
 			"%s/%s",
 			subtitle.Path,
 			subtitle.OutputFile,
-		), "-map", fmt.Sprint(streamIndex))
+		))
 		streamIndex++
 	}
 
-	cmdString := append(files, []string{"-c", "copy", "-f", "matroska", "pipe:1"}...)
-
-	cmd := exec.Command("ffmpeg", cmdString...)
-	pipe, err := cmd.StdoutPipe()
-	if err != nil {
-		c.Logger().Error("Failed to create stdout pipe", err)
-		return nil
+	for i := 0; i < streamIndex; i++ {
+		files = append(files, "-map", fmt.Sprintf("%d:0", i))
 	}
-	defer pipe.Close()
+
+	tmpFilePath := fmt.Sprintf("%s/%s-tmp-enc.mkv", config.ENV.FolderVideoUploadsPriv, uuid.NewString())
+	defer os.Remove(tmpFilePath)
+
+	cmdString := append(files, []string{"-c", "copy", "-f", "matroska", tmpFilePath}...)
+	cmd := exec.Command("ffmpeg", cmdString...)
 
 	if err := cmd.Start(); err != nil {
 		c.Logger().Error("Failed to run cmd", err)
 		return nil
 	}
 
+	// wait until file exists
+	var tmpFile *os.File
+	for {
+		if tmpFile == nil {
+			f, err := os.Open(tmpFilePath)
+			if err != nil {
+				time.Sleep(time.Second * 1)
+				continue
+			}
+			tmpFile = f
+			break
+		}
+	}
+	// pipe, err := cmd.StdoutPipe()
+	// if err != nil {
+	// 	c.Logger().Error("Failed to create stdout pipe", err)
+	// 	return nil
+	// }
+	defer tmpFile.Close()
+
+	fileName := regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(dbLink.Name, "-")
+	if !strings.HasSuffix(fileName, ".mkv") {
+		fileName = fileName + ".mkv"
+	}
+
 	c.Response().Header().Add("Content-Type", "video/x-matroska")
 	c.Response().Header().Add("Transfer-Encoding", "chunked")
 	c.Response().Header().Add("Trailer", "AtEnd")
 	c.Response().Header().Add("Cache-Control", "no-cache")
-	c.Response().Header().Add("Content-Disposition", `attachment; filename="video.mkv"`)
+	c.Response().Header().Add("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fileName))
 	c.Response().Status = http.StatusOK
 
 	var wg sync.WaitGroup
@@ -109,11 +138,11 @@ func DownloadVideoController(c echo.Context) error {
 		defer wg.Done()
 		for {
 			timeStart := time.Now().UnixMilli()
-			n, err := io.CopyN(c.Response().Writer, pipe, speedA)
+			n, err := io.CopyN(c.Response().Writer, tmpFile, speedA)
 			if err != nil {
-				if err.Error() != "EOF" {
-					c.Logger().Error("Failed to write to buffer", err)
-				}
+				// if err.Error() != "EOF" {
+				c.Logger().Error("Failed to write to buffer", err)
+				// }
 				break
 			}
 			if n > 0 {
