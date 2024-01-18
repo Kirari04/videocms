@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
 
@@ -50,16 +49,15 @@ func DownloadVideoController(c echo.Context) error {
 	}
 	files := []string{}
 	streamIndex := 0
-	// add video
-	for _, quality := range dbLink.File.Qualitys {
-		if quality.Name == requestValidation.QUALITY {
-			files = append(files, "-i", fmt.Sprintf(
-				"%s/%s",
-				quality.Path,
-				quality.OutputFile,
-			))
-			streamIndex++
-		}
+
+	// add subtitles
+	for _, subtitle := range dbLink.File.Subtitles {
+		files = append(files, "-i", fmt.Sprintf(
+			"%s/%s",
+			subtitle.Path,
+			subtitle.OutputFile,
+		))
+		streamIndex++
 	}
 
 	// add audios
@@ -72,18 +70,20 @@ func DownloadVideoController(c echo.Context) error {
 		streamIndex++
 	}
 
-	// add subtitles
-	for _, subtitle := range dbLink.File.Subtitles {
-		files = append(files, "-i", fmt.Sprintf(
-			"%s/%s",
-			subtitle.Path,
-			subtitle.OutputFile,
-		))
-		streamIndex++
+	// add video
+	for _, quality := range dbLink.File.Qualitys {
+		if quality.Name == requestValidation.QUALITY {
+			files = append(files, "-i", fmt.Sprintf(
+				"%s/%s",
+				quality.Path,
+				quality.OutputFile,
+			))
+			streamIndex++
+		}
 	}
 
 	for i := 0; i < streamIndex; i++ {
-		files = append(files, "-map", fmt.Sprintf("%d:0", i))
+		files = append(files, "-map", fmt.Sprintf("%d", i))
 	}
 
 	tmpFilePath := fmt.Sprintf("%s/%s-tmp-enc.mkv", config.ENV.FolderVideoUploadsPriv, uuid.NewString())
@@ -99,10 +99,16 @@ func DownloadVideoController(c echo.Context) error {
 
 	// wait until file exists
 	var tmpFile *os.File
+	var try = 0
 	for {
+		if try > 10 {
+			c.Logger().Error("Failed to receive output file from ffmpeg")
+			return nil
+		}
 		if tmpFile == nil {
 			f, err := os.Open(tmpFilePath)
 			if err != nil {
+				try++
 				time.Sleep(time.Second * 1)
 				continue
 			}
@@ -110,17 +116,13 @@ func DownloadVideoController(c echo.Context) error {
 			break
 		}
 	}
-	// pipe, err := cmd.StdoutPipe()
-	// if err != nil {
-	// 	c.Logger().Error("Failed to create stdout pipe", err)
-	// 	return nil
-	// }
 	defer tmpFile.Close()
 
-	fileName := regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(dbLink.Name, "-")
-	if !strings.HasSuffix(fileName, ".mkv") {
-		fileName = fileName + ".mkv"
-	}
+	fileName := fmt.Sprintf(
+		"%s[%s].mkv",
+		regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(dbLink.Name, "-"),
+		requestValidation.QUALITY,
+	)
 
 	c.Response().Header().Add("Content-Type", "video/x-matroska")
 	c.Response().Header().Add("Transfer-Encoding", "chunked")
@@ -140,9 +142,9 @@ func DownloadVideoController(c echo.Context) error {
 			timeStart := time.Now().UnixMilli()
 			n, err := io.CopyN(c.Response().Writer, tmpFile, speedA)
 			if err != nil {
-				// if err.Error() != "EOF" {
-				c.Logger().Error("Failed to write to buffer", err)
-				// }
+				if err.Error() != "EOF" {
+					c.Logger().Error("Failed to write to buffer", err)
+				}
 				break
 			}
 			if n > 0 {
