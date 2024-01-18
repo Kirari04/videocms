@@ -2,6 +2,7 @@ package inits
 
 import (
 	"ch/kirari04/videocms/config"
+	"fmt"
 	"html/template"
 	"io"
 	"log"
@@ -91,6 +92,11 @@ func Server() {
 
 	// recovering from panics
 	app.Use(middleware.Recover())
+
+	// body limit
+	e := echo.New()
+	postMaxSize := int64(float64(config.ENV.MaxPostSize) / 1000)
+	e.Use(middleware.BodyLimit(fmt.Sprintf("%dk", postMaxSize)))
 
 	// Compression middleware
 	app.Use(middleware.GzipWithConfig(middleware.GzipConfig{
