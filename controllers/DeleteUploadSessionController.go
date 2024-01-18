@@ -4,39 +4,35 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
-	"fmt"
 	"log"
+	"net/http"
 	"os"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
-func DeleteUploadSession(c *fiber.Ctx) error {
+func DeleteUploadSession(c echo.Context) error {
 	// parse & validate request
 	var validation models.DeleteUploadSessionValidation
-	if err := c.BodyParser(&validation); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
+	if status, err := helpers.Validate(c, &validation); err != nil {
+		return c.String(status, err.Error())
 	}
 
-	if errors := helpers.ValidateStruct(validation); len(errors) > 0 {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
-	}
-
-	userId, ok := c.Locals("UserID").(uint)
+	userId, ok := c.Get("UserID").(uint)
 	if !ok {
 		log.Println("GetUploadSessions: Failed to catch userId")
-		return c.SendStatus(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 
 	var uploadSession models.UploadSession
 	if res := inits.DB.Where(&models.UploadSession{
 		UUID: validation.UploadSessionUUID,
 	}, "UUID").First(&uploadSession); res.Error != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Upload Session not found")
+		return c.String(http.StatusBadRequest, "Upload Session not found")
 	}
 
 	if uploadSession.UserID != userId {
-		return c.Status(fiber.StatusBadRequest).SendString("Upload Session not found")
+		return c.String(http.StatusBadRequest, "Upload Session not found")
 	}
 
 	if res := inits.DB.
@@ -56,5 +52,5 @@ func DeleteUploadSession(c *fiber.Ctx) error {
 		log.Printf("[WARNING] createUploadFileCleanup -> remove session folder: %v\n", err)
 	}
 
-	return c.Status(fiber.StatusOK).SendString("ok")
+	return c.String(http.StatusOK, "ok")
 }
