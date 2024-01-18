@@ -4,28 +4,24 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
-	"fmt"
+	"net/http"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
-func GetAudioData(c *fiber.Ctx) error {
+func GetAudioData(c echo.Context) error {
 	var requestValidation models.AudioGetValidation
-	if err := c.ParamsParser(&requestValidation); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
-	}
-
-	if errors := helpers.ValidateStruct(requestValidation); len(errors) > 0 {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
+	if status, err := helpers.Validate(c, &requestValidation); err != nil {
+		return c.String(status, err.Error())
 	}
 
 	status, filePath, err := logic.GetAudioData(&requestValidation)
 	if err != nil {
-		return c.Status(status).SendString(err.Error())
+		return c.String(status, err.Error())
 	}
 
-	if err := c.Status(status).SendFile(*filePath); err != nil {
-		return c.Status(fiber.StatusNotFound).SendString("Audio doesn't exist")
+	if err := c.File(*filePath); err != nil {
+		return c.String(http.StatusNotFound, "Audio doesn't exist")
 	}
 	return nil
 }
