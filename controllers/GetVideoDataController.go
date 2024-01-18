@@ -3,33 +3,29 @@ package controllers
 import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/logic"
-	"fmt"
+	"net/http"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
-func GetVideoData(c *fiber.Ctx) error {
+func GetVideoData(c echo.Context) error {
 	type Request struct {
 		UUID    string `validate:"required,uuid_rfc4122"`
 		QUALITY string `validate:"required,min=1,max=10"`
 		FILE    string `validate:"required"`
 	}
 	var requestValidation Request
-	if err := c.ParamsParser(&requestValidation); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
-	}
-
-	if errors := helpers.ValidateStruct(requestValidation); len(errors) > 0 {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
+	if status, err := helpers.Validate(c, &requestValidation); err != nil {
+		return c.String(status, err.Error())
 	}
 
 	status, filePath, err := logic.GetVideoData(requestValidation.FILE, requestValidation.QUALITY, requestValidation.UUID)
 	if err != nil {
-		return c.Status(status).SendString(err.Error())
+		return c.String(status, err.Error())
 	}
 
-	if err := c.Status(status).SendFile(*filePath); err != nil {
-		return c.Status(fiber.StatusNotFound).SendString("Video doesn't exist")
+	if err := c.File(*filePath); err != nil {
+		return c.String(http.StatusNotFound, "Video doesn't exist")
 	}
 	return nil
 }
