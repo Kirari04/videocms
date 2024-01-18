@@ -45,7 +45,7 @@ func DownloadVideoController(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "video doesn't exist")
 	}
 	files := []string{}
-
+	streamIndex := 0
 	// add video
 	for _, quality := range dbLink.File.Qualitys {
 		if quality.Name == requestValidation.QUALITY {
@@ -53,7 +53,8 @@ func DownloadVideoController(c echo.Context) error {
 				"%s/%s",
 				quality.Path,
 				quality.OutputFile,
-			))
+			), "-map", fmt.Sprint(streamIndex))
+			streamIndex++
 		}
 	}
 
@@ -63,7 +64,8 @@ func DownloadVideoController(c echo.Context) error {
 			"%s/%s",
 			audio.Path,
 			audio.OutputFile,
-		))
+		), "-map", fmt.Sprint(streamIndex))
+		streamIndex++
 	}
 
 	// add subtitles
@@ -72,10 +74,11 @@ func DownloadVideoController(c echo.Context) error {
 			"%s/%s",
 			subtitle.Path,
 			subtitle.OutputFile,
-		))
+		), "-map", fmt.Sprint(streamIndex))
+		streamIndex++
 	}
 
-	cmdString := append(files, []string{"-map", "0", "-c", "copy", "-f", "matroska", "pipe:1"}...)
+	cmdString := append(files, []string{"-c", "copy", "-f", "matroska", "pipe:1"}...)
 
 	cmd := exec.Command("ffmpeg", cmdString...)
 	pipe, err := cmd.StdoutPipe()
