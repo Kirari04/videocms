@@ -4,29 +4,24 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
-	"fmt"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
-func CreateUploadFile(c *fiber.Ctx) error {
+func CreateUploadFile(c echo.Context) error {
 	// parse & validate request
 	var validation models.UploadFileValidation
-	if err := c.BodyParser(&validation); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
-	}
-
-	if errors := helpers.ValidateStruct(validation); len(errors) > 0 {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
+	if status, err := helpers.Validate(c, &validation); err != nil {
+		return c.String(status, err.Error())
 	}
 
 	status, response, err := logic.CreateUploadFile(
 		validation.SessionJwtToken,
-		c.Locals("UserID").(uint),
+		c.Get("UserID").(uint),
 	)
 	if err != nil {
-		return c.Status(status).SendString(err.Error())
+		return c.String(status, err.Error())
 	}
 
-	return c.Status(status).JSON(response)
+	return c.JSON(status, response)
 }
