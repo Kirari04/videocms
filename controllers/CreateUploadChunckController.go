@@ -41,14 +41,13 @@ func CreateUploadChunck(c echo.Context) error {
 	fileExt := fileSplit[len(fileSplit)-1]
 	filePath := fmt.Sprintf("%s/%s.%s", config.ENV.FolderVideoUploadsPriv, fileId, fileExt)
 
-	dst, err := os.Create(file.Filename)
+	// Save file to storage
+	dst, err := os.Create(filePath)
 	if err != nil {
 		c.Logger().Error("Failed to open destination file", err)
 		return c.NoContent(fiber.StatusInternalServerError)
 	}
 	defer dst.Close()
-
-	// Save file to storage
 	if _, err = io.Copy(dst, src); err != nil {
 		c.Logger().Errorf("Failed to save file: %v", err)
 		return c.NoContent(fiber.StatusInternalServerError)
