@@ -3,9 +3,9 @@ package controllers
 import (
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
-	"log"
+	"net/http"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
 type GetEncodingFilesRes struct {
@@ -15,11 +15,11 @@ type GetEncodingFilesRes struct {
 	Progress float64
 }
 
-func GetEncodingFiles(c *fiber.Ctx) error {
-	userId, ok := c.Locals("UserID").(uint)
+func GetEncodingFiles(c echo.Context) error {
+	userId, ok := c.Get("UserID").(uint)
 	if !ok {
-		log.Println("Failed to catch user")
-		return c.SendStatus(fiber.StatusInternalServerError)
+		c.Logger().Error("Failed to catch user")
+		return c.NoContent(http.StatusInternalServerError)
 	}
 	var res []GetEncodingFilesRes
 	if err := inits.DB.
@@ -34,9 +34,9 @@ func GetEncodingFiles(c *fiber.Ctx) error {
 		Joins("JOIN files ON files.id = links.file_id").
 		Joins("JOIN qualities ON files.id = qualities.file_id AND qualities.encoding = ? AND qualities.failed = ? AND qualities.ready = ?", true, false, false).
 		Scan(&res).Error; err != nil {
-		log.Println("Failed to list encoding files", err)
-		return c.SendStatus(fiber.StatusInternalServerError)
+		c.Logger().Error("Failed to list encoding files", err)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(&res)
+	return c.JSON(http.StatusOK, &res)
 }
