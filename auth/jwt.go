@@ -70,7 +70,7 @@ func RefreshJWT(tknStr string) (string, time.Time, error) {
 		return jwtKey, nil
 	})
 	if err != nil {
-		return "", time.Now(), err
+		return "", time.Now(), errors.New("Malformated jwt key")
 	}
 	if !tkn.Valid {
 		return "", time.Now(), errors.New("Invalid jwt key")
