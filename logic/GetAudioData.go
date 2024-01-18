@@ -6,16 +6,15 @@ import (
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
-
-	"github.com/gofiber/fiber/v2"
 )
 
 func GetAudioData(requestValidation *models.AudioGetValidation) (status int, filePath *string, err error) {
 	reFILE := regexp.MustCompile(`^audio[0-9]{0,4}\.(m3u8|ts|wav|mp3|ogg)$`)
 
 	if !reFILE.MatchString(requestValidation.FILE) {
-		return fiber.StatusBadRequest, nil, errors.New("bad file format")
+		return http.StatusBadRequest, nil, errors.New("bad file format")
 	}
 
 	//translate link id to file id
@@ -29,7 +28,7 @@ func GetAudioData(requestValidation *models.AudioGetValidation) (status int, fil
 			UUID: requestValidation.UUID,
 		}).
 		First(&dbLink); dbRes.Error != nil {
-		return fiber.StatusNotFound, nil, errors.New("audio doesn't exist")
+		return http.StatusNotFound, nil, errors.New("audio doesn't exist")
 	}
 
 	//check if audio uuid exists
@@ -41,9 +40,9 @@ func GetAudioData(requestValidation *models.AudioGetValidation) (status int, fil
 		}
 	}
 	if !audioExists {
-		return fiber.StatusNotFound, nil, errors.New("audio doesn't exist")
+		return http.StatusNotFound, nil, errors.New("audio doesn't exist")
 	}
 
 	resPath := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, requestValidation.AUDIOUUID, requestValidation.FILE)
-	return fiber.StatusOK, &resPath, nil
+	return http.StatusOK, &resPath, nil
 }

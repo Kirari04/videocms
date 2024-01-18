@@ -9,9 +9,10 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/http"
 	"os"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
 func CreateUploadChunck(index uint, sessionToken string, fromFile string) (status int, response string, err error) {
@@ -19,14 +20,11 @@ func CreateUploadChunck(index uint, sessionToken string, fromFile string) (statu
 	token, claims, err := helpers.VerifyDynamicJWT(sessionToken, &models.UploadSessionClaims{}, []byte(config.ENV.JwtUploadSecretKey))
 	if err != nil || claims == nil {
 		log.Printf("err: %v", err)
-		return fiber.StatusBadRequest, "", errors.New("broken upload session token")
+		return http.StatusBadRequest, "", errors.New("broken upload session token")
 	}
 	if !token.Valid {
-		return fiber.StatusBadRequest, "", errors.New("invalid upload session token")
+		return http.StatusBadRequest, "", errors.New("invalid upload session token")
 	}
-	// if (*claims).UserID != userId {
-	// 	return fiber.StatusForbidden, "", fiber.ErrForbidden
-	// }
 
 	//check if session still active
 	uploadSession := models.UploadSession{}
@@ -34,28 +32,28 @@ func CreateUploadChunck(index uint, sessionToken string, fromFile string) (statu
 		Where(&models.UploadSession{
 			UUID: (*claims).UUID,
 		}).First(&uploadSession); res.Error != nil {
-		return fiber.StatusNotFound, "", errors.New("upload session not found")
+		return http.StatusNotFound, "", errors.New("upload session not found")
 	}
 
 	// check chunck size
 	chunckFile, err := os.Open(fromFile)
 	if err != nil {
 		log.Printf("Failed to open uploaded chunck: %v", err)
-		return fiber.StatusInternalServerError, "", fiber.ErrInternalServerError
+		return http.StatusInternalServerError, "", echo.ErrInternalServerError
 	}
 	chunckFileStat, err := chunckFile.Stat()
 	if err != nil {
 		log.Printf("Failed to read stat from uploaded chunck: %v", err)
-		return fiber.StatusInternalServerError, "", fiber.ErrInternalServerError
+		return http.StatusInternalServerError, "", echo.ErrInternalServerError
 	}
 	maxchunckFileSize := int64(math.Ceil(float64(uploadSession.Size) / float64(uploadSession.ChunckCount)))
 	if chunckFileStat.Size() > maxchunckFileSize+100 {
-		return fiber.StatusRequestEntityTooLarge, "", fiber.ErrRequestEntityTooLarge
+		return http.StatusRequestEntityTooLarge, "", echo.ErrStatusRequestEntityTooLarge
 	}
 
 	// check chunck count
 	if int(index) >= uploadSession.ChunckCount {
-		return fiber.StatusBadRequest, "", fmt.Errorf("chunck index is too high: chunck index: %d vs max index: %d", index, uploadSession.ChunckCount)
+		return http.StatusBadRequest, "", fmt.Errorf("chunck index is too high: chunck index: %d vs max index: %d", index, uploadSession.ChunckCount)
 	}
 
 	/*
@@ -65,7 +63,7 @@ func CreateUploadChunck(index uint, sessionToken string, fromFile string) (statu
 	chunckPath := fmt.Sprintf("%s/%v.chunck", uploadSession.SessionFolder, index)
 	if err := os.Rename(fromFile, chunckPath); err != nil {
 		log.Printf("Failed to move uploaded chunck into upload session folder: %v", err)
-		return fiber.StatusInternalServerError, "", fiber.ErrInternalServerError
+		return http.StatusInternalServerError, "", echo.ErrInternalServerError
 	}
 
 	existingUploadedChunck := models.UploadChunck{}
@@ -76,8 +74,8 @@ func CreateUploadChunck(index uint, sessionToken string, fromFile string) (statu
 	}).FirstOrCreate(&existingUploadedChunck); res.Error != nil {
 		log.Printf("Failed to add uploaded chunck into db: %v", res.Error)
 		log.Printf("Removing Chunck: %v", os.Remove(chunckPath))
-		return fiber.StatusInternalServerError, "", fiber.ErrInternalServerError
+		return http.StatusInternalServerError, "", echo.ErrInternalServerError
 	}
 
-	return fiber.StatusOK, "ok", nil
+	return http.StatusOK, "ok", nil
 }

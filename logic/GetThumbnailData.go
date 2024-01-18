@@ -6,16 +6,15 @@ import (
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
-
-	"github.com/gofiber/fiber/v2"
 )
 
 func GetThumbnailData(fileName string, UUID string) (status int, filePath *string, err error) {
 	reFILE := regexp.MustCompile(`^[1-4]x[1-4]\.(webp)$`)
 
 	if !reFILE.MatchString(fileName) {
-		return fiber.StatusBadRequest, nil, errors.New("bad file format")
+		return http.StatusBadRequest, nil, errors.New("bad file format")
 	}
 
 	//translate link id to file id
@@ -27,10 +26,10 @@ func GetThumbnailData(fileName string, UUID string) (status int, filePath *strin
 			UUID: UUID,
 		}).
 		First(&dbLink); dbRes.Error != nil {
-		return fiber.StatusNotFound, nil, errors.New("thumbnail doesn't exist")
+		return http.StatusNotFound, nil, errors.New("thumbnail doesn't exist")
 	}
 
 	fileRes := fmt.Sprintf("%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, fileName)
 
-	return fiber.StatusOK, &fileRes, nil
+	return http.StatusOK, &fileRes, nil
 }

@@ -7,72 +7,75 @@ import (
 	"ch/kirari04/videocms/middlewares"
 	"time"
 
-	"github.com/gofiber/fiber/v2/middleware/limiter"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 func Api() {
-	inits.Api.Use(limiter.New(*helpers.LimiterConfig(10, time.Second)))
+	inits.Api.Use(middleware.RateLimiterWithConfig(*helpers.LimiterConfig(10, 500, time.Minute*5)))
 
 	auth := inits.Api.Group("/auth")
-	auth.Use(limiter.New(*helpers.LimiterConfig(10, time.Hour))).
-		Post("/login", controllers.AuthLogin)
-	auth.Use(limiter.New(*helpers.LimiterConfig(1, time.Second*10))).
-		Get("/check", controllers.AuthCheck)
-	auth.Use(limiter.New(*helpers.LimiterConfig(1, time.Minute))).
-		Get("/refresh", controllers.AuthRefresh)
+	auth.POST("/login",
+		controllers.AuthLogin,
+		middleware.RateLimiterWithConfig(*helpers.LimiterConfig(1, 2, time.Minute*5)))
+	auth.GET("/check",
+		controllers.AuthCheck,
+		middleware.RateLimiterWithConfig(*helpers.LimiterConfig(1, 2, time.Minute*5)))
+	auth.GET("/refresh",
+		controllers.AuthRefresh,
+		middleware.RateLimiterWithConfig(*helpers.LimiterConfig(1, 2, time.Minute*5)))
 
 	// Routes that dont require authentication
-	inits.Api.Get("/config", controllers.GetConfig)
-	inits.Api.Get("/file/example", controllers.GetFileExample)
-	inits.Api.Get("/p/pages", controllers.ListPublicWebPage)
-	inits.Api.Get("/p/page", controllers.GetPublicWebPage)
+	inits.Api.GET("/config", controllers.GetConfig)
+	inits.Api.GET("/file/example", controllers.GetFileExample)
+	inits.Api.GET("/p/pages", controllers.ListPublicWebPage)
+	inits.Api.GET("/p/page", controllers.GetPublicWebPage)
 
 	// requires uploadsession jwt inside body
-	inits.Api.Post("/pcu/chunck", controllers.CreateUploadChunck)
+	inits.Api.POST("/pcu/chunck", controllers.CreateUploadChunck)
 
 	// Routes that require to be authenticated
-	protectedApi := inits.Api.Group("", middlewares.Auth)
-	protectedApi.Post("/folder", controllers.CreateFolder)
-	protectedApi.Put("/folder", controllers.UpdateFolder)
-	protectedApi.Delete("/folder", controllers.DeleteFolder)
-	protectedApi.Get("/folders", controllers.ListFolders)
-	protectedApi.Delete("/folders", controllers.DeleteFolders)
+	protectedApi := inits.Api.Group("", middlewares.Auth())
+	protectedApi.POST("/folder", controllers.CreateFolder)
+	protectedApi.PUT("/folder", controllers.UpdateFolder)
+	protectedApi.DELETE("/folder", controllers.DeleteFolder)
+	protectedApi.GET("/folders", controllers.ListFolders)
+	protectedApi.DELETE("/folders", controllers.DeleteFolders)
 
-	protectedApi.Post("/file", controllers.CreateFile)
-	protectedApi.Post("/file/clone", controllers.CloneFile)
-	protectedApi.Get("/file", controllers.GetFile)
-	protectedApi.Put("/file", controllers.UpdateFile)
-	protectedApi.Delete("/file", controllers.DeleteFileController)
-	protectedApi.Get("/files", controllers.ListFiles)
-	protectedApi.Delete("/files", controllers.DeleteFilesController)
+	protectedApi.POST("/file", controllers.CreateFile)
+	protectedApi.POST("/file/clone", controllers.CloneFile)
+	protectedApi.GET("/file", controllers.GetFile)
+	protectedApi.PUT("/file", controllers.UpdateFile)
+	protectedApi.DELETE("/file", controllers.DeleteFileController)
+	protectedApi.GET("/files", controllers.ListFiles)
+	protectedApi.DELETE("/files", controllers.DeleteFilesController)
 
-	protectedApi.Get("/account", controllers.GetAccount)
-	protectedApi.Get("/account/settings", controllers.GetUserSettingsController)
-	protectedApi.Put("/account/settings", controllers.UpdateUserSettingsController)
+	protectedApi.GET("/account", controllers.GetAccount)
+	protectedApi.GET("/account/settings", controllers.GetUserSettingsController)
+	protectedApi.PUT("/account/settings", controllers.UpdateUserSettingsController)
 
-	protectedApi.Post("/server", middlewares.IsAdmin, controllers.CreateServer)
-	protectedApi.Delete("/server", middlewares.IsAdmin, controllers.DeleteServer)
-	protectedApi.Get("/servers", middlewares.IsAdmin, controllers.ListServers)
+	protectedApi.POST("/server", controllers.CreateServer, middlewares.IsAdmin())
+	protectedApi.DELETE("/server", controllers.DeleteServer, middlewares.IsAdmin())
+	protectedApi.GET("/servers", controllers.ListServers, middlewares.IsAdmin())
 
-	protectedApi.Get("/pages", middlewares.IsAdmin, controllers.ListWebPage)
-	protectedApi.Post("/page", middlewares.IsAdmin, controllers.CreateWebPage)
-	protectedApi.Put("/page", middlewares.IsAdmin, controllers.UpdateWebPage)
-	protectedApi.Delete("/page", middlewares.IsAdmin, controllers.DeleteWebPage)
+	protectedApi.GET("/pages", controllers.ListWebPage, middlewares.IsAdmin())
+	protectedApi.GET("/page", controllers.CreateWebPage, middlewares.IsAdmin())
+	protectedApi.PUT("/page", controllers.UpdateWebPage, middlewares.IsAdmin())
+	protectedApi.DELETE("/page", controllers.DeleteWebPage, middlewares.IsAdmin())
 
-	protectedApi.Get("/stats", middlewares.IsAdmin, controllers.GetSystemStats)
-	protectedApi.Get("/settings", middlewares.IsAdmin, controllers.GetSettings)
-	protectedApi.Put("/settings", middlewares.IsAdmin, controllers.UpdateSettings)
+	protectedApi.GET("/stats", controllers.GetSystemStats, middlewares.IsAdmin())
+	protectedApi.GET("/settings", controllers.GetSettings, middlewares.IsAdmin())
+	protectedApi.PUT("/settings", controllers.UpdateSettings, middlewares.IsAdmin())
 
-	protectedApi.Post("/webhook", controllers.CreateWebhook)
-	protectedApi.Put("/webhook", controllers.UpdateWebhook)
-	protectedApi.Delete("/webhook", controllers.DeleteWebhook)
-	protectedApi.Get("/webhooks", controllers.ListWebhooks)
+	protectedApi.POST("/webhook", controllers.CreateWebhook)
+	protectedApi.PUT("/webhook", controllers.UpdateWebhook)
+	protectedApi.DELETE("/webhook", controllers.DeleteWebhook)
+	protectedApi.GET("/webhooks", controllers.ListWebhooks)
 
-	protectedApi.Get("/encodings", controllers.GetEncodingFiles)
+	protectedApi.GET("/encodings", controllers.GetEncodingFiles)
 
-	protectedApi.Get("/pcu/sessions", controllers.GetUploadSessions)
-	protectedApi.Post("/pcu/session", controllers.CreateUploadSession)
-	protectedApi.Delete("/pcu/session", controllers.DeleteUploadSession)
+	protectedApi.GET("/pcu/sessions", controllers.GetUploadSessions)
+	protectedApi.POST("/pcu/session", controllers.CreateUploadSession)
+	protectedApi.DELETE("/pcu/session", controllers.DeleteUploadSession)
 	// protectedApi.Post("/pcu/chunck", controllers.CreateUploadChunck)
-	protectedApi.Post("/pcu/file", controllers.CreateUploadFile)
+	protectedApi.POST("/pcu/file", controllers.CreateUploadFile)
 }

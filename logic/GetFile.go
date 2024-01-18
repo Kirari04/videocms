@@ -4,11 +4,11 @@ import (
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
-	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
 type GetFileRespQuali struct {
@@ -64,7 +64,7 @@ func GetFile(LinkID uint, userID uint) (status int, fileData *GetFileResp, err e
 			UserID: userID,
 		}).
 		First(&link, LinkID); res.Error != nil {
-		return fiber.StatusNotFound, nil, errors.New(fiber.ErrNotFound.Message)
+		return http.StatusNotFound, nil, echo.ErrNotFound
 	}
 
 	var Qualitys []GetFileRespQuali
@@ -121,5 +121,5 @@ func GetFile(LinkID uint, userID uint) (status int, fileData *GetFileResp, err e
 		Audios:         Audios,
 	}
 
-	return fiber.StatusOK, &response, nil
+	return http.StatusOK, &response, nil
 }

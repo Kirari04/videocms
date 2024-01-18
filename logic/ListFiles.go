@@ -5,8 +5,9 @@ import (
 	"ch/kirari04/videocms/models"
 	"errors"
 	"log"
+	"net/http"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
 func ListFiles(fromFolder uint, userId uint) (status int, response *[]models.Link, err error) {
@@ -14,7 +15,7 @@ func ListFiles(fromFolder uint, userId uint) (status int, response *[]models.Lin
 	if fromFolder > 0 {
 		res := inits.DB.First(&models.Folder{}, fromFolder)
 		if res.Error != nil {
-			return fiber.StatusBadRequest, nil, errors.New("parent folder doesn't exist")
+			return http.StatusBadRequest, nil, errors.New("parent folder doesn't exist")
 		}
 	}
 
@@ -32,8 +33,8 @@ func ListFiles(fromFolder uint, userId uint) (status int, response *[]models.Lin
 		Find(&links)
 	if res.Error != nil {
 		log.Printf("Failed to query file list: %v", res.Error)
-		return fiber.StatusInternalServerError, nil, errors.New(fiber.ErrInternalServerError.Message)
+		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
 
-	return fiber.StatusOK, &links, nil
+	return http.StatusOK, &links, nil
 }

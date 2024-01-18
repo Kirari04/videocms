@@ -7,8 +7,7 @@ import (
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
-
-	"github.com/gofiber/fiber/v2"
+	"net/http"
 )
 
 /*
@@ -21,17 +20,17 @@ that should prevent the user from calling this method multiple times concurrentl
 func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint) (status int, err error) {
 
 	if helpers.UserRequestAsyncObj.Blocked(userID) {
-		return fiber.StatusTooManyRequests, errors.New("wait until the previous delete request finished")
+		return http.StatusTooManyRequests, errors.New("wait until the previous delete request finished")
 	}
 	helpers.UserRequestAsyncObj.Start(userID)
 	defer helpers.UserRequestAsyncObj.End(userID)
 
 	if len(folderValidation.FolderIDs) == 0 {
-		return fiber.StatusBadRequest, errors.New("array FolderIDs is empty")
+		return http.StatusBadRequest, errors.New("array FolderIDs is empty")
 	}
 
 	if int64(len(folderValidation.FolderIDs)) > config.ENV.MaxItemsMultiDelete {
-		return fiber.StatusBadRequest, errors.New("max requested items exceeded")
+		return http.StatusBadRequest, errors.New("max requested items exceeded")
 	}
 
 	//check if requested folders exists
@@ -43,7 +42,7 @@ func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint
 			UserID: userID,
 		}
 		if res := inits.DB.First(&dbFolder, FolderValidation.FolderID); res.Error != nil {
-			return fiber.StatusBadRequest, fmt.Errorf("FolderID (%d) doesn't exist", FolderValidation.FolderID)
+			return http.StatusBadRequest, fmt.Errorf("FolderID (%d) doesn't exist", FolderValidation.FolderID)
 		}
 		// check if has same parent folder
 		if i == 0 {
@@ -51,7 +50,7 @@ func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint
 		}
 		if i > 0 {
 			if parentFolderID != dbFolder.ParentFolderID {
-				return fiber.StatusBadRequest, fmt.Errorf(
+				return http.StatusBadRequest, fmt.Errorf(
 					"all folders have to share the same parent folder. Folder %d doesnt: %d (required) vs %d (actual)",
 					FolderValidation.FolderID,
 					parentFolderID,
@@ -61,7 +60,7 @@ func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint
 		}
 
 		if reqFolderIdDeleteMap[FolderValidation.FolderID] {
-			return fiber.StatusBadRequest, fmt.Errorf(
+			return http.StatusBadRequest, fmt.Errorf(
 				"the folders have to be distinct. Folder %d is dublicate",
 				FolderValidation.FolderID,
 			)
@@ -93,7 +92,7 @@ func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint
 		return status, fmt.Errorf("failed to delete all folders: %v", err)
 	}
 
-	return fiber.StatusOK, nil
+	return http.StatusOK, nil
 }
 
 func listFolders(folderId uint, folders *[]uint, files *[]models.LinkDeleteValidation) {

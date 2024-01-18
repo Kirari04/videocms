@@ -4,8 +4,9 @@ import (
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
+	"net/http"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
 func CreateWebhook(webhookValidation *models.WebhookCreateValidation, userID uint) (status int, response string, err error) {
@@ -18,7 +19,7 @@ func CreateWebhook(webhookValidation *models.WebhookCreateValidation, userID uin
 		UserID:   userID,
 	}); res.Error != nil {
 		log.Printf("Failed to create webhook: %v", res.Error)
-		return fiber.StatusInternalServerError, "", fiber.ErrInternalServerError
+		return http.StatusInternalServerError, "", echo.ErrInternalServerError
 	}
-	return fiber.StatusOK, "ok", nil
+	return http.StatusOK, "ok", nil
 }

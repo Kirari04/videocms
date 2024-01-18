@@ -9,10 +9,11 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/http"
 	"os"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
 type CreateUploadSessionResponse struct {
@@ -30,7 +31,7 @@ use the split delay in the db lookup to have more concurrent upload sessions the
 func CreateUploadSession(toFolder uint, fileName string, uploadSessionUUID string, fileSize int64, userId uint) (status int, response *CreateUploadSessionResponse, err error) {
 
 	if helpers.UserRequestAsyncObj.Blocked(userId) {
-		return fiber.StatusTooManyRequests, nil, errors.New("wait until the previous delete request finished")
+		return http.StatusTooManyRequests, nil, errors.New("wait until the previous delete request finished")
 	}
 	helpers.UserRequestAsyncObj.Start(userId)
 	defer helpers.UserRequestAsyncObj.End(userId)
@@ -39,20 +40,20 @@ func CreateUploadSession(toFolder uint, fileName string, uploadSessionUUID strin
 	if toFolder > 0 {
 		res := inits.DB.First(&models.Folder{}, toFolder)
 		if res.Error != nil {
-			return fiber.StatusBadRequest, nil, errors.New("parent folder doesn't exist")
+			return http.StatusBadRequest, nil, errors.New("parent folder doesn't exist")
 		}
 	}
 
 	//check requested filesize size
 	if fileSize > config.ENV.MaxUploadFilesize {
-		return fiber.StatusRequestEntityTooLarge, nil, fmt.Errorf("exceeded max upload filesize: %v", config.ENV.MaxUploadFilesize)
+		return http.StatusRequestEntityTooLarge, nil, fmt.Errorf("exceeded max upload filesize: %v", config.ENV.MaxUploadFilesize)
 	}
 
 	// get user settings
 	User, err := helpers.GetUser(userId)
 	if err != nil {
 		log.Printf("Failed to fetch user %v: %v", userId, err)
-		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
+		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
 
 	//check for active upload sessions
@@ -63,11 +64,11 @@ func CreateUploadSession(toFolder uint, fileName string, uploadSessionUUID strin
 			UserID: userId,
 		}).Count(&activeUploadSessions); res.Error != nil {
 		log.Printf("Failed to calc activeUploadSessions: %v : %v", activeUploadSessions, res.Error)
-		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
+		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
 	if activeUploadSessions >= config.ENV.MaxUploadSessions {
 		if activeUploadSessions >= User.Settings.UploadSessionsMax {
-			return fiber.StatusBadRequest, nil, fmt.Errorf("exceeded max upload sessions: %v", config.ENV.MaxUploadSessions)
+			return http.StatusBadRequest, nil, fmt.Errorf("exceeded max upload sessions: %v", config.ENV.MaxUploadSessions)
 		}
 	}
 
@@ -75,7 +76,7 @@ func CreateUploadSession(toFolder uint, fileName string, uploadSessionUUID strin
 	sessionFolder := fmt.Sprintf("%s/%s", config.ENV.FolderVideoUploadsPriv, uploadSessionUUID)
 	if err := os.MkdirAll(sessionFolder, 0766); err != nil {
 		log.Printf("Failed to create upload session folder: %v : %v", sessionFolder, err)
-		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
+		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
 
 	// create session
@@ -91,7 +92,7 @@ func CreateUploadSession(toFolder uint, fileName string, uploadSessionUUID strin
 	}
 	if res := inits.DB.Create(&newSession); res.Error != nil {
 		log.Printf("Failed to create new upload session: %v", res.Error)
-		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
+		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
 
 	claims := models.UploadSessionClaims{
@@ -103,10 +104,10 @@ func CreateUploadSession(toFolder uint, fileName string, uploadSessionUUID strin
 	token, expirationTime, err := helpers.GenerateDynamicJWT[models.UploadSessionClaims](&claims, maxUploadDuration, []byte(config.ENV.JwtUploadSecretKey))
 	if err != nil {
 		log.Printf("Failed to generate jwt token for upload session: %v", err)
-		return fiber.StatusInternalServerError, nil, fiber.ErrInternalServerError
+		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
 
-	return fiber.StatusOK, &CreateUploadSessionResponse{
+	return http.StatusOK, &CreateUploadSessionResponse{
 		Token:       token,
 		Expires:     expirationTime,
 		UUID:        uploadSessionUUID,

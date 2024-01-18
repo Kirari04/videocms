@@ -1,28 +1,28 @@
 package logic
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"math"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
 func CreateThumbnail(imageCountAxis int, inputFile string, height int, outputFile string, outputFolder string, videoDuration float64, fps float64) (status int, err error) {
 	// read file & folder
 	absOutputFolder, err := filepath.Abs(outputFolder)
 	if err != nil {
-		return fiber.StatusBadRequest, err
+		return http.StatusBadRequest, err
 	}
 	os.MkdirAll(absOutputFolder, 0777)
 
 	absInputFile, err := filepath.Abs(inputFile)
 	if err != nil {
-		return fiber.StatusBadRequest, err
+		return http.StatusBadRequest, err
 	}
 
 	// build ffmpeg command
@@ -99,10 +99,10 @@ func CreateThumbnail(imageCountAxis int, inputFile string, height int, outputFil
 		)
 		if err := cmd.Run(); err != nil {
 			log.Printf("Failed during simple thumbnail conversion: %v : %s", err, ffmpegCommandSimpleImage)
-			return fiber.StatusInternalServerError, errors.New(fiber.ErrInternalServerError.Message)
+			return http.StatusInternalServerError, echo.ErrInternalServerError
 		}
 
 	}
 
-	return fiber.StatusOK, nil
+	return http.StatusOK, nil
 }

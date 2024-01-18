@@ -10,15 +10,15 @@ import (
 func Web() {
 	inits.App.Static("/", "./public")
 
-	inits.App.Get("/:UUID", controllers.PlayerController)
+	inits.App.GET("/:UUID", controllers.PlayerController)
 
 	videoData := inits.App.Group(config.ENV.FolderVideoQualitysPub)
-	videoData.Get("/:UUID/stream/muted/master.m3u8", middlewares.JwtStream, controllers.GetM3u8Data)
-	videoData.Get("/:UUID/image/thumb/:FILE", controllers.GetThumbnailData)
-	videoData.Get("/:UUID/:SUBUUID/subtitle/:FILE", middlewares.JwtStream, controllers.GetSubtitleData)
-	videoData.Get("/:UUID/:AUDIOUUID/stream/master.m3u8", middlewares.JwtStream, controllers.GetM3u8Data)
-	videoData.Get("/:UUID/:QUALITY/download/video.mkv", middlewares.JwtStream, controllers.DownloadVideoController)
+	videoData.GET("/:UUID/stream/muted/master.m3u8", controllers.GetM3u8Data, middlewares.JwtStream())
+	videoData.GET("/:UUID/image/thumb/:FILE", controllers.GetThumbnailData, middlewares.JwtStream())
+	videoData.GET("/:UUID/:SUBUUID/subtitle/:FILE", controllers.GetSubtitleData, middlewares.JwtStream())
+	videoData.GET("/:UUID/:AUDIOUUID/stream/master.m3u8", controllers.GetM3u8Data, middlewares.JwtStream())
+	videoData.GET("/:UUID/:QUALITY/download/video.mkv", controllers.DownloadVideoController, middlewares.JwtStream())
 	// no jwt stream
-	videoData.Get("/:UUID/:QUALITY/:FILE", controllers.GetVideoData)
-	videoData.Get("/:UUID/:AUDIOUUID/audio/:FILE", controllers.GetAudioData)
+	videoData.GET("/:UUID/:QUALITY/:FILE", controllers.GetVideoData)
+	videoData.GET("/:UUID/:AUDIOUUID/audio/:FILE", controllers.GetAudioData)
 }

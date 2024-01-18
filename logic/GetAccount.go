@@ -6,9 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 )
 
@@ -26,13 +27,13 @@ type GetAccountResponse struct {
 func GetAccount(userID uint) (status int, response *GetAccountResponse, err error) {
 	if data, found := inits.Cache.Get(fmt.Sprintf("account-%d", userID)); found {
 		res := data.(GetAccountResponse)
-		return fiber.StatusOK, &res, nil
+		return http.StatusOK, &res, nil
 	}
 
 	var dbUser models.User
 	if res := inits.DB.Find(&dbUser, userID); res.Error != nil {
 		log.Printf("Failed to query user: %v", res.Error)
-		return fiber.StatusInternalServerError, nil, errors.New(fiber.ErrInternalServerError.Message)
+		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
 	type DBResponse struct {
 		UploadedFiles int64
@@ -49,7 +50,7 @@ func GetAccount(userID uint) (status int, response *GetAccountResponse, err erro
 		First(&dbUsed); res.Error != nil {
 		if !errors.Is(res.Error, gorm.ErrRecordNotFound) {
 			log.Printf("Failed to query UploadedFiles & StorageUsed: %v", res.Error)
-			return fiber.StatusInternalServerError, nil, errors.New(fiber.ErrInternalServerError.Message)
+			return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 		}
 	}
 	newResponse := GetAccountResponse{
@@ -65,5 +66,5 @@ func GetAccount(userID uint) (status int, response *GetAccountResponse, err erro
 	// save in cache
 	inits.Cache.Set(fmt.Sprintf("account-%d", userID), newResponse, time.Minute)
 
-	return fiber.StatusOK, &newResponse, nil
+	return http.StatusOK, &newResponse, nil
 }

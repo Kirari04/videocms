@@ -5,8 +5,9 @@ import (
 	"ch/kirari04/videocms/models"
 	"errors"
 	"log"
+	"net/http"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 )
 
@@ -17,15 +18,15 @@ func DeleteWebhook(validated *models.WebhookDeleteValidation, userID uint) (stat
 		UserID: userID,
 	}).First(&webhook, validated.WebhookID); res.Error != nil {
 		if errors.Is(res.Error, gorm.ErrRecordNotFound) {
-			return fiber.StatusNotFound, "", fiber.ErrNotFound
+			return http.StatusNotFound, "", echo.ErrNotFound
 		}
 		log.Printf("Failed to query webhook %v: %v", validated.WebhookID, res.Error)
-		return fiber.StatusInternalServerError, "", fiber.ErrInternalServerError
+		return http.StatusInternalServerError, "", echo.ErrInternalServerError
 	}
 	if res := inits.DB.Delete(&webhook); res.Error != nil {
 		log.Printf("Failed to delete webhook %v: %v", validated.WebhookID, res.Error)
-		return fiber.StatusInternalServerError, "", fiber.ErrInternalServerError
+		return http.StatusInternalServerError, "", echo.ErrInternalServerError
 	}
 
-	return fiber.StatusOK, "ok", nil
+	return http.StatusOK, "ok", nil
 }

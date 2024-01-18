@@ -5,8 +5,7 @@ import (
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
-
-	"github.com/gofiber/fiber/v2"
+	"net/http"
 )
 
 type GetM3u8DataRequest struct {
@@ -32,7 +31,7 @@ func GetM3u8Data(UUID string, AUDIOUUID string, JWT string) (status int, m3u8Str
 			UUID: UUID,
 		}).
 		First(&dbLink); dbRes.Error != nil {
-		return fiber.StatusNotFound, nil, errors.New("link doesn't exist")
+		return http.StatusNotFound, nil, errors.New("link doesn't exist")
 	}
 
 	//check if contains audio
@@ -48,5 +47,5 @@ func GetM3u8Data(UUID string, AUDIOUUID string, JWT string) (status int, m3u8Str
 		}
 	}
 	m3u8Response := helpers.GenM3u8Stream(&dbLink, &dbLink.File.Qualitys, dbAudioPtr, JWT)
-	return fiber.StatusOK, &m3u8Response, nil
+	return http.StatusOK, &m3u8Response, nil
 }

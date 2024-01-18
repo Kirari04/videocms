@@ -3,7 +3,6 @@ package middlewares
 import (
 	"net/http"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/labstack/echo/v4"
 )
 
@@ -13,7 +12,7 @@ func IsAdmin() echo.MiddlewareFunc {
 			isAdmin, ok := c.Get("Admin").(bool)
 			if !ok {
 				c.Logger().Error("Failed to catch Admin")
-				return c.NoContent(fiber.StatusInternalServerError)
+				return c.NoContent(http.StatusInternalServerError)
 			}
 			if !isAdmin {
 				return c.String(http.StatusForbidden, "Not Permitted")

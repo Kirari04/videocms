@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/labstack/echo/v4"
 )
 
@@ -91,11 +90,11 @@ func DownloadVideoController(c echo.Context) error {
 		return nil
 	}
 
-	c.Response().Header().Add(fiber.HeaderContentType, "video/x-matroska")
-	c.Response().Header().Add(fiber.HeaderTransferEncoding, "chunked")
-	c.Response().Header().Add(fiber.HeaderTrailer, "AtEnd")
-	c.Response().Header().Add(fiber.HeaderCacheControl, "no-cache")
-	c.Response().Header().Add(fiber.HeaderContentDisposition, `attachment; filename="video.mkv"`)
+	c.Response().Header().Add("Content-Type", "video/x-matroska")
+	c.Response().Header().Add("Transfer-Encoding", "chunked")
+	c.Response().Header().Add("Trailer", "AtEnd")
+	c.Response().Header().Add("Cache-Control", "no-cache")
+	c.Response().Header().Add("Content-Disposition", `attachment; filename="video.mkv"`)
 	c.Response().Status = http.StatusOK
 
 	var wg sync.WaitGroup
@@ -134,6 +133,6 @@ func DownloadVideoController(c echo.Context) error {
 	wg.Wait()
 
 	cmd.Wait()
-	c.Response().Header().Set(fiber.HeaderContentLength, fmt.Sprintf("%d", c.Response().Size))
+	c.Response().Header().Set("Content-Length", fmt.Sprintf("%d", c.Response().Size))
 	return nil
 }

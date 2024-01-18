@@ -6,16 +6,15 @@ import (
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
-
-	"github.com/gofiber/fiber/v2"
 )
 
 func GetSubtitleData(fileName string, UUID string, SUBUUID string) (status int, filePath *string, err error) {
 	reFILE := regexp.MustCompile(`^out\.(ass)$`)
 
 	if !reFILE.MatchString(fileName) {
-		return fiber.StatusBadRequest, nil, errors.New("bad file format")
+		return http.StatusBadRequest, nil, errors.New("bad file format")
 	}
 
 	//translate link id to file id
@@ -29,7 +28,7 @@ func GetSubtitleData(fileName string, UUID string, SUBUUID string) (status int, 
 			UUID: UUID,
 		}).
 		First(&dbLink); dbRes.Error != nil {
-		return fiber.StatusNotFound, nil, errors.New("subtitle doesn't exist")
+		return http.StatusNotFound, nil, errors.New("subtitle doesn't exist")
 	}
 
 	//check if subtitle uuid exists
@@ -41,10 +40,10 @@ func GetSubtitleData(fileName string, UUID string, SUBUUID string) (status int, 
 		}
 	}
 	if !subExists {
-		return fiber.StatusNotFound, nil, errors.New("subtitle doesn't exist")
+		return http.StatusNotFound, nil, errors.New("subtitle doesn't exist")
 	}
 
 	fileRes := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, SUBUUID, fileName)
 
-	return fiber.StatusOK, &fileRes, nil
+	return http.StatusOK, &fileRes, nil
 }

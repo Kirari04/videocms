@@ -7,21 +7,20 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/labstack/echo/v4"
 )
 
 func ViewIndex(c echo.Context) error {
 	var link models.Link
 	if res := inits.DB.First(&link); res.Error != nil {
-		return c.Render(http.StatusOK, "index", fiber.Map{
+		return c.Render(http.StatusOK, "index", echo.Map{
 			"ExampleVideo":         fmt.Sprintf("/%v", "notfound"),
 			"AppName":              config.ENV.AppName,
 			"ProjectDocumentation": config.ENV.ProjectDocumentation,
 			"ProjectDownload":      config.ENV.ProjectDownload,
 		})
 	}
-	return c.Render(http.StatusOK, "index", fiber.Map{
+	return c.Render(http.StatusOK, "index", echo.Map{
 		"ExampleVideo":         fmt.Sprintf("/%v", link.UUID),
 		"AppName":              config.ENV.AppName,
 		"ProjectDocumentation": config.ENV.ProjectDocumentation,

@@ -2,32 +2,36 @@ package inits
 
 import (
 	"ch/kirari04/videocms/config"
-	"errors"
+	"io"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"strings"
-	"time"
+	"text/template"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/compress"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/etag"
-	"github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/gofiber/template/html/v2"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
-var App *fiber.App
-var Api fiber.Router
+var App *echo.Echo
+var Api echo.Group
 var logFile *os.File
 
+type Template struct {
+	templates *template.Template
+}
+
+func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
+	return t.templates.ExecuteTemplate(w, name, data)
+}
+
 func Server() {
-	engine := html.New("./views", ".html")
-	engine.Reload(*config.ENV.ReloadHtml)
+	htmlTemplate := &Template{
+		templates: template.Must(template.ParseGlob("./views/*.html")),
+	}
 	trustedProxies := []string{}
-	trustedProxiesEnabled := false
 	if *config.ENV.CloudflareEnabled {
-		trustedProxiesEnabled = true
 		trustedProxies = append(trustedProxies, []string{
 			"173.245.48.0/20",
 			"103.21.244.0/22",
@@ -53,96 +57,68 @@ func Server() {
 			"2c0f:f248::/32",
 		}...)
 	}
+	app := echo.New()
+	app.Renderer = htmlTemplate
+	trustOptions := []echo.TrustOption{
+		echo.TrustLoopback(false),   // e.g. ipv4 start with 127.
+		echo.TrustLinkLocal(false),  // e.g. ipv4 start with 169.254
+		echo.TrustPrivateNet(false), // e.g. ipv4 start with 10. or 192.168
+	}
+	for _, trustedIpRanges := range trustedProxies {
+		_, ipNet, err := net.ParseCIDR(trustedIpRanges)
+		if err != nil {
+			app.Logger.Error("Failed to parse ip range", err)
+			continue
+		}
+		trustOptions = append(trustOptions, echo.TrustIPRange(ipNet))
+	}
 
-	app := fiber.New(fiber.Config{
+	app.IPExtractor = echo.ExtractIPFromXFFHeader(trustOptions...)
+	app.HTTPErrorHandler = func(err error, c echo.Context) {
+		// Status code defaults to 500
+		code := http.StatusInternalServerError
 
-		Prefork:       false,
-		CaseSensitive: true,
-		StrictRouting: true,
-		ServerHeader:  "Videocms",
-		AppName:       config.ENV.AppName,
-		IdleTimeout:   time.Minute,
-		ReadTimeout:   time.Minute * 10,
-		WriteTimeout:  time.Minute * 10,
-		BodyLimit:     int(config.ENV.MaxPostSize), //5gb
-		Views:         engine,
-		ErrorHandler: func(c *fiber.Ctx, err error) error {
-			// Status code defaults to 500
-			code := fiber.StatusInternalServerError
+		// Retrieve the custom status code if it's a *echo.HTTPError
+		if he, ok := err.(*echo.HTTPError); ok {
+			code = he.Code
+		}
 
-			// Retrieve the custom status code if it's a *fiber.Error
-			var e *fiber.Error
-			if errors.As(err, &e) {
-				code = e.Code
-			}
-
-			if code == fiber.StatusInternalServerError {
-				body := "\nBody hidden because too big"
-				if len(c.Request().Body()) <= 5000 {
-					body = string(c.Request().Body())
-				} else {
-					body = string(c.Request().Body()[0:5000])
-				}
-				log.Printf("InternalServerError: %v \n{%v}{%v}\n%v\n\n", err, c.IP(), c.Request().URI(), body)
-			}
-
-			return c.SendStatus(code)
-		},
-		TrustedProxies:          trustedProxies,
-		EnableTrustedProxyCheck: trustedProxiesEnabled,
-	})
+		if code == http.StatusInternalServerError {
+			c.Logger().Error(err)
+		}
+	}
 
 	// recovering from panics
-	app.Use(recover.New(recover.Config{}))
+	app.Use(middleware.Recover())
 
 	// Compression middleware
-	app.Use(compress.New(compress.Config{
-		Next: func(c *fiber.Ctx) bool {
+	app.Use(middleware.GzipWithConfig(middleware.GzipConfig{
+		Skipper: func(c echo.Context) bool {
 			res := strings.HasPrefix(c.Path(), config.ENV.FolderVideoQualitysPub)
 			if res {
-				c.Append("Compress", "LevelDisabled")
+				c.Response().Header().Add("Compress", "LevelDisabled")
 			} else {
-				c.Append("Compress", "LevelBestCompression")
+				c.Response().Header().Add("Compress", "LevelBestCompression")
 			}
 			return res
 		},
-		Level: compress.LevelBestCompression, // 1
 	}))
 
 	// cors configuration
-	app.Use(cors.New(cors.Config{
-		AllowOrigins:     config.ENV.CorsAllowOrigins,
-		AllowHeaders:     config.ENV.CorsAllowHeaders,
+	app.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins:     []string{config.ENV.CorsAllowOrigins},
+		AllowHeaders:     []string{config.ENV.CorsAllowHeaders},
 		AllowCredentials: *config.ENV.CorsAllowCredentials,
 	}))
 
-	// caches response to be more efficient and save bandwidth
-	app.Use(etag.New())
-
-	// Loggin into file
-	file, err := os.OpenFile("./logs/access.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		log.Panicf("error opening file: %v", err)
-	}
-	logFile = file
-	// using nginxs logformat: https://docs.nginx.com/nginx-amplify/metrics-metadata/nginx-metrics/#additional-nginx-metrics
-	app.Use(logger.New(logger.Config{
-		Format: "${ip} - - [${time}] \"${method} ${url} ${protocol}\" " +
-			"${status} ${bytesSent} \"${referer}\" " +
-			"\"${ua}\" \"${ips}\" " +
-			"\"${host}\" sn=\"${port}\" " +
-			"rt=${latency} " +
-			"ua=\"${route}\" us=\"${status}\" " +
-			"ut=\"0\" ul=\"${bytesReceived}\" " +
-			"cs=${error}\n",
-		Output: file,
-	}))
+	// Logging
+	app.Use(middleware.Logger())
 
 	App = app
-	Api = app.Group("/api")
+	Api = *app.Group("/api")
 }
 
 func ServerStart() {
 	defer logFile.Close()
-	log.Fatal(App.Listen(config.ENV.Host))
+	log.Fatal(App.Start(config.ENV.Host))
 }

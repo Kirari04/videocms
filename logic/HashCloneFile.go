@@ -5,8 +5,8 @@ import (
 	"ch/kirari04/videocms/models"
 	"errors"
 	"log"
+	"net/http"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
@@ -15,7 +15,7 @@ func CloneFileByHash(fromHash string, toFolder uint, fileName string, userId uin
 	if toFolder > 0 {
 		res := inits.DB.First(&models.Folder{}, toFolder)
 		if res.Error != nil {
-			return fiber.StatusBadRequest, nil, errors.New("parent folder doesn't exist")
+			return http.StatusBadRequest, nil, errors.New("parent folder doesn't exist")
 		}
 	}
 
@@ -25,7 +25,7 @@ func CloneFileByHash(fromHash string, toFolder uint, fileName string, userId uin
 		Where(&models.File{
 			Hash: fromHash,
 		}).First(&existingFile); res.Error != nil {
-		return fiber.StatusNotFound, nil, errors.New("requested hash doesnt match any file")
+		return http.StatusNotFound, nil, errors.New("requested hash doesnt match any file")
 	}
 
 	// file is dublicate and can be linked
@@ -39,7 +39,7 @@ func CloneFileByHash(fromHash string, toFolder uint, fileName string, userId uin
 	}
 	if res := inits.DB.Create(&dbLink); res.Error != nil {
 		log.Printf("Error saving link in database: %v", res.Error)
-		return fiber.StatusInternalServerError, nil, res.Error
+		return http.StatusInternalServerError, nil, res.Error
 	}
-	return fiber.StatusOK, &dbLink, nil
+	return http.StatusOK, &dbLink, nil
 }

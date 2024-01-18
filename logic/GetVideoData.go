@@ -6,9 +6,8 @@ import (
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
-
-	"github.com/gofiber/fiber/v2"
 )
 
 func GetVideoData(fileName string, qualityName string, UUID string) (status int, filePath *string, err error) {
@@ -16,11 +15,11 @@ func GetVideoData(fileName string, qualityName string, UUID string) (status int,
 	reFILE := regexp.MustCompile(`^out[0-9]{0,4}\.(m3u8|ts|webm|mp4)$`)
 
 	if !reQUALITY.MatchString(qualityName) {
-		return fiber.StatusBadRequest, nil, errors.New("bad quality format")
+		return http.StatusBadRequest, nil, errors.New("bad quality format")
 	}
 
 	if !reFILE.MatchString(fileName) {
-		return fiber.StatusBadRequest, nil, errors.New("bad file format")
+		return http.StatusBadRequest, nil, errors.New("bad file format")
 	}
 
 	//translate link id to file id
@@ -32,9 +31,9 @@ func GetVideoData(fileName string, qualityName string, UUID string) (status int,
 			UUID: UUID,
 		}).
 		First(&dbLink); dbRes.Error != nil {
-		return fiber.StatusNotFound, nil, errors.New("video doesn't exist")
+		return http.StatusNotFound, nil, errors.New("video doesn't exist")
 	}
 
 	fileRes := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, qualityName, fileName)
-	return fiber.StatusOK, &fileRes, nil
+	return http.StatusOK, &fileRes, nil
 }
