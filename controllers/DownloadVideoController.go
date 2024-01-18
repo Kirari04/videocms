@@ -1,14 +1,11 @@
 package controllers
 
 import (
-	"bufio"
-	"bytes"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os/exec"
 	"regexp"
@@ -16,25 +13,22 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
-func DownloadVideoController(c *fiber.Ctx) error {
+func DownloadVideoController(c echo.Context) error {
 	type Request struct {
 		UUID    string `validate:"required,uuid_rfc4122"`
 		QUALITY string `validate:"required,min=1,max=10"`
 	}
 	var requestValidation Request
-	if err := c.ParamsParser(&requestValidation); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
-	}
-
-	if errors := helpers.ValidateStruct(requestValidation); len(errors) > 0 {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
+	if status, err := helpers.Validate(c, &requestValidation); err != nil {
+		return c.String(status, err.Error())
 	}
 
 	reQUALITY := regexp.MustCompile(`^([0-9]{3,4}p|(h264|vp9|av1))$`)
 	if !reQUALITY.MatchString(requestValidation.QUALITY) {
-		return c.Status(fiber.StatusBadRequest).SendString("bad quality format")
+		return c.String(http.StatusBadRequest, "bad quality format")
 	}
 
 	//translate link id to file id
@@ -49,7 +43,7 @@ func DownloadVideoController(c *fiber.Ctx) error {
 			UUID: requestValidation.UUID,
 		}).
 		First(&dbLink); dbRes.Error != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("video doesn't exist")
+		return c.String(http.StatusBadRequest, "video doesn't exist")
 	}
 	files := []string{}
 
@@ -87,63 +81,48 @@ func DownloadVideoController(c *fiber.Ctx) error {
 	cmd := exec.Command("ffmpeg", cmdString...)
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
-		log.Println("Failed to create stdout pipe")
+		c.Logger().Error("Failed to create stdout pipe", err)
 		return nil
 	}
+	defer pipe.Close()
 
 	if err := cmd.Start(); err != nil {
-		log.Println("Failed to run cmd", err)
+		c.Logger().Error("Failed to run cmd", err)
 		return nil
 	}
 
-	c.Response().StreamBody = true
-	c.Response().ImmediateHeaderFlush = true
-
-	c.Response().Header.Set(fiber.HeaderContentType, "video/x-matroska")
-	c.Response().Header.Set(fiber.HeaderTransferEncoding, "chunked")
-	c.Response().Header.Set(fiber.HeaderTrailer, "AtEnd")
-	c.Response().Header.Set(fiber.HeaderCacheControl, "no-cache")
-	c.Response().Header.Set(fiber.HeaderContentDisposition, `attachment; filename="video.mkv"`)
-	c.Status(http.StatusOK)
+	c.Response().Header().Add(fiber.HeaderContentType, "video/x-matroska")
+	c.Response().Header().Add(fiber.HeaderTransferEncoding, "chunked")
+	c.Response().Header().Add(fiber.HeaderTrailer, "AtEnd")
+	c.Response().Header().Add(fiber.HeaderCacheControl, "no-cache")
+	c.Response().Header().Add(fiber.HeaderContentDisposition, `attachment; filename="video.mkv"`)
+	c.Response().Status = http.StatusOK
 
 	var wg sync.WaitGroup
 	var written int64
 	var speedA int64 = 10 * 1024
 	var speedB int64 = 10 * 1024 * 1024
-	writer := make(chan []byte, 10*1024*1024)
-	c.Response().SetBodyStreamWriter(func(w *bufio.Writer) {
-		for {
-			b, ok := <-writer
-			if !ok {
-				log.Println("stopped channel")
-				break
-			}
-			w.Write(b)
-			w.Flush()
-		}
-	})
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer pipe.Close()
 		for {
 			timeStart := time.Now().UnixMilli()
-			var b bytes.Buffer
-			n, err := io.CopyN(&b, pipe, speedA)
+			n, err := io.CopyN(c.Response().Writer, pipe, speedA)
 			if err != nil {
 				if err.Error() != "EOF" {
-					log.Println("Failed to write to buffer", err)
+					c.Logger().Error("Failed to write to buffer", err)
 				}
 				break
 			}
 			if n > 0 {
-				writer <- b.Bytes()
 				written = written + n
 			}
+			c.Response().Flush()
 			timeEnd := time.Now().UnixMilli()
 			timeDif := timeEnd - timeStart
-			c.Response().Header.Set(fiber.HeaderContentLength, fmt.Sprintf("%d", written))
+			// timeout 1 second minus the download time
 			time.Sleep(time.Second - (time.Millisecond * time.Duration(timeDif)))
+			// increase speed gradualy
 			if speedA < speedB {
 				speedA = speedA * 2
 				if speedA > speedB {
@@ -152,10 +131,9 @@ func DownloadVideoController(c *fiber.Ctx) error {
 			}
 		}
 	}()
-
 	wg.Wait()
+
 	cmd.Wait()
-	close(writer)
-	log.Println("finished")
+	c.Response().Header().Set(fiber.HeaderContentLength, fmt.Sprintf("%d", c.Response().Size))
 	return nil
 }
