@@ -4,15 +4,16 @@ import (
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
+	"net/http"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
-func ListWebPage(c *fiber.Ctx) error {
+func ListWebPage(c echo.Context) error {
 	var webPages []models.WebPage
 	if res := inits.DB.Find(&webPages); res.Error != nil {
 		log.Println("Failed to list webpages", res.Error)
-		return c.SendStatus(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
-	return c.Status(fiber.StatusOK).JSON(&webPages)
+	return c.JSON(http.StatusOK, &webPages)
 }
