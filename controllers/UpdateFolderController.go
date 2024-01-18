@@ -5,8 +5,9 @@ import (
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
+	"net/http"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
 /*
@@ -16,32 +17,17 @@ and shortly after calls the delete method for the root folder too, it would try 
 whole folder tree and delete all folders & files again. To prevent that there is an map variable
 that should prevent the user from calling this method multiple times concurrently.
 */
-func UpdateFolder(c *fiber.Ctx) error {
+func UpdateFolder(c echo.Context) error {
 	// parse & validate request
 	var folderValidation models.FolderUpdateValidation
-	if err := c.BodyParser(&folderValidation); err != nil {
-		return c.Status(400).JSON([]helpers.ValidationError{
-			{
-				FailedField: "none",
-				Tag:         "none",
-				Value:       "Invalid body request format",
-			},
-		})
-	}
-	if errors := helpers.ValidateStruct(folderValidation); len(errors) > 0 {
-		return c.Status(400).JSON(errors)
+	if status, err := helpers.Validate(c, &folderValidation); err != nil {
+		return c.String(status, err.Error())
 	}
 
 	var dbFolder models.Folder
 	//check if requested folder id exists
 	if res := inits.DB.First(&dbFolder, folderValidation.FolderID); res.Error != nil {
-		return c.Status(400).JSON([]helpers.ValidationError{
-			{
-				FailedField: "FolderID",
-				Tag:         "exists",
-				Value:       "Folder doesn't exist",
-			},
-		})
+		return c.String(http.StatusBadRequest, "Folder doesn't exist")
 	}
 
 	/*
@@ -51,13 +37,7 @@ func UpdateFolder(c *fiber.Ctx) error {
 	*/
 	if folderValidation.ParentFolderID > 0 {
 		if res := inits.DB.First(&models.Folder{}, folderValidation.ParentFolderID); res.Error != nil {
-			return c.Status(400).JSON([]helpers.ValidationError{
-				{
-					FailedField: "ParentFolderID",
-					Tag:         "exists",
-					Value:       "Parent folder doesn't exist",
-				},
-			})
+			return c.String(http.StatusBadRequest, "Parent folder doesn't exist")
 		}
 
 		// if the new parent folder is inside the current folder we return an
@@ -65,16 +45,10 @@ func UpdateFolder(c *fiber.Ctx) error {
 		containsFolder, err := helpers.FolderContainsFolder(dbFolder.ID, dbFolder.ParentFolderID)
 		if err != nil {
 			log.Printf("While running FolderContainsFolder the database returned an error: %v", err)
-			return c.SendStatus(fiber.StatusInternalServerError)
+			return c.NoContent(http.StatusInternalServerError)
 		}
 		if containsFolder {
-			return c.Status(400).JSON([]helpers.ValidationError{
-				{
-					FailedField: "ParentFolderID",
-					Tag:         "parent",
-					Value:       "Parent folder aint a parent folder in relation to new  exist",
-				},
-			})
+			return c.String(http.StatusBadRequest, "Parent folder aint a parent folder in relation to new  exist")
 		}
 	}
 
@@ -83,8 +57,8 @@ func UpdateFolder(c *fiber.Ctx) error {
 	dbFolder.ParentFolderID = folderValidation.ParentFolderID
 	if res := inits.DB.Save(&dbFolder); res.Error != nil {
 		log.Printf("Failed to update folder: %v", res.Error)
-		return c.SendStatus(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	return c.SendStatus(fiber.StatusOK)
+	return c.NoContent(http.StatusOK)
 }
