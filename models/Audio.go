@@ -33,9 +33,9 @@ func (c *Audio) Save(DB *gorm.DB) *gorm.DB {
 }
 
 type AudioGetValidation struct {
-	UUID      string `validate:"required,uuid_rfc4122"`
-	AUDIOUUID string `validate:"required,uuid_rfc4122"`
-	FILE      string `validate:"required"`
+	UUID      string `validate:"required,uuid_rfc4122" param:"UUID"`
+	AUDIOUUID string `validate:"required,uuid_rfc4122" param:"AUDIOUUID"`
+	FILE      string `validate:"required" param:"FILE"`
 }
 
 type AvailableAudio struct {

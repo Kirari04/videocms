@@ -10,8 +10,8 @@ import (
 
 func GetThumbnailData(c echo.Context) error {
 	type Request struct {
-		UUID string `validate:"required,uuid_rfc4122"`
-		FILE string `validate:"required"`
+		UUID string `validate:"required,uuid_rfc4122" param:"UUID"`
+		FILE string `validate:"required" param:"FILE"`
 	}
 	var requestValidation Request
 	if status, err := helpers.Validate(c, &requestValidation); err != nil {

@@ -15,8 +15,8 @@ type User struct {
 }
 
 type UserLoginValidation struct {
-	Username string `validate:"required,min=3,max=32"`
-	Password string `validate:"required,min=8,max=250"`
+	Username string `validate:"required,min=3,max=32" form:"username"`
+	Password string `validate:"required,min=8,max=250" form:"password"`
 }
 
 type UserRegisterValidation struct {

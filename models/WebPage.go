@@ -28,5 +28,5 @@ type WebPageDeleteValidation struct {
 }
 
 type WebPageGetValidation struct {
-	Path string `validate:"required,dirpath,min=2,max=50"`
+	Path string `validate:"required,dirpath,min=2,max=50" query:"Path"`
 }

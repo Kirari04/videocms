@@ -15,7 +15,7 @@ type FolderCreateValidation struct {
 }
 
 type FolderListValidation struct {
-	ParentFolderID uint `validate:"number"`
+	ParentFolderID uint `validate:"number" query:"ParentFolderID"`
 }
 
 type FolderDeleteValidation struct {

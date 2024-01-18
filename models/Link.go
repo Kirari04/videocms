@@ -13,17 +13,17 @@ type Link struct {
 }
 
 type LinkListValidation struct {
-	ParentFolderID uint `validate:"number"`
+	ParentFolderID uint `validate:"number" query:"ParentFolderID"`
 }
 
 type LinkDeleteValidation struct {
-	LinkID uint `validate:"required,number"`
+	LinkID uint `validate:"required,number" form:"LinkID"`
 }
 
 type LinkUpdateValidation struct {
-	LinkID         uint   `validate:"required,number"`
-	Name           string `validate:"required,min=1,max=120"`
-	ParentFolderID uint   `validate:"number"`
+	LinkID         uint   `validate:"required,number" form:"LinkID"`
+	Name           string `validate:"required,min=1,max=120" form:"Name"`
+	ParentFolderID uint   `validate:"number" form:"ParentFolderID"`
 }
 
 type LinksDeleteValidation struct {
@@ -31,5 +31,5 @@ type LinksDeleteValidation struct {
 }
 
 type LinkGetValidation struct {
-	LinkID uint `validate:"required,number"`
+	LinkID uint `validate:"required,number" query:"LinkID"`
 }

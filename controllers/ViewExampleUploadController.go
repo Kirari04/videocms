@@ -8,7 +8,7 @@ import (
 )
 
 func ViewExampleUpload(c echo.Context) error {
-	return c.Render(http.StatusOK, "examples/upload", echo.Map{
+	return c.Render(http.StatusOK, "examples/upload.html", echo.Map{
 		"AppName": config.ENV.AppName,
 	})
 }

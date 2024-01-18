@@ -10,9 +10,9 @@ import (
 
 func GetVideoData(c echo.Context) error {
 	type Request struct {
-		UUID    string `validate:"required,uuid_rfc4122"`
-		QUALITY string `validate:"required,min=1,max=10"`
-		FILE    string `validate:"required"`
+		UUID    string `validate:"required,uuid_rfc4122" param:"UUID"`
+		QUALITY string `validate:"required,min=1,max=10" param:"QUALITY"`
+		FILE    string `validate:"required" param:"FILE"`
 	}
 	var requestValidation Request
 	if status, err := helpers.Validate(c, &requestValidation); err != nil {

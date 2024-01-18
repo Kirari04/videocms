@@ -20,7 +20,7 @@ import (
 func PlayerController(c echo.Context) error {
 	// parse & validate request
 	type Request struct {
-		UUID string `validate:"required,uuid_rfc4122"`
+		UUID string `validate:"required,uuid_rfc4122" param:"UUID"`
 	}
 	var requestValidation Request
 	if status, err := helpers.Validate(c, &requestValidation); err != nil {
@@ -38,7 +38,7 @@ func PlayerController(c echo.Context) error {
 			UUID: requestValidation.UUID,
 		}).
 		First(&dbLink); res.Error != nil {
-		return c.Render(http.StatusNotFound, "404", echo.Map{})
+		return c.Render(http.StatusNotFound, "404.html", echo.Map{})
 	}
 
 	// generate jwt token that allows the user to access the stream
@@ -130,7 +130,7 @@ func PlayerController(c echo.Context) error {
 	// 	Domain:   config.ENV.CookieDomain,
 	// 	HTTPOnly: true,
 	// })
-	return c.Render(http.StatusOK, "player", echo.Map{
+	return c.Render(http.StatusOK, "player.html", echo.Map{
 		"Title":         fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
 		"Description":   fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),
 		"Thumbnail":     fmt.Sprintf("%s/%s/image/thumb/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, dbLink.File.Thumbnail),

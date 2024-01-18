@@ -2,13 +2,13 @@ package inits
 
 import (
 	"ch/kirari04/videocms/config"
+	"html/template"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"strings"
-	"text/template"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -28,7 +28,7 @@ func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Con
 
 func Server() {
 	htmlTemplate := &Template{
-		templates: template.Must(template.ParseGlob("./views/*.html")),
+		templates: template.Must(template.ParseGlob("views/*.html")),
 	}
 	trustedProxies := []string{}
 	if *config.ENV.CloudflareEnabled {
