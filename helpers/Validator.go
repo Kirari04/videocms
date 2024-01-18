@@ -3,10 +3,10 @@ package helpers
 import (
 	"errors"
 	"fmt"
-	"log"
+	"net/http"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
 var validate = validator.New()
@@ -32,21 +32,14 @@ func ValidateStruct[T any](data T) []*ValidationError {
 	return errors
 }
 
-func Validate[ValidationModel any](ctx *fiber.Ctx, validationModel *ValidationModel, parser string) (int, error) {
-	switch parser {
-	case "body":
-		ctx.BodyParser(validationModel)
-	case "query":
-		ctx.QueryParser(validationModel)
-	case "param":
-		ctx.ParamsParser(validationModel)
-	default:
-		log.Printf("Incorrect validation parser was set: %s", parser)
-		return fiber.StatusInternalServerError, errors.New(fiber.ErrInternalServerError.Message)
+func Validate[ValidationModel any](c echo.Context, validationModel *ValidationModel) (int, error) {
+	err := c.Bind(validationModel)
+	if err != nil {
+		return http.StatusBadRequest, errors.New("malformated request")
 	}
 
 	if errors := ValidateStruct(validationModel); len(errors) > 0 {
-		return fiber.StatusBadRequest, fmt.Errorf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value)
+		return http.StatusBadRequest, fmt.Errorf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value)
 	}
 
 	return 0, nil
