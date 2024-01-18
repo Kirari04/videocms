@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/labstack/echo/v4"
 )
 
@@ -43,7 +42,7 @@ func AuthLogin(c echo.Context) error {
 	tokenString, expirationTime, err := auth.GenerateJWT(user)
 	if err != nil {
 		log.Printf("Failed to generate jwt for user %s: %v\n", user.Username, err)
-		return c.NoContent(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 
 	return c.JSON(http.StatusOK, echo.Map{
