@@ -5,26 +5,22 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
-	"fmt"
 	"log"
+	"net/http"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
-func UpdateSettings(c *fiber.Ctx) error {
+func UpdateSettings(c echo.Context) error {
 
 	// parse & validate request
 	var validation models.SettingValidation
-	if err := c.BodyParser(&validation); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
-	}
-
-	if errors := helpers.ValidateStruct(validation); len(errors) > 0 {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
+	if status, err := helpers.Validate(c, &validation); err != nil {
+		return c.String(status, err.Error())
 	}
 
 	if res := inits.DB.First(&models.Setting{}, validation.ID); res.Error != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Setting not found by id")
+		return c.String(http.StatusBadRequest, "Setting not found by id")
 	}
 
 	var setting models.Setting
@@ -80,11 +76,11 @@ func UpdateSettings(c *fiber.Ctx) error {
 	setting.FFmpegH264Width = validation.FFmpegH264Width
 	if res := inits.DB.Save(&setting); res.Error != nil {
 		log.Fatalln("Failed to save settings", res.Error)
-		return c.SendStatus(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 	// reload config in background
 	go func() {
 		configdb.Setup()
 	}()
-	return c.Status(fiber.StatusOK).SendString("ok")
+	return c.String(http.StatusOK, "ok")
 }
