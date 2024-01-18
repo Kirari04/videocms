@@ -3,14 +3,14 @@ package controllers
 import (
 	"ch/kirari04/videocms/logic"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
-func GetAccount(c *fiber.Ctx) error {
-	status, dbAccount, err := logic.GetAccount(c.Locals("UserID").(uint))
+func GetAccount(c echo.Context) error {
+	status, dbAccount, err := logic.GetAccount(c.Get("UserID").(uint))
 	if err != nil {
-		return c.Status(status).SendString(err.Error())
+		return c.String(status, err.Error())
 	}
 
-	return c.Status(status).JSON(dbAccount)
+	return c.JSON(status, dbAccount)
 }
