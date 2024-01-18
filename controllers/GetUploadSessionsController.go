@@ -4,9 +4,10 @@ import (
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
+	"net/http"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
 type GetUploadSessionsRes struct {
@@ -17,11 +18,11 @@ type GetUploadSessionsRes struct {
 	ChunckCount int
 }
 
-func GetUploadSessions(c *fiber.Ctx) error {
-	userId, ok := c.Locals("UserID").(uint)
+func GetUploadSessions(c echo.Context) error {
+	userId, ok := c.Get("UserID").(uint)
 	if !ok {
 		log.Println("GetUploadSessions: Failed to catch userId")
-		return c.SendStatus(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 
 	var sessions []GetUploadSessionsRes
@@ -32,8 +33,8 @@ func GetUploadSessions(c *fiber.Ctx) error {
 		}, "UserID").
 		Find(&sessions); res.Error != nil {
 		log.Println("Failed to list upload sessions", res.Error)
-		return c.SendStatus(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(&sessions)
+	return c.JSON(http.StatusOK, &sessions)
 }
