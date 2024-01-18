@@ -4,26 +4,21 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
-	"fmt"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
-func ListFiles(c *fiber.Ctx) error {
+func ListFiles(c echo.Context) error {
 	// parse & validate request
 	var fileValidation models.LinkListValidation
-	if err := c.QueryParser(&fileValidation); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
+	if status, err := helpers.Validate(c, &fileValidation); err != nil {
+		return c.String(status, err.Error())
 	}
 
-	if errors := helpers.ValidateStruct(fileValidation); len(errors) > 0 {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
-	}
-
-	status, response, err := logic.ListFiles(fileValidation.ParentFolderID, c.Locals("UserID").(uint))
+	status, response, err := logic.ListFiles(fileValidation.ParentFolderID, c.Get("UserID").(uint))
 	if err != nil {
-		return c.Status(status).SendString(err.Error())
+		return c.String(status, err.Error())
 	}
 
-	return c.Status(status).JSON(response)
+	return c.JSON(status, response)
 }
