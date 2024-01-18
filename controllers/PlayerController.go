@@ -10,24 +10,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
-func PlayerController(c *fiber.Ctx) error {
+func PlayerController(c echo.Context) error {
 	// parse & validate request
 	type Request struct {
 		UUID string `validate:"required,uuid_rfc4122"`
 	}
 	var requestValidation Request
-	if err := c.ParamsParser(&requestValidation); err != nil {
-		return c.Status(fiber.StatusNotFound).Render("404", fiber.Map{})
-	}
-
-	if errors := helpers.ValidateStruct(requestValidation); len(errors) > 0 {
-		return c.Status(fiber.StatusNotFound).Render("404", fiber.Map{})
+	if status, err := helpers.Validate(c, &requestValidation); err != nil {
+		return c.String(status, err.Error())
 	}
 
 	//check if requested folder exists
@@ -41,14 +38,14 @@ func PlayerController(c *fiber.Ctx) error {
 			UUID: requestValidation.UUID,
 		}).
 		First(&dbLink); res.Error != nil {
-		return c.Status(fiber.StatusNotFound).Render("404", fiber.Map{})
+		return c.Render(http.StatusNotFound, "404", echo.Map{})
 	}
 
 	// generate jwt token that allows the user to access the stream
 	tkn, _, err := auth.GenerateJWTStream(dbLink.UUID)
 	if err != nil {
 		log.Printf("Failed to generate jwt stream token: %v", err)
-		return c.SendStatus(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 
 	// List qualitys non hls & check if has some file is ready
@@ -110,7 +107,7 @@ func PlayerController(c *fiber.Ctx) error {
 		}).
 		Find(&webhooks); res.Error != nil {
 		log.Printf("Failed to query webhooks of file owner: %v", res.Error)
-		return c.SendStatus(fiber.StatusInternalServerError)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 	var jsonWebhooks []map[string]any
 	for _, webhookItem := range webhooks {
@@ -124,16 +121,16 @@ func PlayerController(c *fiber.Ctx) error {
 	rawWebhooks, _ := json.Marshal(jsonWebhooks)
 
 	// "{{.UUID}}={{.JWT}}; path=/; domain=" + window.location.hostname + ";SameSite=None; Secure; HttpOnly"
-	c.Cookie(&fiber.Cookie{
-		Name:     requestValidation.UUID,
-		Value:    tkn,
-		Path:     "/",
-		Secure:   true,
-		SameSite: "None",
-		Domain:   config.ENV.CookieDomain,
-		HTTPOnly: true,
-	})
-	return c.Render("player", fiber.Map{
+	// c.SetCookie(&http.Cookie{
+	// 	Name:     requestValidation.UUID,
+	// 	Value:    tkn,
+	// 	Path:     "/",
+	// 	Secure:   true,
+	// 	SameSite: "None",
+	// 	Domain:   config.ENV.CookieDomain,
+	// 	HTTPOnly: true,
+	// })
+	return c.Render(http.StatusOK, "player", echo.Map{
 		"Title":         fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
 		"Description":   fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),
 		"Thumbnail":     fmt.Sprintf("%s/%s/image/thumb/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, dbLink.File.Thumbnail),
