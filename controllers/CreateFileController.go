@@ -6,33 +6,37 @@ import (
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"fmt"
-	"log"
+	"io"
+	"net/http"
 	"os"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
 )
 
-func CreateFile(c *fiber.Ctx) error {
+func CreateFile(c echo.Context) error {
 	if !*config.ENV.UploadEnabled {
-		return c.Status(fiber.StatusServiceUnavailable).SendString("Upload has been desabled")
+		return c.String(http.StatusServiceUnavailable, "Upload has been desabled")
 	}
 
 	// parse & validate request
 	var fileValidation models.FileCreateValidation
-	if err := c.BodyParser(&fileValidation); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
-	}
-
-	if errors := helpers.ValidateStruct(fileValidation); len(errors) > 0 {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
+	if status, err := helpers.Validate(c, &fileValidation); err != nil {
+		return c.String(status, err.Error())
 	}
 
 	file, err := c.FormFile("file")
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("No File uploaded")
+		return c.String(http.StatusBadRequest, "No File uploaded")
 	}
+	src, err := file.Open()
+	if err != nil {
+		c.Logger().Error("Failed to open src file", err)
+		return c.NoContent(fiber.StatusInternalServerError)
+	}
+	defer src.Close()
 
 	fileId := uuid.NewString()
 	fileSplit := strings.Split(file.Filename, ".")
@@ -40,19 +44,25 @@ func CreateFile(c *fiber.Ctx) error {
 	filePath := fmt.Sprintf("%s/%s.%s", config.ENV.FolderVideoUploadsPriv, fileId, fileExt)
 
 	// Save file to storage
-	if err := c.SaveFile(file, filePath); err != nil {
-		log.Printf("Failed to save file: %v", err)
-		return c.SendStatus(fiber.StatusInternalServerError)
+	dst, err := os.Create(filePath)
+	if err != nil {
+		c.Logger().Error("Failed to open destination file", err)
+		return c.NoContent(fiber.StatusInternalServerError)
+	}
+	defer dst.Close()
+	if _, err = io.Copy(dst, src); err != nil {
+		c.Logger().Errorf("Failed to save file: %v", err)
+		return c.NoContent(fiber.StatusInternalServerError)
 	}
 
 	// business logic
-	status, dbLink, cloned, err := logic.CreateFile(&filePath, fileValidation.ParentFolderID, file.Filename, fileId, file.Size, c.Locals("UserID").(uint))
+	status, dbLink, cloned, err := logic.CreateFile(&filePath, fileValidation.ParentFolderID, file.Filename, fileId, file.Size, c.Get("UserID").(uint))
 	if err != nil {
-		return c.Status(status).SendString(err.Error())
+		return c.String(status, err.Error())
 	}
 	if err != nil || cloned {
 		os.Remove(filePath)
 	}
 
-	return c.Status(status).JSON(dbLink)
+	return c.JSON(status, dbLink)
 }
