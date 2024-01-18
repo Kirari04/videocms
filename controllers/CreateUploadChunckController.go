@@ -6,49 +6,60 @@ import (
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"fmt"
-	"log"
+	"io"
+	"net/http"
 	"os"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
 )
 
 // this route is not securet with user jwt token so it doesnt invalidate the chunck because the session invalidated during the upload time
-func CreateUploadChunck(c *fiber.Ctx) error {
+func CreateUploadChunck(c echo.Context) error {
 	// parse & validate request
 	var validation models.UploadChunckValidation
-	if err := c.BodyParser(&validation); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
-	}
-
-	if errors := helpers.ValidateStruct(validation); len(errors) > 0 {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
+	if status, err := helpers.Validate(c, &validation); err != nil {
+		return c.String(status, err.Error())
 	}
 
 	// file validation
 	file, err := c.FormFile("file")
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("No File uploaded")
+		return c.String(http.StatusBadRequest, "No File uploaded")
 	}
+	src, err := file.Open()
+	if err != nil {
+		c.Logger().Error("Failed to open src file", err)
+		return c.NoContent(fiber.StatusInternalServerError)
+	}
+	defer src.Close()
 
 	fileId := uuid.NewString()
 	fileSplit := strings.Split(file.Filename, ".")
 	fileExt := fileSplit[len(fileSplit)-1]
 	filePath := fmt.Sprintf("%s/%s.%s", config.ENV.FolderVideoUploadsPriv, fileId, fileExt)
 
+	dst, err := os.Create(file.Filename)
+	if err != nil {
+		c.Logger().Error("Failed to open destination file", err)
+		return c.NoContent(fiber.StatusInternalServerError)
+	}
+	defer dst.Close()
+
 	// Save file to storage
-	if err := c.SaveFile(file, filePath); err != nil {
-		log.Printf("Failed to save file: %v", err)
-		return c.SendStatus(fiber.StatusInternalServerError)
+	if _, err = io.Copy(dst, src); err != nil {
+		c.Logger().Errorf("Failed to save file: %v", err)
+		return c.NoContent(fiber.StatusInternalServerError)
 	}
 
 	// business logic
 	status, response, err := logic.CreateUploadChunck(*validation.Index, validation.SessionJwtToken, filePath)
 	if err != nil {
 		os.Remove(filePath)
-		return c.Status(status).SendString(err.Error())
+		return c.String(status, err.Error())
 	}
 
-	return c.Status(status).JSON(response)
+	return c.JSON(status, response)
 }
