@@ -9,6 +9,6 @@ type UploadChunck struct {
 }
 
 type UploadChunckValidation struct {
-	Index           *uint  `validate:"required,min=0,max=10000"`
-	SessionJwtToken string `validate:"required,jwt"`
+	Index           *uint  `validate:"required,min=0,max=10000" json:"Index" form:"Index"`
+	SessionJwtToken string `validate:"required,jwt" json:"SessionJwtToken" form:"SessionJwtToken"`
 }

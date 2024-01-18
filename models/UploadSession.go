@@ -24,11 +24,11 @@ type UploadSessionClaims struct {
 }
 
 type UploadSessionValidation struct {
-	Name           string `validate:"required,min=1,max=128"`
-	Size           int64  `validate:"required,number,min=1"`
-	ParentFolderID uint   `validate:"number"`
+	Name           string `validate:"required,min=1,max=128" json:"Name" form:"Name"`
+	Size           int64  `validate:"required,number,min=1" json:"Size" form:"Size"`
+	ParentFolderID uint   `validate:"number" json:"ParentFolderID" form:"ParentFolderID"`
 }
 
 type DeleteUploadSessionValidation struct {
-	UploadSessionUUID string `validate:"required,uuid_rfc4122"`
+	UploadSessionUUID string `validate:"required,uuid_rfc4122" json:"UploadSessionUUID" form:"UploadSessionUUID"`
 }
