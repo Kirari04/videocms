@@ -4,26 +4,22 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
-	"fmt"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/labstack/echo/v4"
 )
 
-func DeleteFilesController(c *fiber.Ctx) error {
+func DeleteFilesController(c echo.Context) error {
 	// parse & validate request
 	var fileValidation models.LinksDeleteValidation
-	if err := c.BodyParser(&fileValidation); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid body request format")
-	}
-	if errors := helpers.ValidateStruct(fileValidation); len(errors) > 0 {
-		return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
+	if status, err := helpers.Validate(c, &fileValidation); err != nil {
+		return c.String(status, err.Error())
 	}
 
 	// Business logic
-	status, err := logic.DeleteFiles(&fileValidation, c.Locals("UserID").(uint))
+	status, err := logic.DeleteFiles(&fileValidation, c.Get("UserID").(uint))
 
 	if err != nil {
-		return c.Status(status).SendString(err.Error())
+		return c.String(status, err.Error())
 	}
-	return c.SendStatus(status)
+	return c.NoContent(status)
 }
