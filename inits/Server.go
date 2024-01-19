@@ -2,14 +2,16 @@ package inits
 
 import (
 	"ch/kirari04/videocms/config"
+	"context"
 	"fmt"
 	"html/template"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -17,7 +19,6 @@ import (
 
 var App *echo.Echo
 var Api echo.Group
-var logFile *os.File
 
 type Template struct {
 	templates *template.Template
@@ -126,6 +127,21 @@ func Server() {
 }
 
 func ServerStart() {
-	defer logFile.Close()
-	log.Fatal(App.Start(config.ENV.Host))
+	// Start server
+	go func() {
+		if err := App.Start(config.ENV.Host); err != nil && err != http.ErrServerClosed {
+			App.Logger.Fatal("shutting down the server")
+		}
+	}()
+
+	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 10 seconds.
+	// Use a buffered channel to avoid missing signals as recommended for signal.Notify
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
+	<-quit
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := App.Shutdown(ctx); err != nil {
+		App.Logger.Fatal(err)
+	}
 }
