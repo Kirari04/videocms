@@ -10,11 +10,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/net/http2"
 )
 
 var App *echo.Echo
@@ -129,7 +131,11 @@ func Server() {
 func ServerStart() {
 	// Start server
 	go func() {
-		if err := App.Start(config.ENV.Host); err != nil && err != http.ErrServerClosed {
+		if err := App.StartH2CServer(config.ENV.Host, &http2.Server{
+			MaxConcurrentStreams: uint32(runtime.NumGoroutine()),
+			MaxReadFrameSize:     1048576,
+			IdleTimeout:          10 * time.Second,
+		}); err != nil && err != http.ErrServerClosed {
 			App.Logger.Fatal("shutting down the server")
 		}
 	}()
