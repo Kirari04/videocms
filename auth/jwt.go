@@ -21,10 +21,12 @@ var jwtKey []byte
 var sessionDuration = 15 * time.Minute
 
 func GenerateJWT(user models.User) (string, time.Time, error) {
-	jwtKey = []byte(config.ENV.JwtSecretKey)
-	// Declare the expiration time of the token
-	// here, we have kept it as 5 minutes
 	expirationTime := time.Now().Add(sessionDuration)
+	return GenerateTimeJWT(user, expirationTime)
+}
+
+func GenerateTimeJWT(user models.User, expirationTime time.Time) (string, time.Time, error) {
+	jwtKey = []byte(config.ENV.JwtSecretKey)
 	// Create the JWT claims, which includes the username and expiry time
 	claims := &Claims{
 		UserID:   user.ID,

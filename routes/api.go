@@ -23,6 +23,10 @@ func Api() {
 	auth.GET("/refresh",
 		controllers.AuthRefresh,
 		middleware.RateLimiterWithConfig(*helpers.LimiterConfig(1, 2, time.Minute*5)))
+	auth.POST("/apikey",
+		controllers.AuthApikey,
+		middleware.RateLimiterWithConfig(*helpers.LimiterConfig(1, 2, time.Minute*5)),
+		middlewares.Auth())
 
 	// Routes that dont require authentication
 	inits.Api.GET("/config", controllers.GetConfig)
