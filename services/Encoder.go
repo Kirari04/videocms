@@ -50,7 +50,7 @@ func Encoder() {
 	limitChan = make(chan bool, config.ENV.MaxRunningEncodes)
 	for {
 		go loadEncodingTasks()
-		time.Sleep(time.Second * 60)
+		time.Sleep(time.Second * 10)
 	}
 }
 
@@ -95,6 +95,7 @@ func loadEncodingTasks() {
 			Failed:   false,
 		}, "Encoding", "Ready", "Failed").
 		Order("id ASC").
+		Limit(10).
 		Find(&encodingSubs)
 
 	if len(encodingSubs) > 0 {
@@ -122,6 +123,7 @@ func loadEncodingTasks() {
 			Failed:   false,
 		}, "Encoding", "Ready", "Failed").
 		Order("id ASC").
+		Limit(10).
 		Find(&encodingAudios)
 
 	if len(encodingAudios) > 0 {
@@ -149,6 +151,7 @@ func loadEncodingTasks() {
 			Failed:   false,
 		}, "Encoding", "Ready", "Failed").
 		Order("id ASC").
+		Limit(10).
 		Find(&encodingQualitys)
 
 	if len(encodingQualitys) > 0 {
