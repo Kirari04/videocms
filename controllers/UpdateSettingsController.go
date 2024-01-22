@@ -74,6 +74,7 @@ func UpdateSettings(c echo.Context) error {
 	setting.FFmpegVp9Width = validation.FFmpegVp9Width
 	setting.FFmpegH264Height = validation.FFmpegH264Height
 	setting.FFmpegH264Width = validation.FFmpegH264Width
+	setting.PluginPgsServer = validation.PluginPgsServer
 	if res := inits.DB.Save(&setting); res.Error != nil {
 		log.Fatalln("Failed to save settings", res.Error)
 		return c.NoContent(http.StatusInternalServerError)
