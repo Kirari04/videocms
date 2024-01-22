@@ -706,7 +706,7 @@ func prepocessPgs(encodingTask models.Subtitle, absFolderOutput string, absFileI
 		"bash",
 		"-c",
 		ffmpegCommand)
-	if err := cmd.Start(); err != nil {
+	if err := cmd.Run(); err != nil {
 		log.Println(ffmpegCommand)
 		return fmt.Errorf("Error happend while encoding subtitle: %v", err.Error())
 	}
