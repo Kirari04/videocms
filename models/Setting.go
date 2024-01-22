@@ -68,4 +68,6 @@ type Setting struct {
 	FFmpegVp9Width   string `validate:"required,number,min=1"`
 	FFmpegH264Height string `validate:"required,number,min=1"`
 	FFmpegH264Width  string `validate:"required,number,min=1"`
+
+	PluginPgsServer string `validate:"required,http_url"`
 }

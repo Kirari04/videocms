@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/imroc/req/v3"
 	"gorm.io/gorm"
 )
 
@@ -359,7 +360,7 @@ func runEncodeQuality(encodingTask models.Quality) {
 		encodingTask.Encoding = false
 		encodingTask.Failed = true
 		inits.DB.Save(&encodingTask)
-		log.Printf("Error happend while encoding: %v", err.Error())
+		log.Printf("Error happend while encoding quality: %v", err.Error())
 		log.Println(ffmpegCommand)
 		return
 	}
@@ -471,7 +472,7 @@ func runEncodeAudio(encodingTask models.Audio) {
 		encodingTask.Encoding = false
 		encodingTask.Failed = true
 		inits.DB.Save(&encodingTask)
-		log.Printf("Error happend while encoding: %v", err.Error())
+		log.Printf("Error happend while encoding audio: %v", err.Error())
 		log.Println(ffmpegCommand)
 		return
 	}
@@ -502,33 +503,70 @@ func runEncodeSub(encodingTask models.Subtitle) {
 
 	var ffmpegCommand string = "echo Subencoding type didnt match && exit 1"
 
-	switch encodingTask.Type {
-	case "ass":
-		ffmpegCommand = "ffmpeg " +
-			fmt.Sprintf("-i %s ", absFileInput) + // input file
-			"-an " + // disable audio
-			"-vn " + // disable video stream
-			fmt.Sprintf("-map 0:s:%d ", encodingTask.Index) + // mapping first audio stream
-			fmt.Sprintf("-c:s %s ", encodingTask.Codec) + // setting audio codec
-			fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
-			fmt.Sprintf("-progress unix://%s -y", TempSock(
-				totalDuration,
-				fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
-				&encodingTask,
-			)) // progress tracking
-	case "vtt":
-		ffmpegCommand = "ffmpeg " +
-			fmt.Sprintf("-i %s ", absFileInput) + // input file
-			"-an " + // disable audio
-			"-vn " + // disable video stream
-			fmt.Sprintf("-map 0:s:%d ", encodingTask.Index) + // mapping first audio stream
-			fmt.Sprintf("-c:s %s ", encodingTask.Codec) + // setting audio codec
-			fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
-			fmt.Sprintf("-progress unix://%s -y", TempSock(
-				totalDuration,
-				fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
-				&encodingTask,
-			)) // progress tracking
+	if encodingTask.OriginalCodec == "hdmv_pgs_subtitle" {
+		// prepocess pgs
+		if err := prepocessPgs(encodingTask, absFolderOutput, &absFileInput); err != nil {
+			log.Printf("[Preprocess Error] %v", err)
+			encodingTask.Ready = false
+			encodingTask.Encoding = false
+			encodingTask.Failed = true
+			inits.DB.Save(&encodingTask)
+			return
+		}
+		defer os.Remove(absFileInput) // delete srt file after encode
+
+		switch encodingTask.Type {
+		case "ass":
+			ffmpegCommand = "ffmpeg " +
+				fmt.Sprintf("-i %s ", absFileInput) + // input file
+				fmt.Sprintf("-c:s %s ", encodingTask.Codec) + // setting audio codec
+				fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
+				fmt.Sprintf("-progress unix://%s -y", TempSock(
+					totalDuration,
+					fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
+					&encodingTask,
+				)) // progress tracking
+		case "vtt":
+			ffmpegCommand = "ffmpeg " +
+				fmt.Sprintf("-i %s ", absFileInput) + // input file
+				fmt.Sprintf("-c:s %s ", encodingTask.Codec) + // setting audio codec
+				fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
+				fmt.Sprintf("-progress unix://%s -y", TempSock(
+					totalDuration,
+					fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
+					&encodingTask,
+				)) // progress tracking
+		}
+	} else {
+		// normal subtitles
+		switch encodingTask.Type {
+		case "ass":
+			ffmpegCommand = "ffmpeg " +
+				fmt.Sprintf("-i %s ", absFileInput) + // input file
+				"-an " + // disable audio
+				"-vn " + // disable video stream
+				fmt.Sprintf("-map 0:s:%d ", encodingTask.Index) + // mapping first audio stream
+				fmt.Sprintf("-c:s %s ", encodingTask.Codec) + // setting audio codec
+				fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
+				fmt.Sprintf("-progress unix://%s -y", TempSock(
+					totalDuration,
+					fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
+					&encodingTask,
+				)) // progress tracking
+		case "vtt":
+			ffmpegCommand = "ffmpeg " +
+				fmt.Sprintf("-i %s ", absFileInput) + // input file
+				"-an " + // disable audio
+				"-vn " + // disable video stream
+				fmt.Sprintf("-map 0:s:%d ", encodingTask.Index) + // mapping first audio stream
+				fmt.Sprintf("-c:s %s ", encodingTask.Codec) + // setting audio codec
+				fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
+				fmt.Sprintf("-progress unix://%s -y", TempSock(
+					totalDuration,
+					fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
+					&encodingTask,
+				)) // progress tracking
+		}
 	}
 
 	cmd := exec.Command(
@@ -560,7 +598,7 @@ func runEncodeSub(encodingTask models.Subtitle) {
 		encodingTask.Encoding = false
 		encodingTask.Failed = true
 		inits.DB.Save(&encodingTask)
-		log.Printf("Error happend while encoding: %v", err.Error())
+		log.Printf("Error happend while encoding subtitle: %v", err.Error())
 		log.Println(ffmpegCommand)
 		return
 	}
@@ -642,4 +680,52 @@ func deleteActiveEncoding(fileID uint, ID uint, Type string) {
 	}
 
 	ActiveEncodings = helpers.RemoveFromArray(ActiveEncodings, foundIndex)
+}
+
+func prepocessPgs(encodingTask models.Subtitle, absFolderOutput string, absFileInput *string) error {
+
+	ffmpegOutputFile := fmt.Sprintf("%s.sup", encodingTask.OutputFile)
+	ffmpegOutputFilePath := fmt.Sprintf("%s/%s", absFolderOutput, ffmpegOutputFile)
+	pgsOutputFilePath := fmt.Sprintf("%s/%s.srt", absFolderOutput, encodingTask.OutputFile)
+	defer os.Remove(ffmpegOutputFilePath)
+
+	ffmpegCommand := "ffmpeg -y " +
+		fmt.Sprintf("-i %s ", *absFileInput) + // input file
+		"-an " + // disable audio
+		"-vn " + // disable video stream
+		fmt.Sprintf("-map 0:s:%d ", encodingTask.Index) + // mapping first audio stream
+		fmt.Sprintf("-c:s copy ") + // setting audio codec
+		ffmpegOutputFilePath // output file progress
+
+	// convert to srt
+	cmd := exec.Command(
+		"bash",
+		"-c",
+		ffmpegCommand)
+	if err := cmd.Start(); err != nil {
+		log.Println(ffmpegCommand)
+		return fmt.Errorf("Error happend while encoding subtitle: %v", err.Error())
+	}
+
+	pgsFile, err := os.Open(ffmpegOutputFilePath)
+	if err != nil {
+		return fmt.Errorf("Error happend while opening pgs subtitle: %v", err.Error())
+	}
+
+	client := req.C()
+	res, err := client.R().
+		SetFileReader("file", "subtitle.sup", pgsFile).
+		Post(config.ENV.PluginPgsServer)
+	if err != nil {
+		return fmt.Errorf("Error happend while scanning pgs subtitle: %v", err.Error())
+	}
+	if !res.IsSuccessState() {
+		return fmt.Errorf("Error happend waiting for srt from pgs plugin: %v", err.Error())
+
+	}
+	if err := os.WriteFile(pgsOutputFilePath, res.Bytes(), 0644); err != nil {
+		return fmt.Errorf("Error happend while saving srt from pgs: %v", err.Error())
+	}
+	*absFileInput = pgsOutputFilePath
+	return nil
 }

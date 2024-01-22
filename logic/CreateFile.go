@@ -100,9 +100,7 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 
 	//loop over subtitles in file
 	for _, streamInfo := range dataSubtitleStreams {
-		if streamInfo.CodecName != "hdmv_pgs_subtitle" {
-			subtitleStreams = append(subtitleStreams, streamInfo)
-		}
+		subtitleStreams = append(subtitleStreams, streamInfo)
 	}
 
 	//check if video stream exists
@@ -220,7 +218,6 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 		}
 
 		// log.Printf("subtitleName: %s / subtitleLang: %s", subtitleStream.Tags.Title, subtitleStream.Tags.Language)
-
 		for _, subOpt := range models.AvailableSubtitles {
 			// generate unique identifier for subtitle
 			subtitleId := uuid.NewString()
@@ -247,6 +244,7 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 				return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
 			}
 		}
+
 	}
 
 	// save audio data to database so they can be converted later

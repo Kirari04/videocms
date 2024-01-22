@@ -79,6 +79,8 @@ func Setup() {
 	config.ENV.FFmpegH264Height = getEnvDb_int64(&setting.FFmpegH264Height, 480)
 	config.ENV.FFmpegH264Width = getEnvDb_int64(&setting.FFmpegH264Width, 854)
 
+	config.ENV.PluginPgsServer = getEnvDb(&setting.PluginPgsServer, "http://127.0.0.1:5000")
+
 	// validate config before saving
 	validate := validator.New(validator.WithRequiredStructEnabled())
 	err := validate.Struct(&setting)

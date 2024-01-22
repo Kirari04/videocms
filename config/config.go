@@ -74,6 +74,8 @@ type Config struct {
 	FFmpegVp9Width   int64
 	FFmpegH264Height int64
 	FFmpegH264Width  int64
+
+	PluginPgsServer string
 }
 
 type PublicConfig struct {
