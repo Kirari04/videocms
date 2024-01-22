@@ -5,6 +5,7 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"log"
@@ -712,8 +713,12 @@ func prepocessPgs(encodingTask models.Subtitle, absFolderOutput string, absFileI
 		return fmt.Errorf("Error happend while opening pgs subtitle: %v", err.Error())
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	defer cancel()
+
 	client := req.C()
 	res, err := client.R().
+		SetContext(ctx).
 		SetFileReader("file", "subtitle.sup", pgsFile).
 		Post(config.ENV.PluginPgsServer)
 	if err != nil {
