@@ -78,17 +78,18 @@ func Server() {
 	}
 
 	app.IPExtractor = echo.ExtractIPFromXFFHeader(trustOptions...)
-	app.HTTPErrorHandler = func(err error, c echo.Context) {
+	app.HTTPErrorHandler = func(errors error, c echo.Context) {
 		code := http.StatusInternalServerError
-		if he, ok := err.(*echo.HTTPError); ok {
+		if he, ok := errors.(*echo.HTTPError); ok {
 			code = he.Code
 		}
-		c.Logger().Error(err)
+
 		if code == 404 {
 			if err := c.Render(code, "404.html", echo.Map{}); err != nil {
 				c.Logger().Error(err)
 			}
 		} else {
+			c.Logger().Error(errors)
 			c.NoContent(code)
 		}
 	}
