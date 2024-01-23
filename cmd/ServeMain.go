@@ -19,14 +19,14 @@ func ServeMain() {
 
 		services.ResetEncodingState()
 		go services.Encoder()
-
-		// start cleanup process
-		go services.EncoderCleanup()
-		go services.Deleter()
-
-		// start system resource tracker
-		go services.Resources()
 	}
+
+	// start cleanup process
+	go services.EncoderCleanup()
+	go services.Deleter()
+
+	// start system resource tracker
+	go services.Resources()
 
 	// for setting up the webserver
 	inits.Server()
