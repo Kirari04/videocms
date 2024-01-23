@@ -114,17 +114,19 @@ func loadEncodingTasks() {
 
 	// AUDIOS
 	var encodingAudios []models.Audio
-	inits.DB.
-		Model(&models.Audio{}).
-		Preload("File").
-		Where(&models.Audio{
-			Encoding: false,
-			Ready:    false,
-			Failed:   false,
-		}, "Encoding", "Ready", "Failed").
-		Order("id ASC").
-		Limit(10).
-		Find(&encodingAudios)
+	if len(encodingSubs) < 10 {
+		inits.DB.
+			Model(&models.Audio{}).
+			Preload("File").
+			Where(&models.Audio{
+				Encoding: false,
+				Ready:    false,
+				Failed:   false,
+			}, "Encoding", "Ready", "Failed").
+			Order("id ASC").
+			Limit(10).
+			Find(&encodingAudios)
+	}
 
 	if len(encodingAudios) > 0 {
 		log.Printf("Loaded %v audios to encode", len(encodingAudios))
@@ -142,17 +144,19 @@ func loadEncodingTasks() {
 
 	// QUALITYS
 	var encodingQualitys []models.Quality
-	inits.DB.
-		Model(&models.Quality{}).
-		Preload("File").
-		Where(&models.Quality{
-			Encoding: false,
-			Ready:    false,
-			Failed:   false,
-		}, "Encoding", "Ready", "Failed").
-		Order("id ASC").
-		Limit(10).
-		Find(&encodingQualitys)
+	if len(encodingSubs) < 10 && len(encodingAudios) < 10 {
+		inits.DB.
+			Model(&models.Quality{}).
+			Preload("File").
+			Where(&models.Quality{
+				Encoding: false,
+				Ready:    false,
+				Failed:   false,
+			}, "Encoding", "Ready", "Failed").
+			Order("id ASC").
+			Limit(10).
+			Find(&encodingQualitys)
+	}
 
 	if len(encodingQualitys) > 0 {
 		log.Printf("Loaded %v qualitys to encode", len(encodingQualitys))
