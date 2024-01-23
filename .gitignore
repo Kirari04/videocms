@@ -5,3 +5,4 @@
 videos/*
 build/cmd
 build/svelte
+__debug_bin*
