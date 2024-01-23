@@ -13,7 +13,7 @@ import (
 	"github.com/shirou/gopsutil/v3/net"
 )
 
-var resourcesInterval = time.Second * 1
+var resourcesInterval = time.Second * 10
 var netSent uint64 = 0
 var netRecv uint64 = 0
 
@@ -73,13 +73,45 @@ func Resources() {
 			printDiskRead = d[config.ENV.StatsDriveName].ReadBytes - diskRead
 			diskRead = d[config.ENV.StatsDriveName].ReadBytes
 		}
+
+		var printENCQualityQueue int64
+		if res := inits.DB.Model(&models.Quality{}).
+			Where(&models.Quality{
+				Ready:  false,
+				Failed: false,
+			}, "Ready", "Failed").
+			Count(&printENCQualityQueue); res.Error != nil {
+			log.Println("Failed to count printENCQualityQueue", res.Error)
+		}
+		var printENCAudioQueue int64
+		if res := inits.DB.Model(&models.Audio{}).
+			Where(&models.Audio{
+				Ready:  false,
+				Failed: false,
+			}, "Ready", "Failed").
+			Count(&printENCAudioQueue); res.Error != nil {
+			log.Println("Failed to count printENCAudioQueue", res.Error)
+		}
+		var printENCSubtitleQueue int64
+		if res := inits.DB.Model(&models.Subtitle{}).
+			Where(&models.Subtitle{
+				Ready:  false,
+				Failed: false,
+			}, "Ready", "Failed").
+			Count(&printENCSubtitleQueue); res.Error != nil {
+			log.Println("Failed to count printENCSubtitleQueue", res.Error)
+		}
+
 		if res := inits.DB.Create(&models.SystemResource{
-			Cpu:    printCpu,
-			Mem:    printRam,
-			NetOut: printNetSent / uint64(resourcesInterval.Seconds()),
-			NetIn:  printNetRecv / uint64(resourcesInterval.Seconds()),
-			DiskW:  printDiskWrite / uint64(resourcesInterval.Seconds()),
-			DiskR:  printDiskRead / uint64(resourcesInterval.Seconds()),
+			Cpu:              printCpu,
+			Mem:              printRam,
+			NetOut:           printNetSent / uint64(resourcesInterval.Seconds()),
+			NetIn:            printNetRecv / uint64(resourcesInterval.Seconds()),
+			DiskW:            printDiskWrite / uint64(resourcesInterval.Seconds()),
+			DiskR:            printDiskRead / uint64(resourcesInterval.Seconds()),
+			ENCQualityQueue:  printENCQualityQueue,
+			ENCAudioQueue:    printENCAudioQueue,
+			ENCSubtitleQueue: printENCSubtitleQueue,
 		}); res.Error != nil {
 			log.Println("Failed to save system resources", res.Error)
 		}

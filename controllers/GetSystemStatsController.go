@@ -12,13 +12,16 @@ import (
 )
 
 type StatItem struct {
-	CreatedAt time.Time
-	Cpu       float64
-	Mem       float64
-	NetOut    float64
-	NetIn     float64
-	DiskW     float64
-	DiskR     float64
+	CreatedAt        time.Time
+	Cpu              float64
+	Mem              float64
+	NetOut           float64
+	NetIn            float64
+	DiskW            float64
+	DiskR            float64
+	ENCQualityQueue  float64
+	ENCAudioQueue    float64
+	ENCSubtitleQueue float64
 }
 
 func GetSystemStats(c echo.Context) error {
@@ -58,6 +61,9 @@ func GetSystemStats(c echo.Context) error {
 				"AVG(net_in) as net_in",
 				"AVG(disk_w) as disk_w",
 				"AVG(disk_r) as disk_ru",
+				"AVG(enc_quality_queue) as enc_quality_queue",
+				"AVG(enc_audio_queue) as enc_audio_queue",
+				"AVG(enc_subtitle_queue) as enc_subtitle_queue",
 			).
 			Where("created_at > ?", from).
 			Where("created_at < ?", until).
@@ -67,13 +73,16 @@ func GetSystemStats(c echo.Context) error {
 			return c.NoContent(http.StatusInternalServerError)
 		}
 		response = append(response, StatItem{
-			CreatedAt: time.Now().Add(duration * time.Duration(amount-(i+1)) * -1),
-			Cpu:       resources.Cpu,
-			Mem:       resources.Mem,
-			NetOut:    resources.NetOut,
-			NetIn:     resources.NetIn,
-			DiskW:     resources.DiskW,
-			DiskR:     resources.DiskR,
+			CreatedAt:        time.Now().Add(duration * time.Duration(amount-(i+1)) * -1),
+			Cpu:              resources.Cpu,
+			Mem:              resources.Mem,
+			NetOut:           resources.NetOut,
+			NetIn:            resources.NetIn,
+			DiskW:            resources.DiskW,
+			DiskR:            resources.DiskR,
+			ENCQualityQueue:  resources.ENCQualityQueue,
+			ENCAudioQueue:    resources.ENCAudioQueue,
+			ENCSubtitleQueue: resources.ENCSubtitleQueue,
 		})
 	}
 
