@@ -34,7 +34,8 @@ func GetEncodingFiles(c echo.Context) error {
 		).
 		Where("links.user_id = ?", userId).
 		Joins("JOIN files ON files.id = links.file_id").
-		Joins("JOIN qualities ON files.id = qualities.file_id AND qualities.encoding = ? AND qualities.failed = ? AND qualities.ready = ?", true, false, false).
+		Joins("JOIN qualities ON files.id = qualities.file_id AND qualities.failed = ? AND qualities.ready = ?", false, false).
+		Order("files.id ASC").
 		Scan(&resQuality).Error; err != nil {
 		c.Logger().Error("Failed to list encoding files", err)
 		return c.NoContent(http.StatusInternalServerError)
@@ -51,7 +52,8 @@ func GetEncodingFiles(c echo.Context) error {
 		).
 		Where("links.user_id = ?", userId).
 		Joins("JOIN files ON files.id = links.file_id").
-		Joins("JOIN audios ON files.id = audios.file_id AND audios.encoding = ? AND audios.failed = ? AND audios.ready = ?", true, false, false).
+		Joins("JOIN audios ON files.id = audios.file_id AND audios.failed = ? AND audios.ready = ?", false, false).
+		Order("files.id ASC").
 		Scan(&resAudio).Error; err != nil {
 		c.Logger().Error("Failed to list encoding files", err)
 		return c.NoContent(http.StatusInternalServerError)
@@ -68,7 +70,8 @@ func GetEncodingFiles(c echo.Context) error {
 		).
 		Where("links.user_id = ?", userId).
 		Joins("JOIN files ON files.id = links.file_id").
-		Joins("JOIN subtitles ON files.id = subtitles.file_id AND subtitles.encoding = ? AND subtitles.failed = ? AND subtitles.ready = ?", true, false, false).
+		Joins("JOIN subtitles ON files.id = subtitles.file_id AND subtitles.failed = ? AND subtitles.ready = ?", false, false).
+		Order("files.id ASC").
 		Scan(&resSubtitle).Error; err != nil {
 		c.Logger().Error("Failed to list encoding files", err)
 		return c.NoContent(http.StatusInternalServerError)
