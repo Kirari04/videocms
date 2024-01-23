@@ -60,7 +60,8 @@ func ResetEncodingState() {
 		Where(&models.Quality{
 			Encoding: true,
 		}, "Encoding").
-		Updates(map[string]interface{}{"encoding": false}); res.Error != nil {
+		Or("progress > ?", 0).
+		Updates(map[string]interface{}{"encoding": false, "progress": 0}); res.Error != nil {
 		log.Println("Failed to reset encoding status on Quality", res.Error)
 	}
 
@@ -69,7 +70,8 @@ func ResetEncodingState() {
 		Where(&models.Audio{
 			Encoding: true,
 		}, "Encoding").
-		Updates(map[string]interface{}{"encoding": false}); res.Error != nil {
+		Or("progress > ?", 0).
+		Updates(map[string]interface{}{"encoding": false, "progress": 0}); res.Error != nil {
 		log.Println("Failed to reset encoding status on Audio", res.Error)
 	}
 
@@ -78,7 +80,8 @@ func ResetEncodingState() {
 		Where(&models.Subtitle{
 			Encoding: true,
 		}, "Encoding").
-		Updates(map[string]interface{}{"encoding": false}); res.Error != nil {
+		Or("progress > ?", 0).
+		Updates(map[string]interface{}{"encoding": false, "progress": 0}); res.Error != nil {
 		log.Println("Failed to reset encoding status on Subtitle", res.Error)
 	}
 }
