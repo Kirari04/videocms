@@ -52,7 +52,8 @@ func runDeleter() {
 	if len(todos) > 0 {
 		log.Printf("Queued %d file to delete", len(todos))
 	}
-
+	var skippingDeletion int
+	var successDeletion int
 	for _, todo := range todos {
 		/**
 		* check if all files qualities, subs & audios are not currently encoding because else there might be
@@ -84,6 +85,7 @@ func runDeleter() {
 			}
 
 			// we will try again in the next loop (the encoding process may be finished until then)
+			skippingDeletion++
 			continue
 		}
 
@@ -143,5 +145,12 @@ func runDeleter() {
 			log.Printf("Failed to delete File from database: %v", res.Error)
 			continue
 		}
+		successDeletion++
+	}
+	if skippingDeletion > 0 {
+		log.Printf("Skipped %d files from deletion", skippingDeletion)
+	}
+	if successDeletion > 0 {
+		log.Printf("Successfully deleted %d files", successDeletion)
 	}
 }
