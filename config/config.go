@@ -76,6 +76,8 @@ type Config struct {
 	FFmpegH264Width  int64
 
 	PluginPgsServer string
+
+	StatsDriveName string `validate:"required,min=1,max=255"`
 }
 
 type PublicConfig struct {
@@ -129,6 +131,7 @@ func Setup() {
 	ENV.FolderVideoQualitysPriv = getEnv("FolderVideoQualitysPriv", "./videos/qualitys")
 	ENV.FolderVideoQualitysPub = getEnv("FolderVideoQualitysPub", "/videos/qualitys")
 	ENV.FolderVideoUploadsPriv = getEnv("FolderVideoUploadsPriv", "./videos/uploads")
+	ENV.StatsDriveName = getEnv("StatsDriveName", "nvme0n1")
 }
 
 // getters

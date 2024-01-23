@@ -1,6 +1,7 @@
 package services
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
@@ -36,7 +37,7 @@ func Resources() {
 		v, _ := mem.VirtualMemory()
 		c, _ := cpu.Percent(time.Second*2, false)
 		n, _ := net.IOCounters(false)
-		d, _ := disk.IOCounters("nvme0n1")
+		d, _ := disk.IOCounters(config.ENV.StatsDriveName)
 
 		printCpu := c[0]
 		printRam := v.UsedPercent
@@ -59,18 +60,18 @@ func Resources() {
 
 		var printDiskWrite uint64 = 0
 		if diskWrite == 0 {
-			diskWrite = d["nvme0n1"].WriteBytes
+			diskWrite = d[config.ENV.StatsDriveName].WriteBytes
 		} else {
-			printDiskWrite = d["nvme0n1"].WriteBytes - diskWrite
-			diskWrite = d["nvme0n1"].WriteBytes
+			printDiskWrite = d[config.ENV.StatsDriveName].WriteBytes - diskWrite
+			diskWrite = d[config.ENV.StatsDriveName].WriteBytes
 		}
 
 		var printDiskRead uint64 = 0
 		if diskRead == 0 {
-			diskRead = d["nvme0n1"].ReadBytes
+			diskRead = d[config.ENV.StatsDriveName].ReadBytes
 		} else {
-			printDiskRead = d["nvme0n1"].ReadBytes - diskRead
-			diskRead = d["nvme0n1"].ReadBytes
+			printDiskRead = d[config.ENV.StatsDriveName].ReadBytes - diskRead
+			diskRead = d[config.ENV.StatsDriveName].ReadBytes
 		}
 		if res := inits.DB.Create(&models.SystemResource{
 			Cpu:    printCpu,
