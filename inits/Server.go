@@ -120,6 +120,7 @@ func Server() {
 		AllowOrigins:     []string{config.ENV.CorsAllowOrigins},
 		AllowHeaders:     []string{config.ENV.CorsAllowHeaders},
 		AllowCredentials: *config.ENV.CorsAllowCredentials,
+		MaxAge:           7200,
 	}))
 
 	// Logging
