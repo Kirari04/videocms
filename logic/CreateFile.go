@@ -68,8 +68,9 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 	// probe file
 	data, err := ffprobe.ProbeURL(ctx, *fromFile)
 	if err != nil {
-		log.Printf("Error getting data using ffprobe: %v", err)
-		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
+		// log.Printf("Error getting data using ffprobe: %v", err)
+		// return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
+		return http.StatusBadRequest, nil, false, errors.New("Invalid data found when processing video")
 	}
 	// proobe type
 	dataStreams := data.StreamType(ffprobe.StreamAny)
