@@ -55,29 +55,32 @@ func Encoder() {
 }
 
 func ResetEncodingState() {
-	inits.DB.
+	if res := inits.DB.
 		Model(&models.Quality{}).
-		Preload("File").
 		Where(&models.Quality{
 			Encoding: true,
 		}, "Encoding").
-		Updates(map[string]interface{}{"encoding": false})
+		Updates(map[string]interface{}{"encoding": false}); res.Error != nil {
+		log.Println("Failed to reset encoding status on Quality", res.Error)
+	}
 
-	inits.DB.
+	if res := inits.DB.
 		Model(&models.Audio{}).
-		Preload("File").
 		Where(&models.Audio{
 			Encoding: true,
 		}, "Encoding").
-		Updates(map[string]interface{}{"encoding": false})
+		Updates(map[string]interface{}{"encoding": false}); res.Error != nil {
+		log.Println("Failed to reset encoding status on Audio", res.Error)
+	}
 
-	inits.DB.
+	if res := inits.DB.
 		Model(&models.Subtitle{}).
-		Preload("File").
 		Where(&models.Subtitle{
 			Encoding: true,
 		}, "Encoding").
-		Updates(map[string]interface{}{"encoding": false})
+		Updates(map[string]interface{}{"encoding": false}); res.Error != nil {
+		log.Println("Failed to reset encoding status on Subtitle", res.Error)
+	}
 }
 
 func loadEncodingTasks() {
