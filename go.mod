@@ -8,15 +8,17 @@ require (
 	github.com/dpapathanasiou/go-recaptcha v0.0.0-20190121160230-be5090b17804
 	github.com/go-playground/validator/v10 v10.16.0
 	github.com/golang-jwt/jwt/v5 v5.2.0
+	github.com/imroc/req/v3 v3.42.3
 	github.com/labstack/echo/v4 v4.11.4
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/thanhpk/randstr v1.0.6
 	github.com/thatisuday/commando v1.0.4
+	golang.org/x/net v0.20.0
 	golang.org/x/term v0.16.0
 	golang.org/x/time v0.5.0
 	gopkg.in/vansante/go-ffprobe.v2 v2.1.1
 	gorm.io/driver/sqlite v1.5.4
-	gorm.io/gorm v1.25.5
+	gorm.io/gorm v1.25.6
 )
 
 require (
@@ -30,7 +32,6 @@ require (
 	github.com/google/pprof v0.0.0-20240117000934-35fc243c5815 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/imroc/req/v3 v3.42.3 // indirect
 	github.com/klauspost/compress v1.17.4 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
@@ -38,7 +39,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
-	github.com/quic-go/qtls-go1-20 v0.4.1 // indirect
 	github.com/quic-go/quic-go v0.41.0 // indirect
 	github.com/refraction-networking/utls v1.6.1 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
@@ -50,7 +50,6 @@ require (
 	go.uber.org/mock v0.4.0 // indirect
 	golang.org/x/exp v0.0.0-20240119083558-1b970713d09a // indirect
 	golang.org/x/mod v0.14.0 // indirect
-	golang.org/x/net v0.20.0 // indirect
 	golang.org/x/tools v0.17.0 // indirect
 )
 
