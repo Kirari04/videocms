@@ -18,7 +18,7 @@ require (
 	golang.org/x/time v0.5.0
 	gopkg.in/vansante/go-ffprobe.v2 v2.1.1
 	gorm.io/driver/sqlite v1.5.4
-	gorm.io/gorm v1.25.6
+	gorm.io/gorm v1.25.7
 )
 
 require (
