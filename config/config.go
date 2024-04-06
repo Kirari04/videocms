@@ -14,6 +14,7 @@ type Config struct {
 	Project              string
 	ProjectDocumentation string
 	ProjectDownload      string
+	ProjectExampleVideo  string
 
 	JwtSecretKey       string
 	JwtUploadSecretKey string

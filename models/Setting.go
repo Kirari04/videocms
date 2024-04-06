@@ -12,6 +12,7 @@ type Setting struct {
 	Project              string `validate:"required,min=1,max=512" gorm:"size:512;"`
 	ProjectDocumentation string `validate:"required,min=1,max=512" gorm:"size:512;"`
 	ProjectDownload      string `validate:"required,min=1,max=512" gorm:"size:512;"`
+	ProjectExampleVideo  string `validate:"required,min=1,max=512" gorm:"size:512;"`
 
 	JwtSecretKey       string `validate:"required,min=8,max=512" gorm:"size:512;"`
 	JwtUploadSecretKey string `validate:"required,min=8,max=512" gorm:"size:512;"`

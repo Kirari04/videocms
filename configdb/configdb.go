@@ -22,6 +22,7 @@ func Setup() {
 	config.ENV.Project = getEnvDb(&setting.Project, "https://github.com/notfound")
 	config.ENV.ProjectDocumentation = getEnvDb(&setting.ProjectDocumentation, "https://github.com/notfound")
 	config.ENV.ProjectDownload = getEnvDb(&setting.ProjectDownload, "https://github.com/notfound")
+	config.ENV.ProjectExampleVideo = getEnvDb(&setting.ProjectExampleVideo, "notfound")
 
 	config.ENV.JwtSecretKey = getEnvDb(&setting.JwtSecretKey, "secretkey")
 	config.ENV.JwtUploadSecretKey = getEnvDb(&setting.JwtUploadSecretKey, "secretkeyupload")
