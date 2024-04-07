@@ -1,3 +1,12 @@
+FROM golang:latest AS stage
+
+WORKDIR /build
+
+COPY . .
+RUN go mod tidy
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-linkmode external -extldflags -static" -a -installsuffix cgo -o main_linux_amd64.bin main.go
+RUN sha256sum main_linux_amd64.bin > main_linux_amd64.bin.sha256sum
+
 FROM alpine:3.14
 
 WORKDIR /app
@@ -6,24 +15,16 @@ VOLUME /app/public
 VOLUME /app/database
 
 RUN apk add --no-cache ffmpeg bash
-
-COPY ./build/cmd/main_linux_amd64.bin ./
+COPY --from=stage ./build/main_linux_amd64.bin ./
 RUN mv ./main_linux_amd64.bin ./main.bin
-
 COPY ./views ./views/
 COPY ./public ./public/
 
-ENV AppName=VideoCMS
 ENV Host=:3000
-ENV JwtSecretKey=secretkey
-ENV EncodingEnabled=true
-ENV UploadEnabled=true
-ENV RatelimitEnabled=false
-ENV CloudflareEnabled=false
-ENV MaxItemsMultiDelete=1000
-ENV MaxRunningEncodes=1
-ENV MaxRunningEncodes_sub=1
-ENV MaxRunningEncodes_audio=1
+ENV FolderVideoQualitysPriv=./videos/qualitys
+ENV FolderVideoQualitysPub=/videos/qualitys
+ENV FolderVideoUploadsPriv=./videos/uploads
+ENV StatsDriveName=nvme0n1
 
 EXPOSE 3000
 
