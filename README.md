@@ -4,7 +4,7 @@ This project is a cms for hosting your videos.
 
 ## Questions & Feature Requests
 
-You can ask project related questions & feature requests on <a href="https://discord.gg/PKfSxwV6" target="_blank"> Discord </a>.
+You can ask project related questions & feature requests on <a href="https://discord.gg/pHcstaPThK" target="_blank"> Discord </a>.
 
 ## Api-Doc
 
