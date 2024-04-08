@@ -56,11 +56,11 @@ func CreateFile(c echo.Context) error {
 
 	// business logic
 	status, dbLink, cloned, err := logic.CreateFile(&filePath, fileValidation.ParentFolderID, file.Filename, fileId, file.Size, c.Get("UserID").(uint))
-	if err != nil {
-		return c.String(status, err.Error())
-	}
 	if err != nil || cloned {
 		os.Remove(filePath)
+	}
+	if err != nil {
+		return c.String(status, err.Error())
 	}
 
 	return c.JSON(status, dbLink)
