@@ -10,5 +10,5 @@ type Tag struct {
 
 type TagCreateValidation struct {
 	Name   string `validate:"required,min=1,max=120"`
-	FileId uint   `validate:"required,number"`
+	FileID uint   `validate:"required,number"`
 }
