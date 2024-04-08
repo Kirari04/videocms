@@ -9,6 +9,6 @@ type Tag struct {
 }
 
 type TagCreateValidation struct {
-	Name   string `validate:"required,min=1,max=120"`
-	FileID uint   `validate:"required,number"`
+	Name   string `validate:"required,min=1,max=120" json:"Name" form:"Name"`
+	FileID uint   `validate:"required,number" json:"FileID" form:"FileID"`
 }
