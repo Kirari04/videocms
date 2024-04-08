@@ -10,7 +10,7 @@ type Link struct {
 	UserID         uint    `json:"-"`
 	ParentFolder   *Folder `json:"-"`
 	ParentFolderID uint
-	Tags           []Tag `gorm:"many2many:links_tags;"`
+	Tags           []*Tag `gorm:"many2many:tag_links;"`
 }
 
 type LinkListValidation struct {

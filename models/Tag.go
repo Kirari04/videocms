@@ -1,11 +1,24 @@
 package models
 
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
+
 type Tag struct {
 	Model
-	Name   string `gorm:"size:128;"`
-	Links  []Link `gorm:"many2many:links_tags;"`
-	UserId uint   `gorm:"index"`
-	User   User
+	Name   string  `gorm:"size:128;"`
+	UserId uint    `gorm:"index" json:"-"`
+	User   User    `json:"-"`
+	Links  []*Link `gorm:"many2many:tag_links;" json:"-"`
+}
+
+type TagLinks struct {
+	LinkID    uint `gorm:"primaryKey"`
+	TagID     uint `gorm:"primaryKey"`
+	CreatedAt time.Time
+	DeletedAt gorm.DeletedAt
 }
 
 type TagCreateValidation struct {

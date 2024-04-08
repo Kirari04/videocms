@@ -24,6 +24,7 @@ func Models() {
 	mustRun(DB.AutoMigrate(&models.Setting{}))
 	mustRun(DB.AutoMigrate(&models.SystemResource{}))
 	mustRun(DB.AutoMigrate(&models.Tag{}))
+	mustRun(DB.AutoMigrate(&models.TagLinks{}))
 }
 
 func mustRun(err error) {
