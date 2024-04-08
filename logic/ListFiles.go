@@ -25,6 +25,7 @@ func ListFiles(fromFolder uint, userId uint) (status int, response *[]models.Lin
 		Model(&models.Link{}).
 		Preload("User").
 		Preload("File").
+		Preload("Tags").
 		Where(&models.Link{
 			ParentFolderID: fromFolder,
 			UserID:         userId,
