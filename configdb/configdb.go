@@ -27,8 +27,6 @@ func Setup() {
 	config.ENV.JwtSecretKey = getEnvDb(&setting.JwtSecretKey, "secretkey")
 	config.ENV.JwtUploadSecretKey = getEnvDb(&setting.JwtUploadSecretKey, "secretkeyupload")
 
-	config.ENV.CookieDomain = getEnvDb(&setting.CookieDomain, "secretkey")
-
 	config.ENV.ReloadHtml = getEnvDb_bool(&setting.ReloadHtml, boolPtr(false))
 	config.ENV.EncodingEnabled = getEnvDb_bool(&setting.EncodingEnabled, boolPtr(true))
 	config.ENV.UploadEnabled = getEnvDb_bool(&setting.UploadEnabled, boolPtr(true))

@@ -19,8 +19,6 @@ type Config struct {
 	JwtSecretKey       string
 	JwtUploadSecretKey string
 
-	CookieDomain string
-
 	ReloadHtml        *bool
 	EncodingEnabled   *bool
 	UploadEnabled     *bool

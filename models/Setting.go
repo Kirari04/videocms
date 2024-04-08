@@ -17,8 +17,6 @@ type Setting struct {
 	JwtSecretKey       string `validate:"required,min=8,max=512" gorm:"size:512;"`
 	JwtUploadSecretKey string `validate:"required,min=8,max=512" gorm:"size:512;"`
 
-	CookieDomain string `validate:"required,min=8,max=225" gorm:"size:225;"`
-
 	ReloadHtml        string `validate:"required,boolean"`
 	EncodingEnabled   string `validate:"required,boolean"`
 	UploadEnabled     string `validate:"required,boolean"`

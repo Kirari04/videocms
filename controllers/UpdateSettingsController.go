@@ -32,7 +32,6 @@ func UpdateSettings(c echo.Context) error {
 	setting.ProjectExampleVideo = validation.ProjectExampleVideo
 	setting.JwtSecretKey = validation.JwtSecretKey
 	setting.JwtUploadSecretKey = validation.JwtUploadSecretKey
-	setting.CookieDomain = validation.CookieDomain
 	setting.ReloadHtml = validation.ReloadHtml
 	setting.EncodingEnabled = validation.EncodingEnabled
 	setting.UploadEnabled = validation.UploadEnabled
