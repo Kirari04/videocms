@@ -27,6 +27,6 @@ type TagCreateValidation struct {
 }
 
 type TagDeleteValidation struct {
-	TagID  uint `validate:"required,number" json:"TagID" form:"TagID"`
+	TagId  uint `validate:"required,number" json:"TagId" form:"TagId"`
 	LinkId uint `validate:"required,number" json:"LinkId" form:"LinkId"`
 }

@@ -15,7 +15,7 @@ func DeleteTagController(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	status, err := logic.DeleteTag(validator.TagID, validator.LinkId, c.Get("UserID").(uint))
+	status, err := logic.DeleteTag(validator.TagId, validator.LinkId, c.Get("UserID").(uint))
 
 	if err != nil {
 		return c.String(status, err.Error())
