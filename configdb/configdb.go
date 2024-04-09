@@ -71,13 +71,6 @@ func Setup() {
 	config.ENV.FFmpegVp9Crf = getEnvDb_int(&setting.FFmpegVp9Crf, 30)
 	config.ENV.FFmpegH264Crf = getEnvDb_int(&setting.FFmpegH264Crf, 30)
 
-	config.ENV.FFmpegAv1Height = getEnvDb_int64(&setting.FFmpegAv1Height, 480)
-	config.ENV.FFmpegAv1Width = getEnvDb_int64(&setting.FFmpegAv1Width, 854)
-	config.ENV.FFmpegVp9Height = getEnvDb_int64(&setting.FFmpegVp9Height, 480)
-	config.ENV.FFmpegVp9Width = getEnvDb_int64(&setting.FFmpegVp9Width, 854)
-	config.ENV.FFmpegH264Height = getEnvDb_int64(&setting.FFmpegH264Height, 480)
-	config.ENV.FFmpegH264Width = getEnvDb_int64(&setting.FFmpegH264Width, 854)
-
 	config.ENV.PluginPgsServer = getEnvDb(&setting.PluginPgsServer, "http://127.0.0.1:5000")
 
 	// validate config before saving
@@ -167,43 +160,6 @@ func Setup() {
 			Muted:      true,
 			OutputFile: "out.m3u8",
 			Enabled:    *config.ENV.EncodeHls2160p,
-		},
-		// downloads
-		{
-			Name:       "av1",
-			FolderName: "av1",
-			Height:     config.ENV.FFmpegAv1Height,
-			Width:      config.ENV.FFmpegAv1Width,
-			Crf:        config.ENV.FFmpegAv1Crf,
-			Type:       "av1",
-			Muted:      false,
-			AudioCodec: config.ENV.FFmpegAv1AudioCodec,
-			OutputFile: "out.mp4",
-			Enabled:    *config.ENV.EncodeAv1,
-		},
-		{
-			Name:       "vp9",
-			FolderName: "vp9",
-			Height:     config.ENV.FFmpegVp9Height,
-			Width:      config.ENV.FFmpegVp9Width,
-			Crf:        config.ENV.FFmpegVp9Crf,
-			Type:       "vp9",
-			Muted:      false,
-			AudioCodec: config.ENV.FFmpegVp9AudioCodec,
-			OutputFile: "out.webm",
-			Enabled:    *config.ENV.EncodeVp9,
-		},
-		{
-			Name:       "h264",
-			FolderName: "h264",
-			Height:     config.ENV.FFmpegH264Height,
-			Width:      config.ENV.FFmpegH264Width,
-			Crf:        config.ENV.FFmpegH264Crf,
-			Type:       "h264",
-			Muted:      false,
-			AudioCodec: config.ENV.FFmpegH264AudioCodec,
-			OutputFile: "out.mp4",
-			Enabled:    *config.ENV.EncodeH264,
 		},
 	}
 }

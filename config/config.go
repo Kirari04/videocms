@@ -67,13 +67,6 @@ type Config struct {
 	FFmpegVp9Crf  int
 	FFmpegH264Crf int
 
-	FFmpegAv1Height  int64
-	FFmpegAv1Width   int64
-	FFmpegVp9Height  int64
-	FFmpegVp9Width   int64
-	FFmpegH264Height int64
-	FFmpegH264Width  int64
-
 	PluginPgsServer string
 
 	StatsDriveName string `validate:"required,min=1,max=255"`

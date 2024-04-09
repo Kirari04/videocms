@@ -61,12 +61,5 @@ type Setting struct {
 	FFmpegVp9Crf  string `validate:"required,number,min=1,max=50"`
 	FFmpegH264Crf string `validate:"required,number,min=1,max=50"`
 
-	FFmpegAv1Height  string `validate:"required,number,min=1"`
-	FFmpegAv1Width   string `validate:"required,number,min=1"`
-	FFmpegVp9Height  string `validate:"required,number,min=1"`
-	FFmpegVp9Width   string `validate:"required,number,min=1"`
-	FFmpegH264Height string `validate:"required,number,min=1"`
-	FFmpegH264Width  string `validate:"required,number,min=1"`
-
 	PluginPgsServer string `validate:"required"`
 }
