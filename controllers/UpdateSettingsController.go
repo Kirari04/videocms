@@ -68,12 +68,6 @@ func UpdateSettings(c echo.Context) error {
 	setting.FFmpegAv1Crf = validation.FFmpegAv1Crf
 	setting.FFmpegVp9Crf = validation.FFmpegVp9Crf
 	setting.FFmpegH264Crf = validation.FFmpegH264Crf
-	setting.FFmpegAv1Height = validation.FFmpegAv1Height
-	setting.FFmpegAv1Width = validation.FFmpegAv1Width
-	setting.FFmpegVp9Height = validation.FFmpegVp9Height
-	setting.FFmpegVp9Width = validation.FFmpegVp9Width
-	setting.FFmpegH264Height = validation.FFmpegH264Height
-	setting.FFmpegH264Width = validation.FFmpegH264Width
 	setting.PluginPgsServer = validation.PluginPgsServer
 	if res := inits.DB.Save(&setting); res.Error != nil {
 		log.Fatalln("Failed to save settings", res.Error)

@@ -25,3 +25,8 @@ type TagCreateValidation struct {
 	Name   string `validate:"required,min=1,max=120" json:"Name" form:"Name"`
 	FileID uint   `validate:"required,number" json:"FileID" form:"FileID"`
 }
+
+type TagDeleteValidation struct {
+	TagID  uint `validate:"required,number" json:"TagID" form:"TagID"`
+	FileID uint `validate:"required,number" json:"FileID" form:"FileID"`
+}

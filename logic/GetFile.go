@@ -34,6 +34,10 @@ type GetFileRespAudio struct {
 	Lang  string
 	Ready bool
 }
+type GetFileRespTag struct {
+	ID   uint
+	Name string
+}
 type GetFileResp struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
@@ -47,6 +51,7 @@ type GetFileResp struct {
 	Qualitys       []GetFileRespQuali
 	Subtitles      []GetFileRespSub
 	Audios         []GetFileRespAudio
+	Tags           []GetFileRespTag
 }
 
 func GetFile(LinkID uint, userID uint) (status int, fileData *GetFileResp, err error) {
@@ -56,6 +61,7 @@ func GetFile(LinkID uint, userID uint) (status int, fileData *GetFileResp, err e
 	if res := inits.DB.
 		Model(&models.Link{}).
 		Preload("User").
+		Preload("Tags").
 		Preload("File").
 		Preload("File.Qualitys").
 		Preload("File.Subtitles").
@@ -67,7 +73,7 @@ func GetFile(LinkID uint, userID uint) (status int, fileData *GetFileResp, err e
 		return http.StatusNotFound, nil, echo.ErrNotFound
 	}
 
-	var Qualitys []GetFileRespQuali
+	Qualitys := make([]GetFileRespQuali, 0)
 	for _, Quality := range link.File.Qualitys {
 		avgFps := Quality.AvgFrameRate
 		if avgFps == 0 {
@@ -86,7 +92,7 @@ func GetFile(LinkID uint, userID uint) (status int, fileData *GetFileResp, err e
 		})
 	}
 
-	var Subtitles []GetFileRespSub
+	Subtitles := make([]GetFileRespSub, 0)
 	for _, Subtitle := range link.File.Subtitles {
 		Subtitles = append(Subtitles, GetFileRespSub{
 			Name:  Subtitle.Name,
@@ -96,13 +102,21 @@ func GetFile(LinkID uint, userID uint) (status int, fileData *GetFileResp, err e
 		})
 	}
 
-	var Audios []GetFileRespAudio
+	Audios := make([]GetFileRespAudio, 0)
 	for _, Audio := range link.File.Audios {
 		Audios = append(Audios, GetFileRespAudio{
 			Name:  Audio.Name,
 			Lang:  Audio.Lang,
 			Type:  Audio.Type,
 			Ready: Audio.Ready,
+		})
+	}
+
+	Tags := make([]GetFileRespTag, 0)
+	for _, Tag := range link.Tags {
+		Tags = append(Tags, GetFileRespTag{
+			ID:   Tag.ID,
+			Name: Tag.Name,
 		})
 	}
 
@@ -119,6 +133,7 @@ func GetFile(LinkID uint, userID uint) (status int, fileData *GetFileResp, err e
 		Qualitys:       Qualitys,
 		Subtitles:      Subtitles,
 		Audios:         Audios,
+		Tags:           Tags,
 	}
 
 	return http.StatusOK, &response, nil

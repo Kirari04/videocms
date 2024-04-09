@@ -53,6 +53,7 @@ func Api() {
 	protectedApi.GET("/files", controllers.ListFiles)
 	protectedApi.DELETE("/files", controllers.DeleteFilesController)
 	protectedApi.POST("/file/tag", controllers.CreateTagController)
+	protectedApi.DELETE("/file/tag", controllers.DeleteTagController)
 
 	protectedApi.GET("/account", controllers.GetAccount)
 	protectedApi.GET("/account/settings", controllers.GetUserSettingsController)
