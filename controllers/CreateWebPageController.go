@@ -4,6 +4,7 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -26,6 +27,10 @@ func CreateWebPage(c echo.Context) error {
 	}
 	if existing > 0 {
 		return c.String(http.StatusBadRequest, "Path already used")
+	}
+
+	if validatus.Path[len(validatus.Path)-1] != '/' {
+		validatus.Path = fmt.Sprintf("%s/", validatus.Path)
 	}
 
 	webPage := models.WebPage{
