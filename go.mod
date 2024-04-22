@@ -8,7 +8,7 @@ require (
 	github.com/dpapathanasiou/go-recaptcha v0.0.0-20190121160230-be5090b17804
 	github.com/go-playground/validator/v10 v10.19.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
-	github.com/imroc/req/v3 v3.43.1
+	github.com/imroc/req/v3 v3.43.3
 	github.com/labstack/echo/v4 v4.11.4
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/thanhpk/randstr v1.0.6
