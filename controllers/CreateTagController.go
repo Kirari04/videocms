@@ -15,7 +15,7 @@ func CreateTagController(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	status, dbTag, err := logic.CreateTag(validator.Name, validator.FileID, c.Get("UserID").(uint))
+	status, dbTag, err := logic.CreateTag(validator.Name, validator.LinkId, c.Get("UserID").(uint))
 
 	if err != nil {
 		return c.String(status, err.Error())

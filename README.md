@@ -2,6 +2,8 @@
 
 This project is a cms for hosting your videos.
 
+## Documentation
+
 Follow the documentation to setup VideoCMS: [https://videocms-docs.vercel.app/](https://videocms-docs.vercel.app/)
 
 ## Screenshots
