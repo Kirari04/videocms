@@ -67,7 +67,7 @@ func PlayerController(c echo.Context) error {
 				"height": strconv.Itoa(int(qualiItem.Height)),
 				"width":  strconv.Itoa(int(qualiItem.Width)),
 			})
-			streamUrl = fmt.Sprintf("%s/%s/%s/download/video.mkv?stream=1&jwt=%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name, tkn)
+			streamUrl = fmt.Sprintf("%s/%s/%s/%s/1/stream/video.mp4", config.ENV.FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name, tkn)
 			streamUrlHeight = strconv.Itoa(int(qualiItem.Height))
 			streamUrlWidth = strconv.Itoa(int(qualiItem.Width))
 		}
@@ -159,5 +159,6 @@ func PlayerController(c echo.Context) error {
 		"Folder":          config.ENV.FolderVideoQualitysPub,
 		"JWT":             tkn,
 		"AppName":         config.ENV.AppName,
+		"BaseUrl":         config.ENV.BaseUrl,
 	})
 }

@@ -10,6 +10,7 @@ type Config struct {
 	Host string `validate:"required,min=1,max=120"`
 
 	AppName string
+	BaseUrl string
 
 	Project              string
 	ProjectDocumentation string
@@ -74,6 +75,7 @@ type Config struct {
 
 type PublicConfig struct {
 	AppName         string
+	BaseUrl         string
 	Project         string
 	EncodingEnabled bool
 	UploadEnabled   bool
@@ -93,6 +95,7 @@ type PublicConfig struct {
 func (c Config) PublicConfig() PublicConfig {
 	return PublicConfig{
 		AppName:         c.AppName,
+		BaseUrl:         c.BaseUrl,
 		Project:         c.Project,
 		EncodingEnabled: *c.EncodingEnabled,
 		UploadEnabled:   *c.UploadEnabled,

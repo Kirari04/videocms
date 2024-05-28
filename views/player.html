@@ -17,8 +17,8 @@
     <meta name="twitter:image" content="{{ .Thumbnail}}" />
     <meta property="og:type" content="video">
     <meta property="og:url" content="/v/{{.UUID}}">
-    <meta property="og:video" content="{{.StreamUrl}}">
-    <meta property="og:video:secure_url" content="{{.StreamUrl}}">
+    <meta property="og:video" content="{{.BaseUrl}}{{.StreamUrl}}">
+    <meta property="og:video:secure_url" content="{{.BaseUrl}}{{.StreamUrl}}">
     <meta property="og:video:width" content="{{.StreamUrlWidth}}">
     <meta property="og:video:height" content="{{.StreamUrlHeight}}">
     <meta property="og:site_name" content="{{.AppName}}">

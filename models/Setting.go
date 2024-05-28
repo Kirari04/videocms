@@ -8,6 +8,7 @@ type SettingValidation struct {
 type Setting struct {
 	Model
 	AppName string `validate:"required,min=1,max=120" gorm:"size:120;"`
+	BaseUrl string `validate:"required,min=1,max=255" gorm:"size:255;"`
 
 	Project              string `validate:"required,min=1,max=512" gorm:"size:512;"`
 	ProjectDocumentation string `validate:"required,min=1,max=512" gorm:"size:512;"`

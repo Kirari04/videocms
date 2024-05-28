@@ -26,6 +26,7 @@ func UpdateSettings(c echo.Context) error {
 	var setting models.Setting
 	setting.ID = validation.ID
 	setting.AppName = validation.AppName
+	setting.BaseUrl = validation.BaseUrl
 	setting.Project = validation.Project
 	setting.ProjectDocumentation = validation.ProjectDocumentation
 	setting.ProjectDownload = validation.ProjectDownload

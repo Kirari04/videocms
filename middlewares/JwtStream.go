@@ -16,7 +16,10 @@ func JwtStream() echo.MiddlewareFunc {
 			}
 			tknStr := c.QueryParam("jwt")
 			if tknStr == "" {
-				return c.String(http.StatusBadRequest, "UUID parameter match issue")
+				tknStr = c.Param("JWT")
+				if tknStr == "" {
+					return c.String(http.StatusBadRequest, "UUID parameter match issue")
+				}
 			}
 			token, claims, err := auth.VerifyJWTStream(tknStr)
 			if err != nil {
