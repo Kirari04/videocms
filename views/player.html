@@ -19,8 +19,8 @@
     <meta property="og:url" content="/v/{{.UUID}}">
     <meta property="og:video" content="{{.StreamUrl}}">
     <meta property="og:video:secure_url" content="{{.StreamUrl}}">
-    <meta property="og:video:width" content="1920">
-    <meta property="og:video:height" content="1080">
+    <meta property="og:video:width" content="{{.StreamUrlWidth}}">
+    <meta property="og:video:height" content="{{.StreamUrlHeight}}">
     <meta property="og:site_name" content="{{.AppName}}">
     <title>{{ .Title }}</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />

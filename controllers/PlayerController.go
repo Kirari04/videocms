@@ -56,6 +56,8 @@ func PlayerController(c echo.Context) error {
 	var streamIsReady bool
 	var jsonQualitys []map[string]string
 	streamUrl := ""
+	streamUrlWidth := ""
+	streamUrlHeight := ""
 	for _, qualiItem := range dbLink.File.Qualitys {
 		if qualiItem.Ready {
 			streamIsReady = true
@@ -66,6 +68,8 @@ func PlayerController(c echo.Context) error {
 				"width":  strconv.Itoa(int(qualiItem.Width)),
 			})
 			streamUrl = fmt.Sprintf("%s/%s/%s/download/video.mkv?stream=1&jwt=%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name, tkn)
+			streamUrlHeight = strconv.Itoa(int(qualiItem.Height))
+			streamUrlWidth = strconv.Itoa(int(qualiItem.Width))
 		}
 	}
 	rawQuality, _ := json.Marshal(jsonQualitys)
@@ -136,22 +140,24 @@ func PlayerController(c echo.Context) error {
 	// 	HTTPOnly: true,
 	// })
 	return c.Render(http.StatusOK, "player.html", echo.Map{
-		"Title":         fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
-		"Description":   fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),
-		"Thumbnail":     fmt.Sprintf("%s/%s/image/thumb/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, dbLink.File.Thumbnail),
-		"StreamUrl":     template.HTML(streamUrl),
-		"Width":         dbLink.File.Width,
-		"Height":        dbLink.File.Height,
-		"Qualitys":      string(rawQuality),
-		"Subtitles":     string(rawSubtitles),
-		"Audios":        string(rawAudios),
-		"AudioUUID":     firstAudio,
-		"Webhooks":      string(rawWebhooks),
-		"StreamIsReady": streamIsReady,
-		"UUID":          requestValidation.UUID,
-		"PROJECTURL":    config.ENV.Project,
-		"Folder":        config.ENV.FolderVideoQualitysPub,
-		"JWT":           tkn,
-		"AppName":       config.ENV.AppName,
+		"Title":           fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
+		"Description":     fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),
+		"Thumbnail":       fmt.Sprintf("%s/%s/image/thumb/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, dbLink.File.Thumbnail),
+		"StreamUrl":       template.HTML(streamUrl),
+		"StreamUrlWidth":  streamUrlWidth,
+		"StreamUrlHeight": streamUrlHeight,
+		"Width":           dbLink.File.Width,
+		"Height":          dbLink.File.Height,
+		"Qualitys":        string(rawQuality),
+		"Subtitles":       string(rawSubtitles),
+		"Audios":          string(rawAudios),
+		"AudioUUID":       firstAudio,
+		"Webhooks":        string(rawWebhooks),
+		"StreamIsReady":   streamIsReady,
+		"UUID":            requestValidation.UUID,
+		"PROJECTURL":      config.ENV.Project,
+		"Folder":          config.ENV.FolderVideoQualitysPub,
+		"JWT":             tkn,
+		"AppName":         config.ENV.AppName,
 	})
 }
