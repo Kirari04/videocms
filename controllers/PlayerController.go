@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -54,6 +55,7 @@ func PlayerController(c echo.Context) error {
 	// List qualitys non hls & check if has some file is ready
 	var streamIsReady bool
 	var jsonQualitys []map[string]string
+	streamUrl := ""
 	for _, qualiItem := range dbLink.File.Qualitys {
 		if qualiItem.Ready {
 			streamIsReady = true
@@ -63,7 +65,7 @@ func PlayerController(c echo.Context) error {
 				"height": strconv.Itoa(int(qualiItem.Height)),
 				"width":  strconv.Itoa(int(qualiItem.Width)),
 			})
-
+			streamUrl = fmt.Sprintf("%s/%s/%s/download/video.mkv?stream=1&jwt=%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name, tkn)
 		}
 	}
 	rawQuality, _ := json.Marshal(jsonQualitys)
@@ -137,6 +139,7 @@ func PlayerController(c echo.Context) error {
 		"Title":         fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
 		"Description":   fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),
 		"Thumbnail":     fmt.Sprintf("%s/%s/image/thumb/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, dbLink.File.Thumbnail),
+		"StreamUrl":     template.HTML(streamUrl),
 		"Width":         dbLink.File.Width,
 		"Height":        dbLink.File.Height,
 		"Qualitys":      string(rawQuality),
@@ -149,5 +152,6 @@ func PlayerController(c echo.Context) error {
 		"PROJECTURL":    config.ENV.Project,
 		"Folder":        config.ENV.FolderVideoQualitysPub,
 		"JWT":           tkn,
+		"AppName":       config.ENV.AppName,
 	})
 }

@@ -15,11 +15,19 @@
     <meta name="og:image" content="{{ .Thumbnail }}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="{{ .Thumbnail}}" />
+    <meta property="og:type" content="video">
+    <meta property="og:url" content="/v/{{.UUID}}">
+    <meta property="og:video" content="{{.StreamUrl}}">
+    <meta property="og:video:secure_url" content="{{.StreamUrl}}">
+    <meta property="og:video:width" content="1920">
+    <meta property="og:video:height" content="1080">
+    <meta property="og:site_name" content="{{.AppName}}">
     <title>{{ .Title }}</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />
     <link rel="preconnect" href="https://cdn.plyr.io" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link itemprop="thumbnailUrl" href="{{ .Thumbnail }}">
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.7/plyr.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-dark@5/dark.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap" rel="stylesheet" />
