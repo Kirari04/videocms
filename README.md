@@ -27,3 +27,6 @@ Follow the documentation to setup VideoCMS: [https://videocms-docs.vercel.app/](
 
 ### Multiple Audio Channels
 ![Alt text](./docs/image8.png)
+
+### Embed in Chats (like Discord)
+![Alt text](./docs/image9.png)
