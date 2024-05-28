@@ -72,6 +72,8 @@ func Api() {
 	protectedApi.GET("/settings", controllers.GetSettings, middlewares.IsAdmin())
 	protectedApi.PUT("/settings", controllers.UpdateSettings, middlewares.IsAdmin())
 
+	protectedApi.GET("/users", controllers.GetUsers, middlewares.IsAdmin())
+
 	protectedApi.POST("/webhook", controllers.CreateWebhook)
 	protectedApi.PUT("/webhook", controllers.UpdateWebhook)
 	protectedApi.DELETE("/webhook", controllers.DeleteWebhook)
