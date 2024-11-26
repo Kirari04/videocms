@@ -70,6 +70,7 @@ func UpdateSettings(c echo.Context) error {
 	setting.FFmpegVp9Crf = validation.FFmpegVp9Crf
 	setting.FFmpegH264Crf = validation.FFmpegH264Crf
 	setting.PluginPgsServer = validation.PluginPgsServer
+	setting.DownloadEnabled = validation.DownloadEnabled
 	if res := inits.DB.Save(&setting); res.Error != nil {
 		log.Fatalln("Failed to save settings", res.Error)
 		return c.NoContent(http.StatusInternalServerError)

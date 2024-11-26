@@ -63,4 +63,6 @@ type Setting struct {
 	FFmpegH264Crf string `validate:"required,number,min=1,max=50"`
 
 	PluginPgsServer string `validate:"required"`
+
+	DownloadEnabled string `validate:"required,boolean"`
 }

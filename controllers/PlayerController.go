@@ -139,6 +139,12 @@ func PlayerController(c echo.Context) error {
 	// 	Domain:   config.ENV.CookieDomain,
 	// 	HTTPOnly: true,
 	// })
+
+	var downloadsEnabled bool
+	if config.ENV.DownloadEnabled != nil {
+		downloadsEnabled = *config.ENV.DownloadEnabled
+	}
+
 	return c.Render(http.StatusOK, "player.html", echo.Map{
 		"Title":           fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
 		"Description":     fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),
@@ -160,5 +166,6 @@ func PlayerController(c echo.Context) error {
 		"JWT":             tkn,
 		"AppName":         config.ENV.AppName,
 		"BaseUrl":         config.ENV.BaseUrl,
+		"DownloadEnabled": downloadsEnabled,
 	})
 }

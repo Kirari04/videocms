@@ -74,6 +74,8 @@ func Setup() {
 
 	config.ENV.PluginPgsServer = getEnvDb(&setting.PluginPgsServer, "http://127.0.0.1:5000")
 
+	config.ENV.DownloadEnabled = getEnvDb_bool(&setting.DownloadEnabled, boolPtr(true))
+
 	// validate config before saving
 	validate := validator.New(validator.WithRequiredStructEnabled())
 	err := validate.Struct(&setting)

@@ -242,6 +242,7 @@
         const HEIGHT = parseInt("{{ .Height }}");
         const WIDTH = parseFloat("{{ .Width }}");
         const RATIO = WIDTH / HEIGHT;
+        const DOWNLOAD_ENABLED = "{{ .DownloadEnabled }}";
     </script>
     <script>
         Subtitles = Subtitles.filter((e) =>
@@ -317,13 +318,21 @@
             {
                 name: "Download",
                 checkable: false,
-                items: [
+                items: DOWNLOAD_ENABLED === 'true' ? [
                     ...Qualitys.map((Quality, i) => ({
                         name: `${Quality.label} - ${Quality.width}x${Quality.height}`,
                         click: () => {
                             downloadFile(Quality.url);
                         },
                     })),
+                ] : [
+                    {
+                        name: "Downloads are disabled",
+                        active: false,
+                        click: () => {
+
+                        },
+                    },
                 ],
             },
         ];

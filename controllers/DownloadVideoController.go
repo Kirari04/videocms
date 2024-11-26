@@ -36,6 +36,10 @@ func DownloadVideoController(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "bad quality format")
 	}
 
+	if config.ENV.DownloadEnabled == nil || !*config.ENV.DownloadEnabled {
+		return c.String(http.StatusBadRequest, "download disabled")
+	}
+
 	//translate link id to file id
 	var dbLink models.Link
 	if dbRes := inits.DB.
