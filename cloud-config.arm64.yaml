@@ -1,7 +1,0 @@
-#cloud-config
-package_update: true
-packages:
-  - docker.io
-
-runcmd:
-  - docker run -d -p 80:3000 -e EncodingEnabled=true -e UploadEnabled=true -e RatelimitEnabled=false kirari04/videocms:panel_arm64
