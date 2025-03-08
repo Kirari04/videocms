@@ -30,3 +30,9 @@ Follow the documentation to setup VideoCMS: [https://videocms-docs.vercel.app/](
 
 ### Embed in Chats (like Discord)
 ![Alt text](./docs/image9.png)
+
+## Build
+
+```bash
+docker build --platform linux/amd64 -t kirari04/videocms:alpha --push .
+```
