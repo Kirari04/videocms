@@ -27,8 +27,8 @@ import (
 type ActiveEncoding struct {
 	Type    string
 	FileID  uint
-	ID      uint // qualityID | audioID | subID
-	Channel *chan bool
+	ID      uint       // qualityID | audioID | subID
+	Channel *chan bool // sending true will kill the encoding process
 }
 
 type EncodingTask struct {

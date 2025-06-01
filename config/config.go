@@ -49,13 +49,20 @@ type Config struct {
 	Captcha_Hcaptcha_PrivateKey  string
 	Captcha_Hcaptcha_PublicKey   string
 
-	EncodeHls240p  *bool
-	EncodeHls360p  *bool
-	EncodeHls480p  *bool
-	EncodeHls720p  *bool
-	EncodeHls1080p *bool
-	EncodeHls1440p *bool
-	EncodeHls2160p *bool
+	EncodeHls240p        *bool
+	Hls240pVideoBitrate  string
+	EncodeHls360p        *bool
+	Hls360pVideoBitrate  string
+	EncodeHls480p        *bool
+	Hls480pVideoBitrate  string
+	EncodeHls720p        *bool
+	Hls720pVideoBitrate  string
+	EncodeHls1080p       *bool
+	Hls1080pVideoBitrate string
+	EncodeHls1440p       *bool
+	Hls1440pVideoBitrate string
+	EncodeHls2160p       *bool
+	Hls2160pVideoBitrate string
 
 	PluginPgsServer       string
 	EnablePluginPgsServer *bool

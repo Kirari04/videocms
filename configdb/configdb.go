@@ -54,12 +54,19 @@ func Setup() {
 	config.ENV.Captcha_Hcaptcha_PublicKey = getEnvDb(&setting.Captcha_Hcaptcha_PublicKey, "")
 
 	config.ENV.EncodeHls240p = getEnvDb_bool(&setting.EncodeHls240p, boolPtr(true))
+	config.ENV.Hls240pVideoBitrate = getEnvDb(&setting.Hls240pVideoBitrate, "600k")
 	config.ENV.EncodeHls360p = getEnvDb_bool(&setting.EncodeHls360p, boolPtr(true))
+	config.ENV.Hls360pVideoBitrate = getEnvDb(&setting.Hls360pVideoBitrate, "1200k")
 	config.ENV.EncodeHls480p = getEnvDb_bool(&setting.EncodeHls480p, boolPtr(true))
+	config.ENV.Hls480pVideoBitrate = getEnvDb(&setting.Hls480pVideoBitrate, "2500k")
 	config.ENV.EncodeHls720p = getEnvDb_bool(&setting.EncodeHls720p, boolPtr(true))
+	config.ENV.Hls720pVideoBitrate = getEnvDb(&setting.Hls720pVideoBitrate, "4500k")
 	config.ENV.EncodeHls1080p = getEnvDb_bool(&setting.EncodeHls1080p, boolPtr(true))
+	config.ENV.Hls1080pVideoBitrate = getEnvDb(&setting.Hls1080pVideoBitrate, "8000k")
 	config.ENV.EncodeHls1440p = getEnvDb_bool(&setting.EncodeHls1440p, boolPtr(false))
+	config.ENV.Hls1440pVideoBitrate = getEnvDb(&setting.Hls1440pVideoBitrate, "15000k")
 	config.ENV.EncodeHls2160p = getEnvDb_bool(&setting.EncodeHls2160p, boolPtr(false))
+	config.ENV.Hls2160pVideoBitrate = getEnvDb(&setting.Hls2160pVideoBitrate, "25000k")
 
 	config.ENV.PluginPgsServer = getEnvDb(&setting.PluginPgsServer, "http://127.0.0.1:5000")
 	config.ENV.EnablePluginPgsServer = getEnvDb_bool(&setting.EnablePluginPgsServer, boolPtr(false))
@@ -83,7 +90,7 @@ func Setup() {
 			Height:     240,
 			Width:      426,
 
-			VideoBitrate:   "600k",
+			VideoBitrate:   config.ENV.Hls240pVideoBitrate,
 			AudioBitrate:   "64k",
 			Profile:        "baseline",
 			Level:          "1.3",
@@ -100,7 +107,7 @@ func Setup() {
 			Height:     360,
 			Width:      640,
 
-			VideoBitrate:   "1200k",
+			VideoBitrate:   config.ENV.Hls360pVideoBitrate,
 			AudioBitrate:   "96k",
 			Profile:        "main",
 			Level:          "3.0",
@@ -117,7 +124,7 @@ func Setup() {
 			Height:     480,
 			Width:      854,
 
-			VideoBitrate:   "2500k",
+			VideoBitrate:   config.ENV.Hls480pVideoBitrate,
 			AudioBitrate:   "128k",
 			Profile:        "main",
 			Level:          "3.1",
@@ -134,7 +141,7 @@ func Setup() {
 			Height:     720,
 			Width:      1280,
 
-			VideoBitrate:   "4500k",
+			VideoBitrate:   config.ENV.Hls720pVideoBitrate,
 			AudioBitrate:   "192k",
 			Profile:        "high",
 			Level:          "4.0",
@@ -151,7 +158,7 @@ func Setup() {
 			Height:     1080,
 			Width:      1920,
 
-			VideoBitrate:   "8000k",
+			VideoBitrate:   config.ENV.Hls1080pVideoBitrate,
 			AudioBitrate:   "256k",
 			Profile:        "high",
 			Level:          "4.2",
@@ -168,7 +175,7 @@ func Setup() {
 			Height:     1440,
 			Width:      2560,
 
-			VideoBitrate:   "15000k",
+			VideoBitrate:   config.ENV.Hls1440pVideoBitrate,
 			AudioBitrate:   "256k",
 			Profile:        "high",
 			Level:          "5.1",
@@ -185,7 +192,7 @@ func Setup() {
 			Height:     2160,
 			Width:      3840,
 
-			VideoBitrate:   "25000k",
+			VideoBitrate:   config.ENV.Hls2160pVideoBitrate,
 			AudioBitrate:   "320k",
 			Profile:        "high",
 			Level:          "5.2",

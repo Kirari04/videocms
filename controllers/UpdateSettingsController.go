@@ -54,12 +54,19 @@ func UpdateSettings(c echo.Context) error {
 	setting.Captcha_Hcaptcha_PrivateKey = validation.Captcha_Hcaptcha_PrivateKey
 	setting.Captcha_Hcaptcha_PublicKey = validation.Captcha_Hcaptcha_PublicKey
 	setting.EncodeHls240p = validation.EncodeHls240p
+	setting.Hls240pVideoBitrate = validation.Hls240pVideoBitrate
 	setting.EncodeHls360p = validation.EncodeHls360p
+	setting.Hls360pVideoBitrate = validation.Hls360pVideoBitrate
 	setting.EncodeHls480p = validation.EncodeHls480p
+	setting.Hls480pVideoBitrate = validation.Hls480pVideoBitrate
 	setting.EncodeHls720p = validation.EncodeHls720p
+	setting.Hls720pVideoBitrate = validation.Hls720pVideoBitrate
 	setting.EncodeHls1080p = validation.EncodeHls1080p
+	setting.Hls1080pVideoBitrate = validation.Hls1080pVideoBitrate
 	setting.EncodeHls1440p = validation.EncodeHls1440p
+	setting.Hls1440pVideoBitrate = validation.Hls1440pVideoBitrate
 	setting.EncodeHls2160p = validation.EncodeHls2160p
+	setting.Hls2160pVideoBitrate = validation.Hls2160pVideoBitrate
 	setting.PluginPgsServer = validation.PluginPgsServer
 	setting.EnablePluginPgsServer = validation.EnablePluginPgsServer
 	setting.DownloadEnabled = validation.DownloadEnabled
@@ -71,6 +78,7 @@ func UpdateSettings(c echo.Context) error {
 	// reload config in background
 	go func() {
 		configdb.Setup()
+		log.Println("reloaded config")
 	}()
 	return c.String(http.StatusOK, "ok")
 }

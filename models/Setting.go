@@ -43,13 +43,20 @@ type Setting struct {
 	Captcha_Hcaptcha_PrivateKey  string `validate:"required_if=CaptchaType hcaptcha,omitempty,min=1,max=42" gorm:"size:42;"`
 	Captcha_Hcaptcha_PublicKey   string `validate:"required_if=CaptchaType hcaptcha,omitempty,uuid_rfc4122"`
 
-	EncodeHls240p  string `validate:"required,boolean"`
-	EncodeHls360p  string `validate:"required,boolean"`
-	EncodeHls480p  string `validate:"required,boolean"`
-	EncodeHls720p  string `validate:"required,boolean"`
-	EncodeHls1080p string `validate:"required,boolean"`
-	EncodeHls1440p string `validate:"required,boolean"`
-	EncodeHls2160p string `validate:"required,boolean"`
+	EncodeHls240p        string `validate:"required,boolean"`
+	Hls240pVideoBitrate  string `validate:"required,min=1,max=7" gorm:"size:7;"`
+	EncodeHls360p        string `validate:"required,boolean"`
+	Hls360pVideoBitrate  string `validate:"required,min=1,max=7" gorm:"size:7;"`
+	EncodeHls480p        string `validate:"required,boolean"`
+	Hls480pVideoBitrate  string `validate:"required,min=1,max=7" gorm:"size:7;"`
+	EncodeHls720p        string `validate:"required,boolean"`
+	Hls720pVideoBitrate  string `validate:"required,min=1,max=7" gorm:"size:7;"`
+	EncodeHls1080p       string `validate:"required,boolean"`
+	Hls1080pVideoBitrate string `validate:"required,min=1,max=7" gorm:"size:7;"`
+	EncodeHls1440p       string `validate:"required,boolean"`
+	Hls1440pVideoBitrate string `validate:"required,min=1,max=7" gorm:"size:7;"`
+	EncodeHls2160p       string `validate:"required,boolean"`
+	Hls2160pVideoBitrate string `validate:"required,min=1,max=7" gorm:"size:7;"`
 
 	PluginPgsServer       string `validate:"required"`
 	EnablePluginPgsServer string `validate:"required,boolean"`
