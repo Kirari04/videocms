@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"golang.org/x/sys/unix"
 	"gorm.io/gorm"
 )
 
@@ -53,6 +55,21 @@ func GetAccount(userID uint) (status int, response *GetAccountResponse, err erro
 			return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 		}
 	}
+
+	if dbUser.Storage == 0 {
+		// if user has no specific limit we show the physical available space
+
+		folderPath := config.ENV.FolderVideoUploadsPriv
+		var stat unix.Statfs_t // Or unix.Statfs_t
+		if err := unix.Statfs(folderPath, &stat); err == nil {
+			availableBytes := stat.Bavail * uint64(stat.Bsize)
+
+			dbUser.Storage = int64(availableBytes)
+		} else {
+			dbUser.Storage = -1
+		}
+	}
+
 	newResponse := GetAccountResponse{
 		Username: dbUser.Username,
 		Admin:    dbUser.Admin,
