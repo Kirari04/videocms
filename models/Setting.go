@@ -51,7 +51,8 @@ type Setting struct {
 	EncodeHls1440p string `validate:"required,boolean"`
 	EncodeHls2160p string `validate:"required,boolean"`
 
-	PluginPgsServer string `validate:"required"`
+	PluginPgsServer       string `validate:"required"`
+	EnablePluginPgsServer string `validate:"required,boolean"`
 
 	DownloadEnabled string `validate:"required,boolean"`
 }

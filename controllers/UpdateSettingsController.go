@@ -61,7 +61,9 @@ func UpdateSettings(c echo.Context) error {
 	setting.EncodeHls1440p = validation.EncodeHls1440p
 	setting.EncodeHls2160p = validation.EncodeHls2160p
 	setting.PluginPgsServer = validation.PluginPgsServer
+	setting.EnablePluginPgsServer = validation.EnablePluginPgsServer
 	setting.DownloadEnabled = validation.DownloadEnabled
+
 	if res := inits.DB.Save(&setting); res.Error != nil {
 		log.Fatalln("Failed to save settings", res.Error)
 		return c.NoContent(http.StatusInternalServerError)

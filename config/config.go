@@ -57,7 +57,8 @@ type Config struct {
 	EncodeHls1440p *bool
 	EncodeHls2160p *bool
 
-	PluginPgsServer string
+	PluginPgsServer       string
+	EnablePluginPgsServer *bool
 
 	StatsDriveName string `validate:"required,min=1,max=255"`
 
