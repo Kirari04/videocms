@@ -60,15 +60,6 @@ func UpdateSettings(c echo.Context) error {
 	setting.EncodeHls1080p = validation.EncodeHls1080p
 	setting.EncodeHls1440p = validation.EncodeHls1440p
 	setting.EncodeHls2160p = validation.EncodeHls2160p
-	setting.EncodeAv1 = validation.EncodeAv1
-	setting.EncodeVp9 = validation.EncodeVp9
-	setting.EncodeH264 = validation.EncodeH264
-	setting.FFmpegAv1AudioCodec = validation.FFmpegAv1AudioCodec
-	setting.FFmpegVp9AudioCodec = validation.FFmpegVp9AudioCodec
-	setting.FFmpegH264AudioCodec = validation.FFmpegH264AudioCodec
-	setting.FFmpegAv1Crf = validation.FFmpegAv1Crf
-	setting.FFmpegVp9Crf = validation.FFmpegVp9Crf
-	setting.FFmpegH264Crf = validation.FFmpegH264Crf
 	setting.PluginPgsServer = validation.PluginPgsServer
 	setting.DownloadEnabled = validation.DownloadEnabled
 	if res := inits.DB.Save(&setting); res.Error != nil {

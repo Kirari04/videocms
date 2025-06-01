@@ -50,17 +50,6 @@ type Setting struct {
 	EncodeHls1080p string `validate:"required,boolean"`
 	EncodeHls1440p string `validate:"required,boolean"`
 	EncodeHls2160p string `validate:"required,boolean"`
-	EncodeAv1      string `validate:"required,boolean"`
-	EncodeVp9      string `validate:"required,boolean"`
-	EncodeH264     string `validate:"required,boolean"`
-
-	FFmpegAv1AudioCodec  string `validate:"required,min=1,max=40" gorm:"size:40;"`
-	FFmpegVp9AudioCodec  string `validate:"required,min=1,max=40" gorm:"size:40;"`
-	FFmpegH264AudioCodec string `validate:"required,min=1,max=40" gorm:"size:40;"`
-
-	FFmpegAv1Crf  string `validate:"required,number,min=1,max=50"`
-	FFmpegVp9Crf  string `validate:"required,number,min=1,max=50"`
-	FFmpegH264Crf string `validate:"required,number,min=1,max=50"`
 
 	PluginPgsServer string `validate:"required"`
 
