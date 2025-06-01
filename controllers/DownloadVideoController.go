@@ -31,7 +31,7 @@ func DownloadVideoController(c echo.Context) error {
 		requestValidation.Stream = new(bool)
 	}
 
-	reQUALITY := regexp.MustCompile(`^([0-9]{3,4}p|(h264|vp9|av1))$`)
+	reQUALITY := regexp.MustCompile(`^([0-9]{3,4}p|(h264))$`)
 	if !reQUALITY.MatchString(requestValidation.QUALITY) {
 		return c.String(http.StatusBadRequest, "bad quality format")
 	}

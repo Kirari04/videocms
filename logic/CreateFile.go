@@ -306,14 +306,19 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 			// smaller than 16:9 ratio should be fixed by height
 			if qualityOpt.Width <= int64(videoWidth) {
 				if res := inits.DB.Create(&models.Quality{
-					FileID:       dbFile.ID,
-					Name:         qualityOpt.Name,
-					Width:        int64(math.RoundToEven((float64(videoWidth)/(float64(videoHeight)/float64(qualityOpt.Height)))/2) * 2),
-					Height:       int64(math.RoundToEven(float64(qualityOpt.Height)/2) * 2),
-					Crf:          qualityOpt.Crf,
+					FileID: dbFile.ID,
+					Name:   qualityOpt.Name,
+					Width:  int64(math.RoundToEven((float64(videoWidth)/(float64(videoHeight)/float64(qualityOpt.Height)))/2) * 2),
+					Height: int64(math.RoundToEven(float64(qualityOpt.Height)/2) * 2),
+
+					VideoBitrate:   qualityOpt.VideoBitrate,
+					AudioBitrate:   qualityOpt.AudioBitrate,
+					Profile:        qualityOpt.Profile,
+					Level:          qualityOpt.Level,
+					CodecStringAVC: qualityOpt.CodecStringAVC,
+
 					Type:         qualityOpt.Type,
 					Muted:        qualityOpt.Muted,
-					AudioCodec:   qualityOpt.AudioCodec,
 					AvgFrameRate: qualityFrameRate,
 					Path:         qualityPath,
 					OutputFile:   qualityOpt.OutputFile,
@@ -330,14 +335,19 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 			// bigger than 16:9 ratio should be fixed by width
 			if qualityOpt.Height <= int64(videoHeight) {
 				if res := inits.DB.Create(&models.Quality{
-					FileID:       dbFile.ID,
-					Name:         qualityOpt.Name,
-					Width:        int64(math.RoundToEven(float64(qualityOpt.Width)/2) * 2),
-					Height:       int64(math.RoundToEven((float64(videoHeight)/(float64(videoWidth)/float64(qualityOpt.Width)))/2) * 2),
-					Crf:          qualityOpt.Crf,
+					FileID: dbFile.ID,
+					Name:   qualityOpt.Name,
+					Width:  int64(math.RoundToEven(float64(qualityOpt.Width)/2) * 2),
+					Height: int64(math.RoundToEven((float64(videoHeight)/(float64(videoWidth)/float64(qualityOpt.Width)))/2) * 2),
+
+					VideoBitrate:   qualityOpt.VideoBitrate,
+					AudioBitrate:   qualityOpt.AudioBitrate,
+					Profile:        qualityOpt.Profile,
+					Level:          qualityOpt.Level,
+					CodecStringAVC: qualityOpt.CodecStringAVC,
+
 					Type:         qualityOpt.Type,
 					Muted:        qualityOpt.Muted,
-					AudioCodec:   qualityOpt.AudioCodec,
 					AvgFrameRate: qualityFrameRate,
 					Path:         qualityPath,
 					OutputFile:   qualityOpt.OutputFile,

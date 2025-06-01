@@ -62,6 +62,7 @@ func Setup() {
 	config.ENV.EncodeHls2160p = getEnvDb_bool(&setting.EncodeHls2160p, boolPtr(false))
 
 	config.ENV.PluginPgsServer = getEnvDb(&setting.PluginPgsServer, "http://127.0.0.1:5000")
+	config.ENV.EnablePluginPgsServer = getEnvDb_bool(&setting.EnablePluginPgsServer, boolPtr(false))
 
 	config.ENV.DownloadEnabled = getEnvDb_bool(&setting.DownloadEnabled, boolPtr(true))
 
@@ -81,7 +82,13 @@ func Setup() {
 			FolderName: "240p",
 			Height:     240,
 			Width:      426,
-			Crf:        30,
+
+			VideoBitrate:   "600k",
+			AudioBitrate:   "64k",
+			Profile:        "baseline",
+			Level:          "1.3",
+			CodecStringAVC: "avc1.42e00d",
+
 			Type:       "hls",
 			Muted:      true,
 			OutputFile: "out.m3u8",
@@ -92,7 +99,13 @@ func Setup() {
 			FolderName: "360p",
 			Height:     360,
 			Width:      640,
-			Crf:        26,
+
+			VideoBitrate:   "1200k",
+			AudioBitrate:   "96k",
+			Profile:        "main",
+			Level:          "3.0",
+			CodecStringAVC: "avc1.4d401e",
+
 			Type:       "hls",
 			Muted:      true,
 			OutputFile: "out.m3u8",
@@ -103,7 +116,13 @@ func Setup() {
 			FolderName: "480p",
 			Height:     480,
 			Width:      854,
-			Crf:        26,
+
+			VideoBitrate:   "2500k",
+			AudioBitrate:   "128k",
+			Profile:        "main",
+			Level:          "3.1",
+			CodecStringAVC: "avc1.4d401f",
+
 			Type:       "hls",
 			Muted:      true,
 			OutputFile: "out.m3u8",
@@ -114,7 +133,13 @@ func Setup() {
 			FolderName: "720p",
 			Height:     720,
 			Width:      1280,
-			Crf:        26,
+
+			VideoBitrate:   "4500k",
+			AudioBitrate:   "192k",
+			Profile:        "high",
+			Level:          "4.0",
+			CodecStringAVC: "avc1.64001f",
+
 			Type:       "hls",
 			Muted:      true,
 			OutputFile: "out.m3u8",
@@ -125,7 +150,13 @@ func Setup() {
 			FolderName: "1080p",
 			Height:     1080,
 			Width:      1920,
-			Crf:        24,
+
+			VideoBitrate:   "8000k",
+			AudioBitrate:   "256k",
+			Profile:        "high",
+			Level:          "4.2",
+			CodecStringAVC: "avc1.64002a",
+
 			Type:       "hls",
 			Muted:      true,
 			OutputFile: "out.m3u8",
@@ -136,7 +167,13 @@ func Setup() {
 			FolderName: "1440p",
 			Height:     1440,
 			Width:      2560,
-			Crf:        24,
+
+			VideoBitrate:   "15000k",
+			AudioBitrate:   "256k",
+			Profile:        "high",
+			Level:          "5.1",
+			CodecStringAVC: "avc1.640033",
+
 			Type:       "hls",
 			Muted:      true,
 			OutputFile: "out.m3u8",
@@ -147,7 +184,13 @@ func Setup() {
 			FolderName: "2160p",
 			Height:     2160,
 			Width:      3840,
-			Crf:        24,
+
+			VideoBitrate:   "25000k",
+			AudioBitrate:   "320k",
+			Profile:        "high",
+			Level:          "5.2",
+			CodecStringAVC: "avc1.640034",
+
 			Type:       "hls",
 			Muted:      true,
 			OutputFile: "out.m3u8",

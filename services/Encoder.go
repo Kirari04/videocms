@@ -224,8 +224,12 @@ func runEncodeQuality(encodingTask models.Quality) {
 	os.MkdirAll(encodingTask.Path, 0777)
 
 	var frameRateString string
+	var gopSizeString string
+	var segmenDuration int = 4
 	if encodingTask.AvgFrameRate > 0 {
 		frameRateString = fmt.Sprintf("-r %.4f", encodingTask.AvgFrameRate)
+		gopSizeString = fmt.Sprintf("-g %d ", int(encodingTask.AvgFrameRate)*segmenDuration)
+		gopSizeString += fmt.Sprintf("-keyint_min %d", int(encodingTask.AvgFrameRate)*segmenDuration)
 	}
 
 	absFileInput, _ := filepath.Abs(encodingTask.File.Path)
@@ -235,107 +239,26 @@ func runEncodeQuality(encodingTask models.Quality) {
 	var ffmpegCommand string = "echo Encoding type didnt match && exit 1"
 	switch encodingTask.Type {
 	case "hls":
-		ffmpegAudio := "-an "
-		if !encodingTask.Muted && encodingTask.AudioCodec != "" {
-			ffmpegAudio = fmt.Sprintf("-c:a %s ", encodingTask.AudioCodec)
-		}
+
 		ffmpegCommand = "ffmpeg " +
 			fmt.Sprintf("-i %s ", absFileInput) + // input file
-			"-sn " + // disable subtitle
-			ffmpegAudio +
-			"-c:v libx264 " + // setting video codec libx264 | libaom-av1
-			"-pix_fmt yuv420p " + // YUV 4:2:0
-			"-profile:v high " + // force 8 bit
-			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
+			fmt.Sprint("-sn ") + // disable subtitle
+			fmt.Sprint("-an ") + // disable audio
+			fmt.Sprint("-c:v libx264 ") + // setting video codec libx264
+			fmt.Sprintf("-profile:v %s ", encodingTask.Profile) +
+			fmt.Sprintf("-level:v %s ", encodingTask.Level) +
+			fmt.Sprint("-pix_fmt yuv420p ") + // YUV 4:2:0
+			fmt.Sprintf("-b:v %s ", encodingTask.VideoBitrate) + // setting video bitrate
 			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
+			fmt.Sprintf("%s ", gopSizeString) + // (optional) setting gop size
 			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
-			"-f hls -hls_list_size 0 -hls_time 10 -start_number 0 " + // hls playlist
-			fmt.Sprintf("%s ", encFilePath) + // output file
-			fmt.Sprintf("-progress unix://%s -y", TempSock(
-				totalDuration,
-				fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
-				&encodingTask,
-			)) // progress tracking
-	case "vp9":
-		ffmpegAudio := "-an "
-		if !encodingTask.Muted && encodingTask.AudioCodec != "" {
-			ffmpegAudio = fmt.Sprintf("-c:a %s ", encodingTask.AudioCodec)
-		}
-		ffmpegCommand = "ffmpeg " + // starting pass 1
-			fmt.Sprintf("-i %s ", absFileInput) + // input file
-			"-c:v libvpx-vp9 " +
-			"-pix_fmt yuv420p " + // YUV 4:2:0
-			"-profile:v high " + // force 8 bit
-			"-b:v 0 " +
-			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
-			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
-			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
-			" -pass 1 -an -f null /dev/null && " + // pass 1 flags
-			"ffmpeg " + // starting pass 2
-			fmt.Sprintf("-i %s ", absFileInput) + // input file
-			"-sn " + // disable subtitle
-			ffmpegAudio +
-			`-af aformat=channel_layouts="7.1|5.1|stereo" ` + // audio channel layouts
-			"-c:v libvpx-vp9 " + // setting video codec libx264 | libaom-av1
-			"-pass 2 " + // setting pass 2 flag
-			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
-			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
-			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
-			fmt.Sprintf("%s ", encFilePath) + // output file
-			fmt.Sprintf("-progress unix://%s -y", TempSock(
-				totalDuration,
-				fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
-				&encodingTask,
-			)) // progress tracking
-	case "h264":
-		ffmpegAudio := "-an "
-		if !encodingTask.Muted && encodingTask.AudioCodec != "" {
-			ffmpegAudio = fmt.Sprintf("-c:a %s ", encodingTask.AudioCodec)
-		}
-		ffmpegCommand =
-			"ffmpeg " +
-				fmt.Sprintf("-i %s ", absFileInput) + // input file
-				"-sn " + // disable subtitle
-				ffmpegAudio +
-				`-af aformat=channel_layouts="7.1|5.1|stereo" ` + // audio channel layouts
-				"-c:v libx264 " + // setting video codec libx264 | libaom-av1
-				"-pix_fmt yuv420p " + // YUV 4:2:0
-				"-profile:v high " + // force 8 bit
-				fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
-				fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
-				fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
-				fmt.Sprintf("%s ", encFilePath) + // output file
-				fmt.Sprintf("-progress unix://%s -y", TempSock(
-					totalDuration,
-					fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
-					&encodingTask,
-				)) // progress tracking
-	case "av1":
-		ffmpegAudio := "-an "
-		if !encodingTask.Muted && encodingTask.AudioCodec != "" {
-			ffmpegAudio = fmt.Sprintf("-c:a %s ", encodingTask.AudioCodec)
-		}
-		ffmpegCommand = "ffmpeg " + // starting pass 1
-			fmt.Sprintf("-i %s ", absFileInput) + // input file
-			"-c:v libaom-av1 " +
-			"-pix_fmt yuv420p " + // YUV 4:2:0
-			"-profile:v high " + // force 8 bit
-			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
-			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
-			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
-			" -pass 1 -an -f null /dev/null && " + // pass 1 flags
-			"ffmpeg " + // starting pass 2
-			fmt.Sprintf("-i %s ", absFileInput) + // input file
-			"-sn " + // disable subtitle
-			ffmpegAudio +
-			`-af aformat=channel_layouts="7.1|5.1|stereo" ` + // audio channel layouts
-			"-c:v libaom-av1 " + // setting video codec libx264 | libaom-av1
-			"-pix_fmt yuv420p " + // YUV 4:2:0
-			"-profile:v high " + // force 8 bit
-			"-pass 2 " + // setting pass 2 flag
-			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting quality
-			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
-			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
+			fmt.Sprint("-sc_threshold 0 ") +
+			"-f hls " + // hls playlist
+			fmt.Sprintf("-hls_time %d ", segmenDuration) + // segment duration
+			fmt.Sprint("-hls_playlist_type vod ") +
+			fmt.Sprint("-hls_segment_type mpegts ") +
+			fmt.Sprint("-hls_list_size 0 ") +
+			fmt.Sprint("-start_number 0 ") + // start number
 			fmt.Sprintf("%s ", encFilePath) + // output file
 			fmt.Sprintf("-progress unix://%s -y", TempSock(
 				totalDuration,
@@ -412,6 +335,9 @@ func runEncodeAudio(encodingTask models.Audio) {
 	var ffmpegCommand string = "echo Audioencoding type didnt match && exit 1"
 	switch encodingTask.Type {
 	case "hls":
+
+		segmenDuration := 4
+
 		ffmpegCommand = "ffmpeg " +
 			fmt.Sprintf("-i %s ", absFileInput) + // input file
 			"-sn " + // disable subtitle
@@ -419,35 +345,12 @@ func runEncodeAudio(encodingTask models.Audio) {
 			fmt.Sprintf("-map 0:a:%d ", encodingTask.Index) + // mapping first audio stream
 			`-af aformat=channel_layouts="7.1|5.1|stereo" ` +
 			fmt.Sprintf("-c:a %s ", encodingTask.Codec) + // setting audio codec
-			"-f hls -hls_list_size 0 -hls_time 10 -start_number 0 " + // hls playlist
-			fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
-			fmt.Sprintf("-progress unix://%s -y", TempSock(
-				totalDuration,
-				fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
-				&encodingTask,
-			)) // progress tracking
-	case "ogg":
-		ffmpegCommand = "ffmpeg " +
-			fmt.Sprintf("-i %s ", absFileInput) + // input file
-			"-sn " + // disable subtitle
-			"-vn " + // disable video stream
-			fmt.Sprintf("-map 0:a:%d ", encodingTask.Index) + // mapping first audio stream
-			`-af aformat=channel_layouts="7.1|5.1|stereo" ` +
-			fmt.Sprintf("-c:a %s ", encodingTask.Codec) + // setting audio codec
-			fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
-			fmt.Sprintf("-progress unix://%s -y", TempSock(
-				totalDuration,
-				fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
-				&encodingTask,
-			)) // progress tracking
-	case "mp3":
-		ffmpegCommand = "ffmpeg " +
-			fmt.Sprintf("-i %s ", absFileInput) + // input file
-			"-sn " + // disable subtitle
-			"-vn " + // disable video stream
-			fmt.Sprintf("-map 0:a:%d ", encodingTask.Index) + // mapping first audio stream
-			`-af aformat=channel_layouts="7.1|5.1|stereo" ` +
-			fmt.Sprintf("-c:a %s ", encodingTask.Codec) + // setting audio codec
+			"-f hls " + // hls playlist
+			fmt.Sprintf("-hls_time %d ", segmenDuration) + // segment duration
+			fmt.Sprint("-hls_playlist_type vod ") +
+			fmt.Sprint("-hls_segment_type mpegts ") +
+			fmt.Sprint("-hls_list_size 0 ") +
+			fmt.Sprint("-start_number 0 ") + // start number
 			fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
 			fmt.Sprintf("-progress unix://%s -y", TempSock(
 				totalDuration,
@@ -518,6 +421,15 @@ func runEncodeSub(encodingTask models.Subtitle) {
 	var ffmpegCommand string = "echo Subencoding type didnt match && exit 1"
 
 	if encodingTask.OriginalCodec == "hdmv_pgs_subtitle" {
+		if config.ENV.EnablePluginPgsServer == nil || *config.ENV.EnablePluginPgsServer == false {
+			log.Printf("PluginPgsServer disabled")
+			encodingTask.Ready = false
+			encodingTask.Encoding = false
+			encodingTask.Failed = true
+			inits.DB.Save(&encodingTask)
+			return
+		}
+
 		// prepocess pgs
 		if err := prepocessPgs(encodingTask, absFolderOutput, &absFileInput); err != nil {
 			log.Printf("[Preprocess Error] %v", err)

@@ -11,7 +11,7 @@ import (
 )
 
 func GetVideoData(fileName string, qualityName string, UUID string) (status int, filePath *string, err error) {
-	reQUALITY := regexp.MustCompile(`^([0-9]{3,4}p|(h264|vp9|av1))$`)
+	reQUALITY := regexp.MustCompile(`^([0-9]{3,4}p|(h264))$`)
 	reFILE := regexp.MustCompile(`^out[0-9]{0,4}\.(m3u8|ts|webm|mp4)$`)
 
 	if !reQUALITY.MatchString(qualityName) {
