@@ -18,7 +18,7 @@ type Claims struct {
 }
 
 var jwtKey []byte
-var sessionDuration = 15 * time.Minute
+var sessionDuration = time.Hour * 24 * 7
 
 func GenerateJWT(user models.User) (string, time.Time, error) {
 	expirationTime := time.Now().Add(sessionDuration)
