@@ -11,7 +11,6 @@ require (
 	github.com/imroc/req/v3 v3.52.2
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/patrickmn/go-cache v2.1.0+incompatible
-	github.com/thanhpk/randstr v1.0.6
 	github.com/thatisuday/commando v1.0.4
 	golang.org/x/net v0.40.0
 	golang.org/x/term v0.32.0
@@ -49,7 +48,6 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/mock v0.5.2 // indirect
-	golang.org/x/exp v0.0.0-20250531010427-b6e5de432a8b // indirect
 	golang.org/x/mod v0.24.0 // indirect
 	golang.org/x/sync v0.14.0 // indirect
 	golang.org/x/tools v0.33.0 // indirect

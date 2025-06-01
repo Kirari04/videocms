@@ -2,8 +2,6 @@ package models
 
 type SystemResource struct {
 	Model
-	ServerID         *uint `gorm:"index" json:"-"`
-	Server           *Server
 	Cpu              float64
 	Mem              float64
 	NetOut           uint64

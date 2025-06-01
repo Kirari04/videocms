@@ -59,10 +59,6 @@ func Api() {
 	protectedApi.GET("/account/settings", controllers.GetUserSettingsController)
 	protectedApi.PUT("/account/settings", controllers.UpdateUserSettingsController)
 
-	protectedApi.POST("/server", controllers.CreateServer, middlewares.IsAdmin())
-	protectedApi.DELETE("/server", controllers.DeleteServer, middlewares.IsAdmin())
-	protectedApi.GET("/servers", controllers.ListServers, middlewares.IsAdmin())
-
 	protectedApi.GET("/pages", controllers.ListWebPage, middlewares.IsAdmin())
 	protectedApi.POST("/page", controllers.CreateWebPage, middlewares.IsAdmin())
 	protectedApi.PUT("/page", controllers.UpdateWebPage, middlewares.IsAdmin())

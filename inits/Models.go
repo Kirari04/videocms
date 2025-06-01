@@ -19,7 +19,6 @@ func Models() {
 	mustRun(DB.AutoMigrate(&models.UploadSession{}))
 	mustRun(DB.AutoMigrate(&models.UploadChunck{}))
 	mustRun(DB.AutoMigrate(&models.Webhook{}))
-	mustRun(DB.AutoMigrate(&models.Server{}))
 	mustRun(DB.AutoMigrate(&models.WebPage{}))
 	mustRun(DB.AutoMigrate(&models.Setting{}))
 	mustRun(DB.AutoMigrate(&models.SystemResource{}))
