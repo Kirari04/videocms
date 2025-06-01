@@ -56,17 +56,6 @@ type Config struct {
 	EncodeHls1080p *bool
 	EncodeHls1440p *bool
 	EncodeHls2160p *bool
-	EncodeAv1      *bool
-	EncodeVp9      *bool
-	EncodeH264     *bool
-
-	FFmpegAv1AudioCodec  string
-	FFmpegVp9AudioCodec  string
-	FFmpegH264AudioCodec string
-
-	FFmpegAv1Crf  int
-	FFmpegVp9Crf  int
-	FFmpegH264Crf int
 
 	PluginPgsServer string
 
@@ -123,7 +112,7 @@ type ConfigMap map[string]string
 
 var ENV Config
 var EXTENSIONS []string = []string{
-	"mp4", "mkv", "webm", "avi", "mov",
+	"mp4", "mkv", "webm", "avi", "mov", "ts",
 }
 
 func Setup() {

@@ -60,17 +60,6 @@ func Setup() {
 	config.ENV.EncodeHls1080p = getEnvDb_bool(&setting.EncodeHls1080p, boolPtr(true))
 	config.ENV.EncodeHls1440p = getEnvDb_bool(&setting.EncodeHls1440p, boolPtr(false))
 	config.ENV.EncodeHls2160p = getEnvDb_bool(&setting.EncodeHls2160p, boolPtr(false))
-	config.ENV.EncodeAv1 = getEnvDb_bool(&setting.EncodeAv1, boolPtr(false))
-	config.ENV.EncodeVp9 = getEnvDb_bool(&setting.EncodeVp9, boolPtr(false))
-	config.ENV.EncodeH264 = getEnvDb_bool(&setting.EncodeH264, boolPtr(false))
-
-	config.ENV.FFmpegAv1AudioCodec = getEnvDb(&setting.FFmpegAv1AudioCodec, "aac")
-	config.ENV.FFmpegVp9AudioCodec = getEnvDb(&setting.FFmpegVp9AudioCodec, "libopus")
-	config.ENV.FFmpegH264AudioCodec = getEnvDb(&setting.FFmpegH264AudioCodec, "aac")
-
-	config.ENV.FFmpegAv1Crf = getEnvDb_int(&setting.FFmpegAv1Crf, 30)
-	config.ENV.FFmpegVp9Crf = getEnvDb_int(&setting.FFmpegVp9Crf, 30)
-	config.ENV.FFmpegH264Crf = getEnvDb_int(&setting.FFmpegH264Crf, 30)
 
 	config.ENV.PluginPgsServer = getEnvDb(&setting.PluginPgsServer, "http://127.0.0.1:5000")
 
