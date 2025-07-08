@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/xyproto/randomstring"
 )
 
 func Setup() {
@@ -25,8 +26,8 @@ func Setup() {
 	config.ENV.ProjectDownload = getEnvDb(&setting.ProjectDownload, "https://github.com/notfound")
 	config.ENV.ProjectExampleVideo = getEnvDb(&setting.ProjectExampleVideo, "notfound")
 
-	config.ENV.JwtSecretKey = getEnvDb(&setting.JwtSecretKey, "secretkey")
-	config.ENV.JwtUploadSecretKey = getEnvDb(&setting.JwtUploadSecretKey, "secretkeyupload")
+	config.ENV.JwtSecretKey = getEnvDb(&setting.JwtSecretKey, randomstring.CookieFriendlyString(64))
+	config.ENV.JwtUploadSecretKey = getEnvDb(&setting.JwtUploadSecretKey, randomstring.CookieFriendlyString(64))
 
 	config.ENV.ReloadHtml = getEnvDb_bool(&setting.ReloadHtml, boolPtr(false))
 	config.ENV.EncodingEnabled = getEnvDb_bool(&setting.EncodingEnabled, boolPtr(true))
