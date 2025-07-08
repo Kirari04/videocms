@@ -1,9 +1,0 @@
-#cloud-config
-package_update: true
-packages:
-  - docker.io
-
-runcmd:
-  - docker run -d -p 80:3000 -e EncodingEnabled=true -e UploadEnabled=true -e RatelimitEnabled=false kirari04/videocms:panel
-  - docker volume create portainer_data
-  - docker run -d -p 8000:8000 -p 9443:9443 --name portainer --restart=always -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data portainer/portainer-ce:latest
