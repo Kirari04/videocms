@@ -11,7 +11,7 @@ var EXTENSIONS []string = []string{
 	"mp4", "mkv", "webm", "avi", "mov", "ts",
 }
 
-var VERSION string = "v0.0.1"
+var VERSION string = "v0.0.3"
 
 type Config struct {
 	Host string `validate:"required,min=1,max=120"`
