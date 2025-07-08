@@ -138,7 +138,7 @@ func ServerStart() {
 			MaxReadFrameSize:     1048576,
 			IdleTimeout:          10 * time.Second,
 		}); err != nil && err != http.ErrServerClosed {
-			App.Logger.Fatal("shutting down the server")
+			App.Logger.Fatal("shutting down the server", err)
 		}
 	}()
 
