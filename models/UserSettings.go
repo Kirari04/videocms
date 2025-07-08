@@ -37,5 +37,6 @@ func (j UserSettings) Value() (driver.Value, error) {
 }
 
 type UserSettingsUpdateValidation struct {
-	EnablePlayerCaptcha *bool `validate:"required,boolean"`
+	EnablePlayerCaptcha *bool   `validate:"required,boolean"`
+	NewPassword         *string `validate:"omitempty,min=8,max=64"`
 }

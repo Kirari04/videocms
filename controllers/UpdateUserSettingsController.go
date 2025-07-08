@@ -36,5 +36,21 @@ func UpdateUserSettingsController(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	// if new password is set, update it
+	if validater.NewPassword != nil {
+		// hash the new password
+		rawhash, err := helpers.HashPassword(*validater.NewPassword)
+		if err != nil {
+			log.Println("Failed to hash new password", err)
+			return c.NoContent(http.StatusInternalServerError)
+		}
+		user.Hash = rawhash
+
+		if res := inits.DB.Save(&user); res.Error != nil {
+			log.Println("Failed to update user password", res.Error)
+			return c.NoContent(http.StatusInternalServerError)
+		}
+	}
+
 	return c.NoContent(http.StatusOK)
 }

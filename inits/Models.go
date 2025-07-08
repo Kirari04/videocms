@@ -2,7 +2,10 @@ package inits
 
 import (
 	"ch/kirari04/videocms/models"
+	"fmt"
 	"log"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 func Models() {
@@ -24,6 +27,29 @@ func Models() {
 	mustRun(DB.AutoMigrate(&models.SystemResource{}))
 	mustRun(DB.AutoMigrate(&models.Tag{}))
 	mustRun(DB.AutoMigrate(&models.TagLinks{}))
+
+	// init default admin user
+	// if no user exists
+	var count int64
+	if err := DB.Model(&models.User{}).Count(&count).Error; err != nil {
+		log.Fatalln("Failed to count users: ", err)
+		return
+	}
+	if count == 0 {
+		rawhash, _ := bcrypt.GenerateFromPassword([]byte("12345678"), 14)
+		user := models.User{
+			Username: "admin",
+			Hash:     string(rawhash),
+			Admin:    true,
+			Settings: models.UserSettings{
+				WebhooksEnabled: true,
+				WebhooksMax:     100,
+			},
+		}
+		if res := DB.Create(&user); res.Error != nil {
+			fmt.Printf("error while creating admin user: %s\n", res.Error.Error())
+		}
+	}
 }
 
 func mustRun(err error) {
