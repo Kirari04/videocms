@@ -6,6 +6,13 @@ import (
 	"strconv"
 )
 
+var ENV Config
+var EXTENSIONS []string = []string{
+	"mp4", "mkv", "webm", "avi", "mov", "ts",
+}
+
+var VERSION string = "v0.0.1"
+
 type Config struct {
 	Host string `validate:"required,min=1,max=120"`
 
@@ -117,11 +124,6 @@ func (c Config) PublicConfig() PublicConfig {
 }
 
 type ConfigMap map[string]string
-
-var ENV Config
-var EXTENSIONS []string = []string{
-	"mp4", "mkv", "webm", "avi", "mov", "ts",
-}
 
 func Setup() {
 	ENV.Host = getEnv("Host", ":3000")

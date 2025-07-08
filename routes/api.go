@@ -70,6 +70,8 @@ func Api() {
 
 	protectedApi.GET("/users", controllers.GetUsers, middlewares.IsAdmin())
 
+	protectedApi.GET("/versioncheck", controllers.GetVersionCheck, middlewares.IsAdmin())
+
 	protectedApi.POST("/webhook", controllers.CreateWebhook)
 	protectedApi.PUT("/webhook", controllers.UpdateWebhook)
 	protectedApi.DELETE("/webhook", controllers.DeleteWebhook)
