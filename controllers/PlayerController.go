@@ -145,27 +145,33 @@ func PlayerController(c echo.Context) error {
 		downloadsEnabled = *config.ENV.DownloadEnabled
 	}
 
+	var continueWatchingPopupEnabled bool
+	if config.ENV.ContinueWatchingPopupEnabled != nil {
+		continueWatchingPopupEnabled = *config.ENV.ContinueWatchingPopupEnabled
+	}
+
 	return c.Render(http.StatusOK, "player.html", echo.Map{
-		"Title":           fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
-		"Description":     fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),
-		"Thumbnail":       fmt.Sprintf("%s/%s/image/thumb/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, dbLink.File.Thumbnail),
-		"StreamUrl":       template.HTML(streamUrl),
-		"StreamUrlWidth":  streamUrlWidth,
-		"StreamUrlHeight": streamUrlHeight,
-		"Width":           dbLink.File.Width,
-		"Height":          dbLink.File.Height,
-		"Qualitys":        string(rawQuality),
-		"Subtitles":       string(rawSubtitles),
-		"Audios":          string(rawAudios),
-		"AudioUUID":       firstAudio,
-		"Webhooks":        string(rawWebhooks),
-		"StreamIsReady":   streamIsReady,
-		"UUID":            requestValidation.UUID,
-		"PROJECTURL":      config.ENV.Project,
-		"Folder":          config.ENV.FolderVideoQualitysPub,
-		"JWT":             tkn,
-		"AppName":         config.ENV.AppName,
-		"BaseUrl":         config.ENV.BaseUrl,
-		"DownloadEnabled": downloadsEnabled,
+		"Title":                        fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
+		"Description":                  fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),
+		"Thumbnail":                    fmt.Sprintf("%s/%s/image/thumb/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, dbLink.File.Thumbnail),
+		"StreamUrl":                    template.HTML(streamUrl),
+		"StreamUrlWidth":               streamUrlWidth,
+		"StreamUrlHeight":              streamUrlHeight,
+		"Width":                        dbLink.File.Width,
+		"Height":                       dbLink.File.Height,
+		"Qualitys":                     string(rawQuality),
+		"Subtitles":                    string(rawSubtitles),
+		"Audios":                       string(rawAudios),
+		"AudioUUID":                    firstAudio,
+		"Webhooks":                     string(rawWebhooks),
+		"StreamIsReady":                streamIsReady,
+		"UUID":                         requestValidation.UUID,
+		"PROJECTURL":                   config.ENV.Project,
+		"Folder":                       config.ENV.FolderVideoQualitysPub,
+		"JWT":                          tkn,
+		"AppName":                      config.ENV.AppName,
+		"BaseUrl":                      config.ENV.BaseUrl,
+		"DownloadEnabled":              downloadsEnabled,
+		"ContinueWatchingPopupEnabled": continueWatchingPopupEnabled,
 	})
 }

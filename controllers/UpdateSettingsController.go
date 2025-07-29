@@ -70,6 +70,7 @@ func UpdateSettings(c echo.Context) error {
 	setting.PluginPgsServer = validation.PluginPgsServer
 	setting.EnablePluginPgsServer = validation.EnablePluginPgsServer
 	setting.DownloadEnabled = validation.DownloadEnabled
+	setting.ContinueWatchingPopupEnabled = validation.ContinueWatchingPopupEnabled
 
 	if res := inits.DB.Save(&setting); res.Error != nil {
 		log.Fatalln("Failed to save settings", res.Error)

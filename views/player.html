@@ -242,7 +242,8 @@
         const HEIGHT = parseInt("{{ .Height }}");
         const WIDTH = parseFloat("{{ .Width }}");
         const RATIO = WIDTH / HEIGHT;
-        const DOWNLOAD_ENABLED = "{{ .DownloadEnabled }}";
+        const DOWNLOAD_ENABLED = "{{ .DownloadEnabled }}" === "true";
+        const CONTINUE_WATCHING_POPUP_ENABLED = "{{ .ContinueWatchingPopupEnabled }}" === "true";
     </script>
     <script>
         Subtitles = Subtitles.filter((e) =>
@@ -841,6 +842,11 @@
                 localStorage.getItem(`POSITION-${UUID}`)
             );
             if (oldPosition > 0) {
+                if (!CONTINUE_WATCHING_POPUP_ENABLED) {
+                    return;
+                }
+                // render continue watching popup
+
                 const settingOverlayContainer =
                     document.createElement("div");
                 settingOverlayContainer.classList.add(

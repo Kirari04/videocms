@@ -61,5 +61,6 @@ type Setting struct {
 	PluginPgsServer       string `validate:"required"`
 	EnablePluginPgsServer string `validate:"required,boolean"`
 
-	DownloadEnabled string `validate:"required,boolean"`
+	DownloadEnabled              string `validate:"required,boolean"`
+	ContinueWatchingPopupEnabled string `validate:"required,boolean"`
 }

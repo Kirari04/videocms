@@ -73,6 +73,7 @@ func Setup() {
 	config.ENV.EnablePluginPgsServer = getEnvDb_bool(&setting.EnablePluginPgsServer, boolPtr(false))
 
 	config.ENV.DownloadEnabled = getEnvDb_bool(&setting.DownloadEnabled, boolPtr(true))
+	config.ENV.ContinueWatchingPopupEnabled = getEnvDb_bool(&setting.ContinueWatchingPopupEnabled, boolPtr(true))
 
 	// validate config before saving
 	validate := validator.New(validator.WithRequiredStructEnabled())

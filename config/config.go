@@ -76,6 +76,8 @@ type Config struct {
 
 	StatsDriveName string `validate:"required,min=1,max=255"`
 
+	ContinueWatchingPopupEnabled *bool
+
 	DownloadEnabled *bool
 }
 
@@ -96,6 +98,8 @@ type PublicConfig struct {
 	CaptchaType                 string
 	Captcha_Recaptcha_PublicKey string
 	Captcha_Hcaptcha_PublicKey  string
+
+	ContinueWatchingPopupEnabled bool
 
 	DownloadEnabled bool
 }
@@ -118,6 +122,8 @@ func (c Config) PublicConfig() PublicConfig {
 		CaptchaType:                 c.CaptchaType,
 		Captcha_Recaptcha_PublicKey: c.Captcha_Recaptcha_PublicKey,
 		Captcha_Hcaptcha_PublicKey:  c.Captcha_Hcaptcha_PublicKey,
+
+		ContinueWatchingPopupEnabled: *c.ContinueWatchingPopupEnabled,
 
 		DownloadEnabled: *c.DownloadEnabled,
 	}
