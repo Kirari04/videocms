@@ -67,7 +67,6 @@ func GetSystemStats(c echo.Context) error {
 			).
 			Where("created_at > ?", from).
 			Where("created_at < ?", until).
-			Where("server_id IS NULL").
 			Find(&resources); res.Error != nil {
 			log.Println("Failed to query stats", res.Error)
 			return c.NoContent(http.StatusInternalServerError)
