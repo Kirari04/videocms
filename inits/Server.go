@@ -124,7 +124,7 @@ func Server() {
 	}))
 
 	// Logging
-	app.Use(middleware.Logger())
+	app.Use(middleware.RequestLogger())
 
 	App = app
 	Api = *app.Group("/api")
