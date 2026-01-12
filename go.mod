@@ -11,8 +11,8 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/thatisuday/commando v1.0.4
 	github.com/xyproto/randomstring v1.2.0
-	golang.org/x/net v0.48.0
-	golang.org/x/term v0.38.0
+	golang.org/x/net v0.49.0
+	golang.org/x/term v0.39.0
 	golang.org/x/time v0.14.0
 	gopkg.in/vansante/go-ffprobe.v2 v2.2.1
 	gorm.io/driver/sqlite v1.6.0
@@ -32,7 +32,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.58.0 // indirect
+	github.com/quic-go/quic-go v0.59.0 // indirect
 	github.com/refraction-networking/utls v1.8.1 // indirect
 	github.com/shoenig/go-m1cpu v0.1.7 // indirect
 	github.com/thatisuday/clapper v1.0.10 // indirect
@@ -55,7 +55,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.33 // indirect
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	golang.org/x/crypto v0.46.0
-	golang.org/x/sys v0.39.0
-	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/crypto v0.47.0
+	golang.org/x/sys v0.40.0
+	golang.org/x/text v0.33.0 // indirect
 )
