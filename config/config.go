@@ -35,6 +35,7 @@ type Config struct {
 
 	MaxItemsMultiDelete int64
 	MaxRunningEncodes   int64
+	MaxFramerate        int64
 
 	MaxUploadFilesize   int64
 	MaxUploadChuncksize int64

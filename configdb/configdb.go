@@ -37,6 +37,7 @@ func Setup() {
 
 	config.ENV.MaxItemsMultiDelete = getEnvDb_int64(&setting.MaxItemsMultiDelete, 1000)
 	config.ENV.MaxRunningEncodes = getEnvDb_int64(&setting.MaxRunningEncodes, 1)
+	config.ENV.MaxFramerate = getEnvDb_int64(&setting.MaxFramerate, 60)
 
 	config.ENV.MaxUploadFilesize = getEnvDb_int64(&setting.MaxUploadFilesize, 5*1024*1024*1024) // 5gb
 	config.ENV.MaxUploadChuncksize = getEnvDb_int64(&setting.MaxUploadChuncksize, 20*1024*1024) // 20mb

@@ -40,6 +40,7 @@ func UpdateSettings(c echo.Context) error {
 	setting.CloudflareEnabled = validation.CloudflareEnabled
 	setting.MaxItemsMultiDelete = validation.MaxItemsMultiDelete
 	setting.MaxRunningEncodes = validation.MaxRunningEncodes
+	setting.MaxFramerate = validation.MaxFramerate
 	setting.MaxUploadFilesize = validation.MaxUploadFilesize
 	setting.MaxUploadChuncksize = validation.MaxUploadChuncksize
 	setting.MaxUploadSessions = validation.MaxUploadSessions

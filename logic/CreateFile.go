@@ -298,8 +298,8 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 		qualityPath := fmt.Sprintf("%s/%s/%s", config.ENV.FolderVideoQualitysPriv, fileId, qualityOpt.FolderName)
 		// switch framerate if too high
 		var qualityFrameRate float64 = 0
-		if avgFramerate > 30 {
-			qualityFrameRate = 30
+		if avgFramerate > float64(config.ENV.MaxFramerate) {
+			qualityFrameRate = float64(config.ENV.MaxFramerate)
 		}
 
 		if float64(videoWidth/videoHeight) > float64(16/9) {

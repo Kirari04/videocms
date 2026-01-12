@@ -26,6 +26,7 @@ type Setting struct {
 
 	MaxItemsMultiDelete string `validate:"required,number,min=1"`
 	MaxRunningEncodes   string `validate:"required,number,min=1"`
+	MaxFramerate        string `validate:"required,number,min=1"`
 
 	MaxUploadFilesize   string `validate:"required,number,min=1"`
 	MaxUploadChuncksize string `validate:"required,number,min=1"`
