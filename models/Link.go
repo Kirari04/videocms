@@ -34,3 +34,7 @@ type LinksDeleteValidation struct {
 type LinkGetValidation struct {
 	LinkID uint `validate:"required,number" query:"LinkID"`
 }
+
+type LinkSearchValidation struct {
+	Query string `validate:"required,min=1,max=120" query:"Query"`
+}

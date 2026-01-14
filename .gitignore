@@ -7,3 +7,4 @@ build/cmd
 build/svelte
 __debug_bin*
 tmp/main
+videocms

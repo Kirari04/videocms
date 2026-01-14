@@ -50,6 +50,7 @@ func Api() {
 	protectedApi.GET("/file", controllers.GetFile)
 	protectedApi.PUT("/file", controllers.UpdateFile)
 	protectedApi.DELETE("/file", controllers.DeleteFileController)
+	protectedApi.GET("/files/search", controllers.SearchFiles)
 	protectedApi.GET("/files", controllers.ListFiles)
 	protectedApi.DELETE("/files", controllers.DeleteFilesController)
 	protectedApi.POST("/file/tag", controllers.CreateTagController)
