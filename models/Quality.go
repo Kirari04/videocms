@@ -10,7 +10,7 @@ type Quality struct {
 	Height int64
 	Width  int64
 	Size   int64
-	// Crf          int `json:"-"`
+	Crf    int
 
 	VideoBitrate   string // example: 8000k
 	AudioBitrate   string // example: 128k
@@ -48,7 +48,8 @@ type AvailableQuality struct {
 	FolderName string
 	Height     int64
 	Width      int64
-	// Crf        int
+	Crf        int
+
 	VideoBitrate   string // example: 8000k
 	AudioBitrate   string // example: 128k
 	Profile        string // example: high

@@ -248,7 +248,9 @@ func runEncodeQuality(encodingTask models.Quality) {
 			fmt.Sprintf("-profile:v %s ", encodingTask.Profile) +
 			fmt.Sprintf("-level:v %s ", encodingTask.Level) +
 			fmt.Sprint("-pix_fmt yuv420p ") + // YUV 4:2:0
-			fmt.Sprintf("-b:v %s ", encodingTask.VideoBitrate) + // setting video bitrate
+			fmt.Sprintf("-crf %d ", encodingTask.Crf) + // setting crf
+			fmt.Sprintf("-maxrate %s ", encodingTask.VideoBitrate) + // setting max video bitrate
+			fmt.Sprintf("-bufsize %sk ", strconv.Itoa(helpers.ExtractNumber(encodingTask.VideoBitrate)*2)) + // setting video bufsize
 			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
 			fmt.Sprintf("%s ", gopSizeString) + // (optional) setting gop size
 			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
@@ -650,7 +652,7 @@ func prepocessPgs(encodingTask models.Subtitle, absFolderOutput string, absFileI
 		return fmt.Errorf("Error happend while scanning pgs subtitle: %v", err.Error())
 	}
 	if !res.IsSuccessState() {
-		return fmt.Errorf("Error happend waiting for srt from pgs plugin: %v", err.Error())
+		return fmt.Errorf("Error happend waiting for srt from pgs plugin: %v", err)
 
 	}
 	if err := os.WriteFile(pgsOutputFilePath, res.Bytes(), 0644); err != nil {

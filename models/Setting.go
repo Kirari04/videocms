@@ -46,18 +46,25 @@ type Setting struct {
 
 	EncodeHls240p        string `validate:"required,boolean"`
 	Hls240pVideoBitrate  string `validate:"required,min=1,max=7" gorm:"size:7;"`
+	Hls240pCrf           string `validate:"required,number,min=0,max=51" gorm:"size:2;"`
 	EncodeHls360p        string `validate:"required,boolean"`
 	Hls360pVideoBitrate  string `validate:"required,min=1,max=7" gorm:"size:7;"`
+	Hls360pCrf           string `validate:"required,number,min=0,max=51" gorm:"size:2;"`
 	EncodeHls480p        string `validate:"required,boolean"`
 	Hls480pVideoBitrate  string `validate:"required,min=1,max=7" gorm:"size:7;"`
+	Hls480pCrf           string `validate:"required,number,min=0,max=51" gorm:"size:2;"`
 	EncodeHls720p        string `validate:"required,boolean"`
 	Hls720pVideoBitrate  string `validate:"required,min=1,max=7" gorm:"size:7;"`
+	Hls720pCrf           string `validate:"required,number,min=0,max=51" gorm:"size:2;"`
 	EncodeHls1080p       string `validate:"required,boolean"`
 	Hls1080pVideoBitrate string `validate:"required,min=1,max=7" gorm:"size:7;"`
+	Hls1080pCrf          string `validate:"required,number,min=0,max=51" gorm:"size:2;"`
 	EncodeHls1440p       string `validate:"required,boolean"`
 	Hls1440pVideoBitrate string `validate:"required,min=1,max=7" gorm:"size:7;"`
+	Hls1440pCrf          string `validate:"required,number,min=0,max=51" gorm:"size:2;"`
 	EncodeHls2160p       string `validate:"required,boolean"`
 	Hls2160pVideoBitrate string `validate:"required,min=1,max=7" gorm:"size:7;"`
+	Hls2160pCrf          string `validate:"required,number,min=0,max=51" gorm:"size:2;"`
 
 	PluginPgsServer       string `validate:"required"`
 	EnablePluginPgsServer string `validate:"required,boolean"`

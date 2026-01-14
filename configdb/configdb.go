@@ -57,18 +57,25 @@ func Setup() {
 
 	config.ENV.EncodeHls240p = getEnvDb_bool(&setting.EncodeHls240p, boolPtr(true))
 	config.ENV.Hls240pVideoBitrate = getEnvDb(&setting.Hls240pVideoBitrate, "600k")
+	config.ENV.Hls240pCrf = getEnvDb_int(&setting.Hls240pCrf, 23)
 	config.ENV.EncodeHls360p = getEnvDb_bool(&setting.EncodeHls360p, boolPtr(true))
 	config.ENV.Hls360pVideoBitrate = getEnvDb(&setting.Hls360pVideoBitrate, "1200k")
+	config.ENV.Hls360pCrf = getEnvDb_int(&setting.Hls360pCrf, 23)
 	config.ENV.EncodeHls480p = getEnvDb_bool(&setting.EncodeHls480p, boolPtr(true))
 	config.ENV.Hls480pVideoBitrate = getEnvDb(&setting.Hls480pVideoBitrate, "2500k")
+	config.ENV.Hls480pCrf = getEnvDb_int(&setting.Hls480pCrf, 23)
 	config.ENV.EncodeHls720p = getEnvDb_bool(&setting.EncodeHls720p, boolPtr(true))
 	config.ENV.Hls720pVideoBitrate = getEnvDb(&setting.Hls720pVideoBitrate, "4500k")
+	config.ENV.Hls720pCrf = getEnvDb_int(&setting.Hls720pCrf, 23)
 	config.ENV.EncodeHls1080p = getEnvDb_bool(&setting.EncodeHls1080p, boolPtr(true))
 	config.ENV.Hls1080pVideoBitrate = getEnvDb(&setting.Hls1080pVideoBitrate, "8000k")
+	config.ENV.Hls1080pCrf = getEnvDb_int(&setting.Hls1080pCrf, 23)
 	config.ENV.EncodeHls1440p = getEnvDb_bool(&setting.EncodeHls1440p, boolPtr(false))
 	config.ENV.Hls1440pVideoBitrate = getEnvDb(&setting.Hls1440pVideoBitrate, "15000k")
+	config.ENV.Hls1440pCrf = getEnvDb_int(&setting.Hls1440pCrf, 23)
 	config.ENV.EncodeHls2160p = getEnvDb_bool(&setting.EncodeHls2160p, boolPtr(false))
 	config.ENV.Hls2160pVideoBitrate = getEnvDb(&setting.Hls2160pVideoBitrate, "25000k")
+	config.ENV.Hls2160pCrf = getEnvDb_int(&setting.Hls2160pCrf, 23)
 
 	config.ENV.PluginPgsServer = getEnvDb(&setting.PluginPgsServer, "http://127.0.0.1:5000")
 	config.ENV.EnablePluginPgsServer = getEnvDb_bool(&setting.EnablePluginPgsServer, boolPtr(false))
@@ -92,6 +99,7 @@ func Setup() {
 			FolderName: "240p",
 			Height:     240,
 			Width:      426,
+			Crf:        config.ENV.Hls240pCrf,
 
 			VideoBitrate:   config.ENV.Hls240pVideoBitrate,
 			AudioBitrate:   "64k",
@@ -109,6 +117,7 @@ func Setup() {
 			FolderName: "360p",
 			Height:     360,
 			Width:      640,
+			Crf:        config.ENV.Hls360pCrf,
 
 			VideoBitrate:   config.ENV.Hls360pVideoBitrate,
 			AudioBitrate:   "96k",
@@ -126,6 +135,7 @@ func Setup() {
 			FolderName: "480p",
 			Height:     480,
 			Width:      854,
+			Crf:        config.ENV.Hls480pCrf,
 
 			VideoBitrate:   config.ENV.Hls480pVideoBitrate,
 			AudioBitrate:   "128k",
@@ -143,6 +153,7 @@ func Setup() {
 			FolderName: "720p",
 			Height:     720,
 			Width:      1280,
+			Crf:        config.ENV.Hls720pCrf,
 
 			VideoBitrate:   config.ENV.Hls720pVideoBitrate,
 			AudioBitrate:   "192k",
@@ -160,6 +171,7 @@ func Setup() {
 			FolderName: "1080p",
 			Height:     1080,
 			Width:      1920,
+			Crf:        config.ENV.Hls1080pCrf,
 
 			VideoBitrate:   config.ENV.Hls1080pVideoBitrate,
 			AudioBitrate:   "256k",
@@ -177,6 +189,7 @@ func Setup() {
 			FolderName: "1440p",
 			Height:     1440,
 			Width:      2560,
+			Crf:        config.ENV.Hls1440pCrf,
 
 			VideoBitrate:   config.ENV.Hls1440pVideoBitrate,
 			AudioBitrate:   "256k",
@@ -194,6 +207,7 @@ func Setup() {
 			FolderName: "2160p",
 			Height:     2160,
 			Width:      3840,
+			Crf:        config.ENV.Hls2160pCrf,
 
 			VideoBitrate:   config.ENV.Hls2160pVideoBitrate,
 			AudioBitrate:   "320k",
