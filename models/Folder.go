@@ -30,3 +30,9 @@ type FolderUpdateValidation struct {
 	FolderID       uint   `validate:"required,number" json:"FolderID" form:"FolderID"`
 	ParentFolderID uint   `validate:"number" json:"ParentFolderID" form:"ParentFolderID"`
 }
+
+type MoveItemsValidation struct {
+	ParentFolderID uint   `validate:"number" json:"ParentFolderID" form:"ParentFolderID"`
+	FolderIDs      []uint `json:"FolderIDs" form:"FolderIDs"`
+	LinkIDs        []uint `json:"LinkIDs" form:"LinkIDs"`
+}

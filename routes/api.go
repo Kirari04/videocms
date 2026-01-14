@@ -42,6 +42,7 @@ func Api() {
 	protectedApi.POST("/folder", controllers.CreateFolder)
 	protectedApi.PUT("/folder", controllers.UpdateFolder)
 	protectedApi.DELETE("/folder", controllers.DeleteFolder)
+	protectedApi.PUT("/move", controllers.MoveItems)
 	protectedApi.GET("/folders", controllers.ListFolders)
 	protectedApi.DELETE("/folders", controllers.DeleteFolders)
 
