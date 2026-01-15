@@ -4,11 +4,9 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
-	"math"
+	"github.com/labstack/echo/v4"
 	"net/http"
 	"time"
-
-	"github.com/labstack/echo/v4"
 )
 
 func GetSystemStats(c echo.Context) error {

@@ -8,12 +8,49 @@ import (
 	"net/http"
 )
 
-func GetUsers() (int, *[]models.User, error) {
-	users := make([]models.User, 0)
-	if res := inits.DB.Find(&users); res.Error != nil {
+func GetUsers(page, limit int, search string) (int, interface{}, error) {
+	type UserWithUsage struct {
+		models.User
+		UsedStorage int64 `json:"used_storage"`
+		FileCount   int64 `json:"file_count"`
+	}
+
+	var users []UserWithUsage
+	var total int64
+
+	offset := (page - 1) * limit
+
+	query := inits.DB.Model(&models.User{})
+
+	if search != "" {
+		searchTerm := "%" + search + "%"
+		query = query.Where("username LIKE ? OR email LIKE ?", searchTerm, searchTerm)
+	}
+
+	if err := query.Count(&total).Error; err != nil {
+		return http.StatusInternalServerError, nil, errors.New("failed to count users")
+	}
+
+	err := query.
+		Select("users.*, " +
+			"(SELECT COALESCE(SUM(size), 0) FROM files WHERE files.user_id = users.id AND files.deleted_at IS NULL) as used_storage, " +
+			"(SELECT COUNT(id) FROM files WHERE files.user_id = users.id AND files.deleted_at IS NULL) as file_count").
+		Limit(limit).
+		Offset(offset).
+		Scan(&users).Error
+
+	if err != nil {
 		return http.StatusInternalServerError, nil, errors.New("failed to fetch users")
 	}
-	return http.StatusOK, &users, nil
+
+	return http.StatusOK, map[string]interface{}{
+		"data": users,
+		"meta": map[string]interface{}{
+			"total": total,
+			"page":  page,
+			"limit": limit,
+		},
+	}, nil
 }
 
 func CreateUser(username, password, email string, admin bool, storage int64, balance float64) (int, *models.User, error) {
