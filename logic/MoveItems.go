@@ -8,7 +8,7 @@ import (
 	"net/http"
 )
 
-func MoveItems(userId uint, targetFolderId uint, folderIds []uint, linkIds []uint) (int, error) {
+func MoveItems(userId uint, targetFolderId uint, folderIds []uint, linkIds []uint, isAdmin bool) (int, error) {
 	// check if at least one item is being moved
 	if len(folderIds) == 0 && len(linkIds) == 0 {
 		return http.StatusBadRequest, errors.New("no items selected to move")
@@ -20,7 +20,7 @@ func MoveItems(userId uint, targetFolderId uint, folderIds []uint, linkIds []uin
 		if res := inits.DB.First(&targetFolder, targetFolderId); res.Error != nil {
 			return http.StatusBadRequest, errors.New("target folder doesn't exist")
 		}
-		if targetFolder.UserID != userId {
+		if !isAdmin && targetFolder.UserID != userId {
 			return http.StatusForbidden, errors.New("unauthorized access to target folder")
 		}
 	}
@@ -36,8 +36,8 @@ func MoveItems(userId uint, targetFolderId uint, folderIds []uint, linkIds []uin
 		if res := inits.DB.First(&folder, folderId); res.Error != nil {
 			return http.StatusBadRequest, errors.New("folder to move not found")
 		}
-		
-		if folder.UserID != userId {
+
+		if !isAdmin && folder.UserID != userId {
 			return http.StatusForbidden, errors.New("unauthorized access to folder")
 		}
 
@@ -64,8 +64,8 @@ func MoveItems(userId uint, targetFolderId uint, folderIds []uint, linkIds []uin
 		if res := inits.DB.First(&link, linkId); res.Error != nil {
 			return http.StatusBadRequest, errors.New("file to move not found")
 		}
-		
-		if link.UserID != userId {
+
+		if !isAdmin && link.UserID != userId {
 			return http.StatusForbidden, errors.New("unauthorized access to file")
 		}
 

@@ -23,9 +23,21 @@ func UpdateFile(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "File doesn't exist")
 	}
 
+	// Verify ownership
+	userID := c.Get("UserID").(uint)
+	isAdmin, _ := c.Get("Admin").(bool)
+	if !isAdmin && dbLink.UserID != userID {
+		return c.String(http.StatusForbidden, "Unauthorized access to file")
+	}
+
 	if linkValidation.ParentFolderID > 0 {
-		if res := inits.DB.First(&models.Folder{}, linkValidation.ParentFolderID); res.Error != nil {
+		var targetParent models.Folder
+		if res := inits.DB.First(&targetParent, linkValidation.ParentFolderID); res.Error != nil {
 			return c.String(http.StatusBadRequest, "Parent folder doesn't exist")
+		}
+
+		if !isAdmin && targetParent.UserID != userID {
+			return c.String(http.StatusForbidden, "Unauthorized access to target parent folder")
 		}
 	}
 

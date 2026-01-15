@@ -15,11 +15,15 @@ func MoveItems(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
+	// Determine admin status
+	isAdmin, _ := c.Get("Admin").(bool)
+
 	status, err := logic.MoveItems(
 		c.Get("UserID").(uint),
 		moveValidation.ParentFolderID,
 		moveValidation.FolderIDs,
 		moveValidation.LinkIDs,
+		isAdmin,
 	)
 	if err != nil {
 		return c.String(status, err.Error())
