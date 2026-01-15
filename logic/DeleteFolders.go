@@ -17,7 +17,7 @@ and shortly after calls the delete method for the root folder too, it would try 
 whole folder tree and delete all folders & files again. To prevent that there is an map variable
 that should prevent the user from calling this method multiple times concurrently.
 */
-func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint) (status int, err error) {
+func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint, isAdmin bool) (status int, err error) {
 
 	if helpers.UserRequestAsyncObj.Blocked(userID) {
 		return http.StatusTooManyRequests, errors.New("wait until the previous delete request finished")
@@ -38,10 +38,13 @@ func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint
 	reqFolderIdDeleteList := []uint{}
 	var parentFolderID uint = 0
 	for i, FolderValidation := range folderValidation.FolderIDs {
-		var dbFolder = models.Folder{
-			UserID: userID,
+		query := inits.DB.Model(&models.Folder{})
+		if !isAdmin {
+			query = query.Where("user_id = ?", userID)
 		}
-		if res := inits.DB.First(&dbFolder, FolderValidation.FolderID); res.Error != nil {
+
+		var dbFolder models.Folder
+		if res := query.First(&dbFolder, FolderValidation.FolderID); res.Error != nil {
 			return http.StatusBadRequest, fmt.Errorf("FolderID (%d) doesn't exist", FolderValidation.FolderID)
 		}
 		// check if has same parent folder
@@ -83,7 +86,7 @@ func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint
 	if len(files) > 0 {
 		if status, err := DeleteFiles(&models.LinksDeleteValidation{
 			LinkIDs: files,
-		}, userID); err != nil {
+		}, userID, isAdmin); err != nil {
 			return status, fmt.Errorf("failed to delete all files from folders: %v", err)
 		}
 	}

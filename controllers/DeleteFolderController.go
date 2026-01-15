@@ -15,12 +15,15 @@ func DeleteFolder(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
+	// Determine admin status
+	isAdmin, _ := c.Get("Admin").(bool)
+
 	// Business logic
 	status, err := logic.DeleteFolders(&models.FoldersDeleteValidation{
 		FolderIDs: []models.FolderDeleteValidation{
 			folderValidation,
 		},
-	}, c.Get("UserID").(uint))
+	}, c.Get("UserID").(uint), isAdmin)
 	if err != nil {
 		return c.String(status, err.Error())
 	}

@@ -12,7 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func DeleteFiles(fileValidation *models.LinksDeleteValidation, userID uint) (status int, err error) {
+func DeleteFiles(fileValidation *models.LinksDeleteValidation, userID uint, isAdmin bool) (status int, err error) {
 	if len(fileValidation.LinkIDs) == 0 {
 		return http.StatusBadRequest, errors.New("array LinkIDs is empty")
 	}
@@ -24,9 +24,12 @@ func DeleteFiles(fileValidation *models.LinksDeleteValidation, userID uint) (sta
 	linkIdDeleteMap := make(map[uint]bool, len(fileValidation.LinkIDs))
 	linkIdDeleteList := []uint{}
 	for _, LinkValidation := range fileValidation.LinkIDs {
-		if res := inits.DB.First(&models.Link{
-			UserID: userID,
-		}, LinkValidation.LinkID); res.Error != nil {
+		query := inits.DB.Model(&models.Link{})
+		if !isAdmin {
+			query = query.Where("user_id = ?", userID)
+		}
+
+		if res := query.First(&models.Link{}, LinkValidation.LinkID); res.Error != nil {
 			return http.StatusBadRequest, fmt.Errorf("linkID (%d) doesn't exist", LinkValidation.LinkID)
 		}
 		if linkIdDeleteMap[LinkValidation.LinkID] {
