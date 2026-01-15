@@ -1,20 +1,14 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/inits"
-	"ch/kirari04/videocms/models"
-	"log"
-	"net/http"
-
+	"ch/kirari04/videocms/logic"
 	"github.com/labstack/echo/v4"
 )
 
 func GetUsers(c echo.Context) error {
-	users := make([]models.User, 0)
-	if res := inits.DB.First(&users); res.Error != nil {
-		log.Println("Failed to fetch users")
-		return c.NoContent(http.StatusInternalServerError)
+	status, users, err := logic.GetUsers()
+	if err != nil {
+		return c.String(status, err.Error())
 	}
-
-	return c.JSON(http.StatusOK, &users)
+	return c.JSON(status, users)
 }

@@ -71,6 +71,11 @@ func Api() {
 	protectedApi.PUT("/settings", controllers.UpdateSettings, middlewares.IsAdmin())
 
 	protectedApi.GET("/users", controllers.GetUsers, middlewares.IsAdmin())
+	protectedApi.POST("/users", controllers.CreateUser, middlewares.IsAdmin())
+	protectedApi.GET("/users/:id", controllers.GetUser, middlewares.IsAdmin())
+	protectedApi.PUT("/users/:id", controllers.UpdateUser, middlewares.IsAdmin())
+	protectedApi.DELETE("/users/:id", controllers.DeleteUser, middlewares.IsAdmin())
+	protectedApi.POST("/users/:id/password", controllers.ResetUserPassword, middlewares.IsAdmin())
 
 	protectedApi.GET("/versioncheck", controllers.GetVersionCheck, middlewares.IsAdmin())
 
