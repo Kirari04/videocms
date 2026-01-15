@@ -54,22 +54,24 @@ type GetFileResp struct {
 	Tags           []GetFileRespTag
 }
 
-func GetFile(LinkID uint, userID uint) (status int, fileData *GetFileResp, err error) {
+func GetFile(LinkID uint, userID uint, isAdmin bool) (status int, fileData *GetFileResp, err error) {
 
 	// query all files
 	var link models.Link
-	if res := inits.DB.
+	query := inits.DB.
 		Model(&models.Link{}).
 		Preload("User").
 		Preload("Tags").
 		Preload("File").
 		Preload("File.Qualitys").
 		Preload("File.Subtitles").
-		Preload("File.Audios").
-		Where(&models.Link{
-			UserID: userID,
-		}).
-		First(&link, LinkID); res.Error != nil {
+		Preload("File.Audios")
+
+	if !isAdmin {
+		query = query.Where("user_id = ?", userID)
+	}
+
+	if res := query.First(&link, LinkID); res.Error != nil {
 		return http.StatusNotFound, nil, echo.ErrNotFound
 	}
 

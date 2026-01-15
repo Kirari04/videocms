@@ -15,8 +15,11 @@ func GetFile(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
+	// Determine admin status
+	isAdmin, _ := c.Get("Admin").(bool)
+
 	// Business logic
-	status, response, err := logic.GetFile(fileValidation.LinkID, c.Get("UserID").(uint))
+	status, response, err := logic.GetFile(fileValidation.LinkID, c.Get("UserID").(uint), isAdmin)
 	if err != nil {
 		return c.String(status, err.Error())
 	}
