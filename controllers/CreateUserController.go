@@ -11,7 +11,7 @@ import (
 type CreateUserRequest struct {
 	Username string  `json:"username" validate:"required,min=3,max=32"`
 	Password string  `json:"password" validate:"required,min=8,max=250"`
-	Email    string  `json:"email" validate:"required,email"`
+	Email    string  `json:"email" validate:"omitempty,email"`
 	Admin    bool    `json:"admin"`
 	Storage  int64   `json:"storage"`
 	Balance  float64 `json:"balance"`
