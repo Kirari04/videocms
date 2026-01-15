@@ -2,7 +2,7 @@ package logic
 
 import (
 	"ch/kirari04/videocms/inits"
-	"ch/kirari04/videocms/models"
+	"math"
 	"time"
 )
 
@@ -23,18 +23,20 @@ type SystemStatsData struct {
 	ENCSubtitleQueue []StatPoint
 }
 
-func GetSystemStats(from time.Time, to time.Time, points int) (SystemStatsData, error) {
-	var resources []models.SystemResource
-	
-	// Fetch all data in range
-	if res := inits.DB.
-		Where("created_at >= ?", from).
-		Where("created_at <= ?", to).
-		Order("created_at asc").
-		Find(&resources); res.Error != nil {
-		return SystemStatsData{}, res.Error
-	}
+type aggregatedResult struct {
+	Ts               int64
+	Cpu              float64
+	Mem              float64
+	NetOut           float64
+	NetIn            float64
+	DiskW            float64
+	DiskR            float64
+	ENCQualityQueue  float64
+	ENCAudioQueue    float64
+	ENCSubtitleQueue float64
+}
 
+func GetSystemStats(from time.Time, to time.Time, points int) (SystemStatsData, error) {
 	result := SystemStatsData{
 		Cpu:              make([]StatPoint, 0),
 		Mem:              make([]StatPoint, 0),
@@ -47,101 +49,79 @@ func GetSystemStats(from time.Time, to time.Time, points int) (SystemStatsData, 
 		ENCSubtitleQueue: make([]StatPoint, 0),
 	}
 
-	if len(resources) == 0 {
+	duration := to.Sub(from)
+	if duration <= 0 || points <= 0 {
 		return result, nil
 	}
 
-	// If fewer data points than requested resolution, return all
-	if len(resources) <= points {
-		for _, r := range resources {
-			ts := r.CreatedAt.UnixMilli()
-			result.Cpu = append(result.Cpu, StatPoint{ts, r.Cpu})
-			result.Mem = append(result.Mem, StatPoint{ts, r.Mem})
-			result.NetOut = append(result.NetOut, StatPoint{ts, float64(r.NetOut)})
-			result.NetIn = append(result.NetIn, StatPoint{ts, float64(r.NetIn)})
-			result.DiskW = append(result.DiskW, StatPoint{ts, float64(r.DiskW)})
-			result.DiskR = append(result.DiskR, StatPoint{ts, float64(r.DiskR)})
-			result.ENCQualityQueue = append(result.ENCQualityQueue, StatPoint{ts, float64(r.ENCQualityQueue)})
-			result.ENCAudioQueue = append(result.ENCAudioQueue, StatPoint{ts, float64(r.ENCAudioQueue)})
-			result.ENCSubtitleQueue = append(result.ENCSubtitleQueue, StatPoint{ts, float64(r.ENCSubtitleQueue)})
+	// Calculate step in seconds
+	stepSeconds := int64(math.Ceil(duration.Seconds() / float64(points)))
+	if stepSeconds < 1 {
+		stepSeconds = 1
+	}
+
+	var aggregations []aggregatedResult
+
+	// SQLite-specific optimization: Group by calculated time bucket
+	// (strftime('%s', created_at) / step) * step
+	if err := inits.DB.Table("system_resources").
+		Select(`
+			(CAST(strftime('%s', created_at) AS INTEGER) / ? ) * ? as ts,
+			AVG(cpu) as cpu,
+			AVG(mem) as mem,
+			AVG(net_out) as net_out,
+			AVG(net_in) as net_in,
+			AVG(disk_w) as disk_w,
+			AVG(disk_r) as disk_r,
+			AVG(enc_quality_queue) as enc_quality_queue,
+			AVG(enc_audio_queue) as enc_audio_queue,
+			AVG(enc_subtitle_queue) as enc_subtitle_queue
+		`, stepSeconds, stepSeconds).
+		Where("created_at >= ? AND created_at <= ?", from, to).
+		Group("ts").
+		Order("ts asc").
+		Scan(&aggregations).Error; err != nil {
+		return result, err
+	}
+
+	// Convert aggregations to map for O(1) lookup
+	aggMap := make(map[int64]aggregatedResult)
+	for _, agg := range aggregations {
+		aggMap[agg.Ts] = agg
+	}
+
+	// Iterate through all buckets to fill gaps with zeros
+	startTs := from.Unix()
+	endTs := to.Unix()
+
+	// Align startTs to the grid
+	startTs = (startTs / stepSeconds) * stepSeconds
+
+	for ts := startTs; ts <= endTs; ts += stepSeconds {
+		pointTs := ts * 1000 // Convert to Milliseconds for ApexCharts
+
+		if val, ok := aggMap[ts]; ok {
+			result.Cpu = append(result.Cpu, StatPoint{pointTs, val.Cpu})
+			result.Mem = append(result.Mem, StatPoint{pointTs, val.Mem})
+			result.NetOut = append(result.NetOut, StatPoint{pointTs, val.NetOut})
+			result.NetIn = append(result.NetIn, StatPoint{pointTs, val.NetIn})
+			result.DiskW = append(result.DiskW, StatPoint{pointTs, val.DiskW})
+			result.DiskR = append(result.DiskR, StatPoint{pointTs, val.DiskR})
+			result.ENCQualityQueue = append(result.ENCQualityQueue, StatPoint{pointTs, val.ENCQualityQueue})
+			result.ENCAudioQueue = append(result.ENCAudioQueue, StatPoint{pointTs, val.ENCAudioQueue})
+			result.ENCSubtitleQueue = append(result.ENCSubtitleQueue, StatPoint{pointTs, val.ENCSubtitleQueue})
+		} else {
+			// Fill with zeros
+			result.Cpu = append(result.Cpu, StatPoint{pointTs, 0})
+			result.Mem = append(result.Mem, StatPoint{pointTs, 0})
+			result.NetOut = append(result.NetOut, StatPoint{pointTs, 0})
+			result.NetIn = append(result.NetIn, StatPoint{pointTs, 0})
+			result.DiskW = append(result.DiskW, StatPoint{pointTs, 0})
+			result.DiskR = append(result.DiskR, StatPoint{pointTs, 0})
+			result.ENCQualityQueue = append(result.ENCQualityQueue, StatPoint{pointTs, 0})
+			result.ENCAudioQueue = append(result.ENCAudioQueue, StatPoint{pointTs, 0})
+			result.ENCSubtitleQueue = append(result.ENCSubtitleQueue, StatPoint{pointTs, 0})
 		}
-		return result, nil
-	}
-
-	// Aggregation logic
-	totalDuration := to.Sub(from)
-	if totalDuration <= 0 {
-		return result, nil
-	}
-	
-	bucketSize := totalDuration / time.Duration(points)
-	if bucketSize == 0 {
-		bucketSize = time.Second // prevent div by zero
-	}
-
-	currentBucketEnd := from.Add(bucketSize)
-	
-	// Accumulators
-	var (
-		sumCpu, sumMem, sumNetOut, sumNetIn, sumDiskW, sumDiskR       float64
-		sumEncQ, sumEncA, sumEncS                                     float64
-		count                                                         float64
-	)
-
-	for _, r := range resources {
-		// If current record is past the current bucket, close the bucket
-		for r.CreatedAt.After(currentBucketEnd) {
-			if count > 0 {
-				// Finalize bucket
-				// Use the middle of the bucket as timestamp? Or end? 
-				// ApexCharts usually likes the timestamp. Let's use bucket start or end.
-				ts := currentBucketEnd.Add(-bucketSize).UnixMilli()
-				
-				result.Cpu = append(result.Cpu, StatPoint{ts, sumCpu / count})
-				result.Mem = append(result.Mem, StatPoint{ts, sumMem / count})
-				result.NetOut = append(result.NetOut, StatPoint{ts, sumNetOut / count})
-				result.NetIn = append(result.NetIn, StatPoint{ts, sumNetIn / count})
-				result.DiskW = append(result.DiskW, StatPoint{ts, sumDiskW / count})
-				result.DiskR = append(result.DiskR, StatPoint{ts, sumDiskR / count})
-				result.ENCQualityQueue = append(result.ENCQualityQueue, StatPoint{ts, sumEncQ / count})
-				result.ENCAudioQueue = append(result.ENCAudioQueue, StatPoint{ts, sumEncA / count})
-				result.ENCSubtitleQueue = append(result.ENCSubtitleQueue, StatPoint{ts, sumEncS / count})
-			}
-			
-			// Reset
-			sumCpu, sumMem, sumNetOut, sumNetIn, sumDiskW, sumDiskR = 0, 0, 0, 0, 0, 0
-			sumEncQ, sumEncA, sumEncS = 0, 0, 0
-			count = 0
-			
-			// Move to next bucket
-			currentBucketEnd = currentBucketEnd.Add(bucketSize)
-		}
-
-		// Add to current bucket
-		sumCpu += r.Cpu
-		sumMem += r.Mem
-		sumNetOut += float64(r.NetOut)
-		sumNetIn += float64(r.NetIn)
-		sumDiskW += float64(r.DiskW)
-		sumDiskR += float64(r.DiskR)
-		sumEncQ += float64(r.ENCQualityQueue)
-		sumEncA += float64(r.ENCAudioQueue)
-		sumEncS += float64(r.ENCSubtitleQueue)
-		count++
-	}
-
-	// Handle last bucket
-	if count > 0 {
-		ts := currentBucketEnd.Add(-bucketSize).UnixMilli()
-		result.Cpu = append(result.Cpu, StatPoint{ts, sumCpu / count})
-		result.Mem = append(result.Mem, StatPoint{ts, sumMem / count})
-		result.NetOut = append(result.NetOut, StatPoint{ts, sumNetOut / count})
-		result.NetIn = append(result.NetIn, StatPoint{ts, sumNetIn / count})
-		result.DiskW = append(result.DiskW, StatPoint{ts, sumDiskW / count})
-		result.DiskR = append(result.DiskR, StatPoint{ts, sumDiskR / count})
-		result.ENCQualityQueue = append(result.ENCQualityQueue, StatPoint{ts, sumEncQ / count})
-		result.ENCAudioQueue = append(result.ENCAudioQueue, StatPoint{ts, sumEncA / count})
-		result.ENCSubtitleQueue = append(result.ENCSubtitleQueue, StatPoint{ts, sumEncS / count})
 	}
 
 	return result, nil

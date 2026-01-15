@@ -4,6 +4,7 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
+	"math"
 	"net/http"
 	"time"
 
@@ -17,39 +18,68 @@ func GetSystemStats(c echo.Context) error {
 	}
 
 	to := time.Now()
-	from := to.Add(-24 * time.Hour) // Default 24h
-	points := 50
+	var from time.Time
+	var points int
 
-	// Handle Legacy Interval
-	if validatus.Interval != "" {
-		switch validatus.Interval {
-		case "5min":
-			from = to.Add(-4 * time.Hour)
-			points = 48
-		case "1h":
-			from = to.Add(-24 * time.Hour)
-			points = 24
-		case "7h":
-			from = to.Add(-168 * time.Hour) // 7 days
-			points = 24
-		}
-	}
-
-	// Handle Custom Range (overrides Interval)
-	if validatus.From != "" {
-		if t, err := time.Parse(time.RFC3339, validatus.From); err == nil {
-			from = t
-		}
-	}
+	// 1. Parse 'from' and 'to' from query
 	if validatus.To != "" {
 		if t, err := time.Parse(time.RFC3339, validatus.To); err == nil {
 			to = t
 		}
 	}
-	if validatus.Points > 0 {
-		points = validatus.Points
+
+	if validatus.From != "" {
+		if t, err := time.Parse(time.RFC3339, validatus.From); err == nil {
+			from = t
+		}
 	}
 
+	// 2. Handle Legacy Interval (only if 'from' not set)
+	if from.IsZero() && validatus.Interval != "" {
+		switch validatus.Interval {
+		case "5min":
+			from = to.Add(-4 * time.Hour)
+		case "1h":
+			from = to.Add(-24 * time.Hour)
+		case "7h":
+			from = to.Add(-168 * time.Hour) // 7 days
+		}
+	}
+
+	// 3. Default 'from' if still missing (Default to 24h)
+	if from.IsZero() {
+		from = to.Add(-24 * time.Hour)
+	}
+
+	// 4. Determine Points
+	if validatus.Points > 0 {
+		points = validatus.Points
+	} else {
+		// Smart Interval Calculation
+		// Goal: ~10-15 min intervals for < 24h
+		// Goal: Avoid too many points (max ~200)
+
+		duration := to.Sub(from)
+		minutes := duration.Minutes()
+
+		if minutes <= 1440 { // <= 24 hours
+			// Target 15 minute intervals -> 96 points for 24h
+			// Min points 50
+			calcPoints := int(minutes / 15)
+			if calcPoints < 50 {
+				points = 50
+			} else if calcPoints > 200 {
+				points = 200
+			} else {
+				points = calcPoints
+			}
+		} else {
+			// For longer ranges, stick to ~100 points
+			points = 100
+		}
+	}
+
+	// 5. Fetch Data
 	stats, err := logic.GetSystemStats(from, to, points)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
