@@ -54,6 +54,21 @@ func GetUsers(page, limit int, search string) (int, interface{}, error) {
 }
 
 func CreateUser(username, password, email string, admin bool, storage int64, balance float64) (int, *models.User, error) {
+	// Check for existing username
+	var count int64
+	inits.DB.Model(&models.User{}).Where("username = ?", username).Count(&count)
+	if count > 0 {
+		return http.StatusConflict, nil, errors.New("username already exists")
+	}
+
+	// Check for existing email (only if provided)
+	if email != "" {
+		inits.DB.Model(&models.User{}).Where("email = ?", email).Count(&count)
+		if count > 0 {
+			return http.StatusConflict, nil, errors.New("email already exists")
+		}
+	}
+
 	hash, err := helpers.HashPassword(password)
 	if err != nil {
 		return http.StatusInternalServerError, nil, errors.New("failed to process password")
@@ -89,12 +104,27 @@ func UpdateUser(id uint64, username, email string, admin *bool, storage *int64, 
 		return http.StatusNotFound, nil, errors.New("user not found")
 	}
 
-	if username != "" {
+	if username != "" && username != user.Username {
+		var count int64
+		inits.DB.Model(&models.User{}).Where("username = ?", username).Count(&count)
+		if count > 0 {
+			return http.StatusConflict, nil, errors.New("username already exists")
+		}
 		user.Username = username
 	}
-	if email != "" {
+
+	if email != "" && email != user.Email {
+		var count int64
+		inits.DB.Model(&models.User{}).Where("email = ?", email).Count(&count)
+		if count > 0 {
+			return http.StatusConflict, nil, errors.New("email already exists")
+		}
 		user.Email = email
+	} else if email == "" && user.Email != "" {
+		// Allow clearing the email if explicitly passed as empty string
+		user.Email = ""
 	}
+
 	if admin != nil {
 		user.Admin = *admin
 	}
