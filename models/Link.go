@@ -15,6 +15,7 @@ type Link struct {
 
 type LinkListValidation struct {
 	ParentFolderID uint `validate:"number" query:"ParentFolderID"`
+	UserID         uint `validate:"number" query:"UserID"`
 }
 
 type LinkDeleteValidation struct {
@@ -36,5 +37,6 @@ type LinkGetValidation struct {
 }
 
 type LinkSearchValidation struct {
-	Query string `validate:"required,min=1,max=120" query:"Query"`
+	Query  string `validate:"required,min=1,max=120" query:"Query"`
+	UserID uint   `validate:"number" query:"UserID"`
 }

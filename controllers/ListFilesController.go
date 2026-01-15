@@ -15,7 +15,15 @@ func ListFiles(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	status, response, err := logic.ListFiles(fileValidation.ParentFolderID, c.Get("UserID").(uint))
+	// Determine which UserID to use
+	userID := c.Get("UserID").(uint)
+	isAdmin, _ := c.Get("Admin").(bool)
+
+	if isAdmin && fileValidation.UserID > 0 {
+		userID = fileValidation.UserID
+	}
+
+	status, response, err := logic.ListFiles(fileValidation.ParentFolderID, userID)
 	if err != nil {
 		return c.String(status, err.Error())
 	}

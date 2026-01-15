@@ -25,6 +25,14 @@ func ListFolders(c echo.Context) error {
 		}
 	}
 
+	// Determine which UserID to use
+	userID := c.Get("UserID").(uint)
+	isAdmin, _ := c.Get("Admin").(bool)
+
+	if isAdmin && folderValidation.UserID > 0 {
+		userID = folderValidation.UserID
+	}
+
 	// query all folders
 	var folders []models.Folder
 	res := inits.DB.
@@ -32,7 +40,7 @@ func ListFolders(c echo.Context) error {
 		Preload("User").
 		Where(&models.Folder{
 			ParentFolderID: folderValidation.ParentFolderID,
-			UserID:         c.Get("UserID").(uint),
+			UserID:         userID,
 		}, "ParentFolderID", "UserID").
 		Order("name ASC").
 		Find(&folders)

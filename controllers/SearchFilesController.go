@@ -15,7 +15,15 @@ func SearchFiles(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	status, response, err := logic.SearchFiles(c.Get("UserID").(uint), searchValidation.Query)
+	// Determine which UserID to use
+	userID := c.Get("UserID").(uint)
+	isAdmin, _ := c.Get("Admin").(bool)
+
+	if isAdmin && searchValidation.UserID > 0 {
+		userID = searchValidation.UserID
+	}
+
+	status, response, err := logic.SearchFiles(userID, searchValidation.Query)
 	if err != nil {
 		return c.String(status, err.Error())
 	}
