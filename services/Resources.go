@@ -22,11 +22,11 @@ var diskRead uint64 = 0
 
 func Resources() {
 	go func() {
-		// delete stats older than 24h
+		// delete stats older than 30 days
 		for {
 			time.Sleep(time.Minute * 1)
 			if res := inits.DB.
-				Where("created_at < ?", time.Now().Add(time.Hour*24*-1)).
+				Where("created_at < ?", time.Now().Add(time.Hour*24*30*-1)).
 				Unscoped().
 				Delete(&models.SystemResource{}); res.Error != nil {
 				log.Println("Failed to delete system resources")

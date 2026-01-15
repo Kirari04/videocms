@@ -14,5 +14,8 @@ type SystemResource struct {
 }
 
 type SystemResourceGetValidation struct {
-	Interval string `query:"interval" validate:"required,oneof=5min 1h 7h"`
+	From     string `query:"from"`
+	To       string `query:"to"`
+	Points   int    `query:"points"`
+	Interval string `query:"interval"`
 }
