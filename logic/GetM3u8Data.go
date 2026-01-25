@@ -48,7 +48,7 @@ func GetM3u8Data(UUID string, AUDIOUUID string, JWT string) (status int, m3u8Str
 		}
 	}
 	m3u8Response := helpers.GenM3u8Stream(&dbLink, &dbLink.File.Qualitys, dbAudioPtr, JWT)
-	return http.StatusOK, &m3u8Response, dbLink.File.UserID, dbLink.FileID, audioID, nil
+	return http.StatusOK, &m3u8Response, dbLink.UserID, dbLink.FileID, audioID, nil
 }
 
 func GetM3u8DataMulti(UUID string, JWT string) (status int, m3u8Str *string, userID uint, fileID uint, err error) {
@@ -67,5 +67,5 @@ func GetM3u8DataMulti(UUID string, JWT string) (status int, m3u8Str *string, use
 	}
 
 	m3u8Response := helpers.GenM3u8StreamMulti(&dbLink, &dbLink.File.Qualitys, &dbLink.File.Audios, JWT)
-	return http.StatusOK, &m3u8Response, dbLink.File.UserID, dbLink.FileID, nil
+	return http.StatusOK, &m3u8Response, dbLink.UserID, dbLink.FileID, nil
 }

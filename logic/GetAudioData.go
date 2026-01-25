@@ -45,5 +45,5 @@ func GetAudioData(requestValidation *models.AudioGetValidation) (status int, fil
 	}
 
 	resPath := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, requestValidation.AUDIOUUID, requestValidation.FILE)
-	return http.StatusOK, &resPath, dbLink.File.UserID, dbLink.FileID, audioID, nil
+	return http.StatusOK, &resPath, dbLink.UserID, dbLink.FileID, audioID, nil
 }

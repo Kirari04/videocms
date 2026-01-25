@@ -31,5 +31,5 @@ func GetThumbnailData(fileName string, UUID string) (status int, filePath *strin
 
 	fileRes := fmt.Sprintf("%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, fileName)
 
-	return http.StatusOK, &fileRes, dbLink.File.UserID, dbLink.FileID, nil
+	return http.StatusOK, &fileRes, dbLink.UserID, dbLink.FileID, nil
 }

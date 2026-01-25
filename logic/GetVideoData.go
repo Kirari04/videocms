@@ -47,5 +47,5 @@ func GetVideoData(fileName string, qualityName string, UUID string) (status int,
 	}
 
 	fileRes := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, qualityName, fileName)
-	return http.StatusOK, &fileRes, dbLink.File.UserID, dbLink.FileID, qualityID, nil
+	return http.StatusOK, &fileRes, dbLink.UserID, dbLink.FileID, qualityID, nil
 }

@@ -45,5 +45,5 @@ func GetSubtitleData(fileName string, UUID string, SUBUUID string) (status int, 
 
 	fileRes := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, SUBUUID, fileName)
 
-	return http.StatusOK, &fileRes, dbLink.File.UserID, dbLink.FileID, nil
+	return http.StatusOK, &fileRes, dbLink.UserID, dbLink.FileID, nil
 }
