@@ -10,11 +10,11 @@ import (
 	"regexp"
 )
 
-func GetSubtitleData(fileName string, UUID string, SUBUUID string) (status int, filePath *string, err error) {
+func GetSubtitleData(fileName string, UUID string, SUBUUID string) (status int, filePath *string, userID uint, fileID uint, err error) {
 	reFILE := regexp.MustCompile(`^out\.(ass)$`)
 
 	if !reFILE.MatchString(fileName) {
-		return http.StatusBadRequest, nil, errors.New("bad file format")
+		return http.StatusBadRequest, nil, 0, 0, errors.New("bad file format")
 	}
 
 	//translate link id to file id
@@ -28,7 +28,7 @@ func GetSubtitleData(fileName string, UUID string, SUBUUID string) (status int, 
 			UUID: UUID,
 		}).
 		First(&dbLink); dbRes.Error != nil {
-		return http.StatusNotFound, nil, errors.New("subtitle doesn't exist")
+		return http.StatusNotFound, nil, 0, 0, errors.New("subtitle doesn't exist")
 	}
 
 	//check if subtitle uuid exists
@@ -40,10 +40,10 @@ func GetSubtitleData(fileName string, UUID string, SUBUUID string) (status int, 
 		}
 	}
 	if !subExists {
-		return http.StatusNotFound, nil, errors.New("subtitle doesn't exist")
+		return http.StatusNotFound, nil, 0, 0, errors.New("subtitle doesn't exist")
 	}
 
 	fileRes := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, SUBUUID, fileName)
 
-	return http.StatusOK, &fileRes, nil
+	return http.StatusOK, &fileRes, dbLink.File.UserID, dbLink.FileID, nil
 }

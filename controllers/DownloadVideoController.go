@@ -129,6 +129,20 @@ func DownloadVideoController(c echo.Context) error {
 	// wait until file exists
 	var tmpFile *os.File
 	var fileName string
+
+	fileInfo, err := os.Stat(tmpFilePath)
+	if err == nil {
+		// find quality id
+		var qualityID uint
+		for _, q := range dbLink.File.Qualitys {
+			if q.Name == requestValidation.QUALITY {
+				qualityID = q.ID
+				break
+			}
+		}
+		helpers.TrackTraffic(dbLink.File.UserID, dbLink.FileID, qualityID, 0, uint64(fileInfo.Size()))
+	}
+
 	if *requestValidation.Stream {
 		f, err := os.Open(tmpFilePath)
 		if err != nil {

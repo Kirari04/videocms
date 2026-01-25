@@ -4,6 +4,7 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/logic"
 	"net/http"
+	"os"
 
 	"github.com/labstack/echo/v4"
 )
@@ -19,9 +20,14 @@ func GetVideoData(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	status, filePath, err := logic.GetVideoData(requestValidation.FILE, requestValidation.QUALITY, requestValidation.UUID)
+	status, filePath, userID, fileID, qualityID, err := logic.GetVideoData(requestValidation.FILE, requestValidation.QUALITY, requestValidation.UUID)
 	if err != nil {
 		return c.String(status, err.Error())
+	}
+
+	fileInfo, err := os.Stat(*filePath)
+	if err == nil {
+		helpers.TrackTraffic(userID, fileID, qualityID, 0, uint64(fileInfo.Size()))
 	}
 
 	if err := c.File(*filePath); err != nil {

@@ -32,10 +32,12 @@ func GetM3u8Data(c echo.Context) error {
 		JWT = requestValidationMuted.JWT
 	}
 
-	status, m3u8Str, err := logic.GetM3u8Data(requestValidation.UUID, requestValidation.AUDIOUUID, JWT)
+	status, m3u8Str, userID, fileID, audioID, err := logic.GetM3u8Data(requestValidation.UUID, requestValidation.AUDIOUUID, JWT)
 	if err != nil {
 		return c.String(status, err.Error())
 	}
+
+	helpers.TrackTraffic(userID, fileID, 0, audioID, uint64(len(*m3u8Str)))
 
 	return c.String(status, *m3u8Str)
 }
@@ -49,10 +51,12 @@ func GetM3u8DataMulti(c echo.Context) error {
 		return c.String(http.StatusBadRequest, fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
 	}
 
-	status, m3u8Str, err := logic.GetM3u8DataMulti(requestValidationMuted.UUID, requestValidationMuted.JWT)
+	status, m3u8Str, userID, fileID, err := logic.GetM3u8DataMulti(requestValidationMuted.UUID, requestValidationMuted.JWT)
 	if err != nil {
 		return c.String(status, err.Error())
 	}
+
+	helpers.TrackTraffic(userID, fileID, 0, 0, uint64(len(*m3u8Str)))
 
 	return c.String(status, *m3u8Str)
 }

@@ -10,11 +10,11 @@ import (
 	"regexp"
 )
 
-func GetThumbnailData(fileName string, UUID string) (status int, filePath *string, err error) {
+func GetThumbnailData(fileName string, UUID string) (status int, filePath *string, userID uint, fileID uint, err error) {
 	reFILE := regexp.MustCompile(`^[1-4]x[1-4]\.(webp)$`)
 
 	if !reFILE.MatchString(fileName) {
-		return http.StatusBadRequest, nil, errors.New("bad file format")
+		return http.StatusBadRequest, nil, 0, 0, errors.New("bad file format")
 	}
 
 	//translate link id to file id
@@ -26,10 +26,10 @@ func GetThumbnailData(fileName string, UUID string) (status int, filePath *strin
 			UUID: UUID,
 		}).
 		First(&dbLink); dbRes.Error != nil {
-		return http.StatusNotFound, nil, errors.New("thumbnail doesn't exist")
+		return http.StatusNotFound, nil, 0, 0, errors.New("thumbnail doesn't exist")
 	}
 
 	fileRes := fmt.Sprintf("%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, fileName)
 
-	return http.StatusOK, &fileRes, nil
+	return http.StatusOK, &fileRes, dbLink.File.UserID, dbLink.FileID, nil
 }

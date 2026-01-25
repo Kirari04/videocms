@@ -4,6 +4,7 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/logic"
 	"net/http"
+	"os"
 
 	"github.com/labstack/echo/v4"
 )
@@ -19,9 +20,14 @@ func GetSubtitleData(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	status, filePath, err := logic.GetSubtitleData(requestValidation.FILE, requestValidation.UUID, requestValidation.SUBUUID)
+	status, filePath, userID, fileID, err := logic.GetSubtitleData(requestValidation.FILE, requestValidation.UUID, requestValidation.SUBUUID)
 	if err != nil {
 		return c.String(status, err.Error())
+	}
+
+	fileInfo, err := os.Stat(*filePath)
+	if err == nil {
+		helpers.TrackTraffic(userID, fileID, 0, 0, uint64(fileInfo.Size()))
 	}
 
 	if err := c.File(*filePath); err != nil {
