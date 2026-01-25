@@ -326,6 +326,17 @@ This documentation outlines the available API endpoints for the VideoCMS applica
     ]
     ```
 
+### Top Upload Files
+*   **Method:** `GET`
+*   **Path:** `/account/upload/top`
+*   **Auth Required:** Yes
+*   **Response (JSON):**
+    ```json
+    [
+      {"ID": 10, "Name": "heavy_upload.mp4", "Bytes": 5000000000}
+    ]
+    ```
+
 ### Storage Stats
 *   **Method:** `GET`
 *   **Path:** `/account/storage/top`
