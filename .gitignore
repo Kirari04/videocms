@@ -1,5 +1,7 @@
 *.log
 *.sqlite
+*.sqlite-shm
+*.sqlite-wal
 .env
 *_bin
 videos/*
