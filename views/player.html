@@ -30,8 +30,44 @@
     <link itemprop="thumbnailUrl" href="{{ .Thumbnail }}">
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.7/plyr.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-dark@5/dark.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
+        :root {
+            --background: 240 10% 3.9%;
+            --foreground: 0 0% 98%;
+            --card: 240 10% 3.9%;
+            --card-foreground: 0 0% 98%;
+            --popover: 240 10% 3.9%;
+            --popover-foreground: 0 0% 98%;
+            --primary: 0 0% 98%;
+            --primary-foreground: 240 5.9% 10%;
+            --muted: 240 3.7% 15.9%;
+            --muted-foreground: 240 5% 64.9%;
+            --accent: 240 3.7% 15.9%;
+            --accent-foreground: 0 0% 98%;
+            --destructive: 0 62.8% 30.6%;
+            --destructive-foreground: 0 0% 98%;
+            --border: 240 3.7% 15.9%;
+            --input: 240 3.7% 15.9%;
+            --ring: 240 4.9% 83.9%;
+            --radius: 0.5rem;
+            --font-sans: "Inter", sans-serif;
+            
+            /* Plyr overrides */
+            --plyr-color-main: hsl(var(--primary));
+            --plyr-video-control-color: hsl(var(--foreground));
+            --plyr-video-control-color-hover: hsl(var(--primary));
+            --plyr-control-icon-size: 18px;
+            --plyr-range-track-height: 4px;
+            --plyr-range-thumb-height: 12px;
+            --plyr-range-thumb-width: 12px;
+            --plyr-font-family: var(--font-sans);
+            --plyr-menu-background: hsl(var(--popover));
+            --plyr-menu-color: hsl(var(--popover-foreground));
+            --plyr-tooltip-background: hsl(var(--popover));
+            --plyr-tooltip-color: hsl(var(--popover-foreground));
+        }
+
         html,
         body,
         .container {
@@ -39,11 +75,11 @@
             width: 100%;
             padding: 0;
             margin: 0;
-            background: #1a1927;
+            background: #09090b; /* Zinc 950 */
             position: fixed;
             left: 0;
             top: 0;
-            font-family: "Ubuntu", sans-serif;
+            font-family: var(--font-sans);
             overflow: hidden;
         }
 
@@ -65,7 +101,9 @@
         }
 
         .plyr__caption {
-            font-size: 20pt;
+            font-size: 1.25rem;
+            font-weight: 500;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
         }
 
         .plyr {
@@ -83,97 +121,250 @@
             overflow: hidden;
         }
 
-        .plyr__controls {
-            justify-content: flex-start;
-            z-index: 99 !important;
+        /* Modern Plyr Control Styles */
+        .plyr--video .plyr__controls {
+            background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
+            padding: 2rem 1.5rem 1.5rem;
+            transition: opacity 0.3s ease;
+            display: flex;
+            align-items: center;
         }
-
+        
         .plyr__controls .plyr__progress__container {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            padding: calc(var(--plyr-control-spacing, 10px) * 0.7) !important;
+            margin-bottom: 0;
+            flex-grow: 1;
+        }
+        
+        .plyr__control {
+            transition: all 0.2s ease;
+            border-radius: 4px;
+        }
+        
+        .plyr__control:hover {
+            background: rgba(255, 255, 255, 0.1) !important;
+            color: hsl(var(--primary));
         }
 
-        .plyr__controls__item.plyr__time.plyr__time--current {
-            margin-left: auto;
+        .plyr__control--overlaid {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .plyr__control--overlaid:hover {
+            background: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
         }
 
+        .plyr__menu__container {
+            background: hsl(var(--popover));
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Settings Menu Overlay - Vidstack/Shadcn style */
         .settingOverlayContainer {
             position: absolute;
-            right: 1rem;
-            bottom: 80px;
-            z-index: 999;
-            background-color: rgb(42, 42, 42);
-            min-height: 100px;
-            min-width: 100px;
-            transition: 0.3s ease;
+            right: 1.5rem;
+            bottom: 5rem;
+            z-index: 1000;
+            background-color: hsl(var(--popover) / 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            width: 280px;
             max-height: calc(100vh - 150px);
-            overflow: auto;
-            border-radius: 1rem;
             display: flex;
             flex-direction: column;
-            gap: 0.4rem;
-            padding: 2rem 0.4rem 1rem 0.4rem;
-            user-select: none;
+            padding: 0.5rem;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
+            color: hsl(var(--popover-foreground));
+            font-size: 0.875rem;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            transform-origin: bottom right;
+            opacity: 1;
+            transform: scale(1) translateY(0);
+            overflow: hidden;
         }
 
         .settingOverlayContainer.hidden {
             opacity: 0;
             pointer-events: none;
-            max-height: 0vh;
-            min-height: 0;
-            overflow: hidden;
+            transform: scale(0.95) translateY(10px);
         }
 
-        .settingOverlayContainer .submenuTitle {
-            padding: 0 1rem 0.4rem 0.2rem;
-            color: #fff;
-            border-bottom: 2px solid rgb(20, 20, 20);
+        .settingsHeader {
             display: flex;
             align-items: center;
-            cursor: pointer;
+            padding: 0.5rem;
+            margin-bottom: 0.25rem;
+            border-bottom: 1px solid hsl(var(--border));
+            font-weight: 600;
+            color: hsl(var(--foreground));
         }
 
-        .settingOverlayContainer .xbutton {
-            padding: 0.4rem;
-            width: 100%;
-            box-sizing: border-box;
-            position: absolute;
-            right: 0rem;
-            top: 0rem;
-            z-index: 1000;
-            color: #fff;
-            background-color: rgb(30, 30, 30);
-            border-radius: 999px;
+        .settingsHeader .back-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            margin-right: 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+            color: hsl(var(--muted-foreground));
+        }
+
+        .settingsHeader .back-btn:hover {
+            background-color: hsl(var(--accent));
+            color: hsl(var(--accent-foreground));
+        }
+
+        .settingsContent {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            overflow-y: auto;
+            max-height: 300px;
+        }
+        
+        .settingsContent::-webkit-scrollbar {
+            width: 5px;
+        }
+        .settingsContent::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .settingsContent::-webkit-scrollbar-thumb {
+            background: hsl(var(--muted));
+            border-radius: 5px;
+        }
+
+        .settingsItem {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.6rem 0.75rem;
+            border-radius: 4px;
+            cursor: pointer;
+            color: hsl(var(--foreground));
+            transition: all 0.15s ease;
+            text-decoration: none;
+            user-select: none;
+        }
+
+        .settingsItem:hover {
+            background-color: hsl(var(--accent));
+            color: hsl(var(--accent-foreground));
+        }
+        
+        .settingsItem .label-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex: 1;
+        }
+
+        .settingsItem .icon {
+            width: 16px;
+            height: 16px;
+            opacity: 0.7;
+        }
+        
+        .settingsItem .label {
+            font-weight: 400;
+        }
+
+        .settingsItem .value {
+            color: hsl(var(--muted-foreground));
+            font-size: 0.75rem;
+            margin-left: auto;
+            padding-left: 0.5rem;
+        }
+        
+        .settingsItem .chevron {
+            width: 14px;
+            height: 14px;
+            opacity: 0.5;
+            margin-left: 0.25rem;
+        }
+
+        .settingsItem.active {
+            color: hsl(var(--primary));
+        }
+        
+        .settingsItem.active .check-icon {
+            opacity: 1;
+        }
+        .check-icon {
+            width: 14px;
+            height: 14px;
+            opacity: 0;
+            color: hsl(var(--primary));
+            margin-right: 0.5rem;
+        }
+
+        /* Continue Watching Popup - Specific overrides */
+        .continuePositionContainer {
+            bottom: 50%;
+            right: 50%;
+            transform: translate(50%, 50%);
+            width: 320px;
+            padding: 1rem;
+            gap: 0.5rem;
+        }
+        
+        .continuePositionContainer.hidden {
+            transform: translate(50%, 60%) scale(0.95);
+        }
+
+        .continueTitle {
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: hsl(var(--foreground));
             text-align: center;
+        }
+        
+        .continueActions {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            height: 2.25rem;
+            padding: 0 1rem;
             cursor: pointer;
+            transition: background 0.2s;
         }
-
-        .settingOverlayContainer .xbutton:hover {
-            background-color: rgb(22, 22, 22);
+        .btn-primary {
+            background: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
         }
-
-        .settingOverlayContainer .settingsItem {
-            position: relative;
-            padding: 0.4rem 1rem;
-            border-radius: 1rem;
-            cursor: pointer;
-            color: #fff;
+        .btn-primary:hover {
+            opacity: 0.9;
         }
-
-        .settingOverlayContainer .submenuBackbutton {
-            color: #fff;
-            padding: 0.4rem;
+        .btn-secondary {
+            background: hsl(var(--accent));
+            color: hsl(var(--accent-foreground));
         }
-
-        .settingOverlayContainer .submenuTitle:hover {
-            background-color: rgb(31, 31, 31);
+        .btn-secondary:hover {
+            background: hsl(var(--accent) / 0.8);
         }
-
-        .settingOverlayContainer .settingsItem:hover {
-            background-color: rgb(31, 31, 31);
+        .btn-ghost {
+            background: transparent;
+            color: hsl(var(--muted-foreground));
+        }
+        .btn-ghost:hover {
+            color: hsl(var(--foreground));
+            background: hsl(var(--accent));
         }
 
         .devmenu {
@@ -185,6 +376,7 @@
             padding: 1rem;
             display: flex;
             gap: 1rem;
+            z-index: 9999;
         }
 
         .msgdiv {
@@ -196,8 +388,8 @@
             background-color: rgba(0, 0, 0, 0.6);
             backdrop-filter: blur(10px);
             padding: 2rem;
-            font-size: 35pt;
-            font-weight: 900;
+            font-size: 2rem;
+            font-weight: 700;
             border-radius: 1rem;
         }
 
@@ -223,6 +415,12 @@
     <script src="https://cdn.rawgit.com/video-dev/hls.js/18bb552/dist/hls.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/assjs@0.0.9/dist/ass.min.js"></script>
     <script>
+        // Icons
+        const ICON_CHEVRON_RIGHT = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`;
+        const ICON_CHECK = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+        const ICON_BACK = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>`;
+        const ICON_SETTINGS = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
+
         let Qualitys = JSON.parse(decodeURI("{{.Qualitys}}"));
         if (Qualitys == null) Qualitys = [];
         let Subtitles = JSON.parse(decodeURI("{{.Subtitles}}"));
@@ -257,11 +455,15 @@
         let settingsList = [
             {
                 name: "Quality",
+                icon: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>`,
+                currentValue: "Auto",
                 checkable: true,
                 items: [],
             },
             {
                 name: "Subtitle",
+                icon: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 6.1H3"/><path d="M21 12.1H3"/><path d="M15.1 18H3"/></svg>`,
+                currentValue: "Disabled",
                 checkable: true,
                 items: [
                     {
@@ -269,6 +471,7 @@
                         uuid: "muted",
                         click: () => {
                             renderSubtitle(-1);
+                            updateSettingsValue(1, "Disabled");
                         },
                     },
                     ...Subtitles.map((Subtitle, i) => ({
@@ -276,12 +479,15 @@
                         uuid: Subtitle.uuid,
                         click: () => {
                             renderSubtitle(i);
+                            updateSettingsValue(1, Subtitle.name);
                         },
                     })),
                 ],
             },
             {
                 name: "Audio",
+                icon: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 22h.5c.5 0 1-.2 1.4-.6.4-.4.6-.9.6-1.4V7.5L14.5 2H6c-.5 0-1 .2-1.4.6C4.2 3 4 3.5 4 4v3"/><circle cx="10" cy="15" r="2"/><path d="M10 13v-6c0-1.1.9-2 2-2v0h.5"/><path d="M14 13.5v2.5"/><path d="M18 13.5v2.5"/></svg>`,
+                currentValue: "Disabled",
                 checkable: true,
                 items: [
                     {
@@ -294,6 +500,7 @@
                             active_video_el.currentTime = oldPosition;
                             active_video_el.play();
                             settingsListSetActive(2, 0);
+                            updateSettingsValue(2, "Disabled");
                             renderCustomSettingOverlay(false);
                         },
                     },
@@ -311,6 +518,7 @@
                                 Audios[i].lang
                             );
                             settingsListSetActive(2, i + 1);
+                            updateSettingsValue(2, Audio.name);
                             renderCustomSettingOverlay(false);
                         },
                     })),
@@ -318,8 +526,10 @@
             },
             {
                 name: "Download",
+                icon: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>`,
+                currentValue: "",
                 checkable: false,
-                items: DOWNLOAD_ENABLED === 'true' ? [
+                items: DOWNLOAD_ENABLED ? [
                     ...Qualitys.map((Quality, i) => ({
                         name: `${Quality.label} - ${Quality.width}x${Quality.height}`,
                         click: () => {
@@ -330,13 +540,15 @@
                     {
                         name: "Downloads are disabled",
                         active: false,
-                        click: () => {
-
-                        },
+                        click: () => {},
                     },
                 ],
             },
         ];
+
+        function updateSettingsValue(index, value) {
+            settingsList[index].currentValue = value;
+        }
 
         function settingsListSetActive(
             menuItemIndex,
@@ -373,6 +585,17 @@
             trackPosition();
             loadResource();
             activateWebhooks();
+            
+            // Global click to close settings
+            document.addEventListener("click", (e) => {
+                const container = document.querySelector(".settingOverlayContainer");
+                const btn = document.querySelector("#plyr-settings-btn");
+                if (container && !container.classList.contains("hidden")) {
+                    if (!container.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+                        container.classList.add("hidden");
+                    }
+                }
+            });
         }
 
         function qualityString(width, height) {
@@ -399,16 +622,19 @@
                     );
                     active_src = `${FOLDER}/${UUID}/${Audios[lastUsedIndex].uuid}/stream/master.m3u8?jwt=${JWT}`;
                     settingsListSetActive(2, lastUsedIndex + 1);
+                    updateSettingsValue(2, Audios[lastUsedIndex].name);
                 } else {
                     if (Audios.length > 0) {
                         active_src = `${FOLDER}/${UUID}/${Audios[0].uuid}/stream/master.m3u8?jwt=${JWT}`;
                         settingsListSetActive(2, 1);
+                        updateSettingsValue(2, Audios[0].name);
                     }
                 }
             } else {
                 if (Audios.length > 0) {
                     active_src = `${FOLDER}/${UUID}/${Audios[0].uuid}/stream/master.m3u8?jwt=${JWT}`;
                     settingsListSetActive(2, 1);
+                    updateSettingsValue(2, Audios[0].name);
                 }
             }
 
@@ -419,14 +645,11 @@
                     (S) => S.lang === lastUsedLang
                 );
                 if (lastUsedIndex !== -1) {
-                    console.log(
-                        "found last used sub: ",
-                        Subtitles[lastUsedIndex].lang,
-                        Subtitles[lastUsedIndex].name
-                    );
                     active_subtitle_index = lastUsedIndex;
+                    updateSettingsValue(1, Subtitles[lastUsedIndex].name);
                 } else {
                     active_subtitle_index = -1;
+                    updateSettingsValue(1, "Disabled");
                 }
             }
         }
@@ -536,11 +759,11 @@
                 keyboard: { focused: false, global: true },
                 controls: () => {
                     let controls = [
-                        "progress", // The progress bar and scrubber for playback and buffering
                         "play-large", // The large play button in the center
                         "play", // Play/pause playback
                         "rewind", // Rewind by the seek time (default 10 seconds)
                         "fast-forward", // Fast forward by the seek time (default 10 seconds)
+                        "progress", // The progress bar and scrubber for playback and buffering
                         "current-time", // The current time of playback
                         "duration", // The full duration of the media
                     ];
@@ -627,10 +850,12 @@
         function addCustomSettingButtonToPlyr() {
             const plyr_settings = addButtonToPlyr(
                 ".plyr__volume",
-                "plyr-settings",
-                "Settings"
+                "plyr-settings-btn",
+                "Settings",
+                ICON_SETTINGS
             );
-            plyr_settings.addEventListener("click", () => {
+            plyr_settings.addEventListener("click", (e) => {
+                e.stopPropagation();
                 toggleCustomSettingOverlay();
             });
         }
@@ -643,105 +868,148 @@
                 renderCustomSettingOverlay(false);
             }
         }
+        
         function renderCustomSettingOverlay(hidden = true) {
-            // delete old menu
-            if (document.querySelector(".settingOverlayContainer")) {
-                document.querySelector(
-                    ".settingOverlayContainer"
-                ).outerHTML = "";
+            // Remove old menu
+            const oldMenu = document.querySelector(".settingOverlayContainer");
+            if (oldMenu) {
+                oldMenu.remove();
             }
-            // render menu
-            const settingOverlayContainer = document.createElement("div");
-            settingOverlayContainer.classList.add(
-                "settingOverlayContainer"
-            );
-            if (hidden) {
-                settingOverlayContainer.classList.add("hidden");
-            }
-            const xbutton = document.createElement("div");
-            xbutton.append(document.createTextNode("close"));
-            xbutton.classList.add("xbutton");
-            xbutton.onclick = () => {
-                toggleCustomSettingOverlay();
-            };
-            settingOverlayContainer.append(xbutton);
+
+            // Create container
+            const container = document.createElement("div");
+            container.classList.add("settingOverlayContainer");
+            if (hidden) container.classList.add("hidden");
+
+            // Stop click propagation inside menu
+            container.addEventListener("click", (e) => e.stopPropagation());
 
             if (renderCustomSettingOverlayIndex === -1) {
-                // main menu
+                // === Main Menu ===
+                const content = document.createElement("div");
+                content.classList.add("settingsContent");
+                
                 settingsList.forEach((menuItem, i) => {
-                    const settingsItem = document.createElement("div");
-                    settingsItem.classList.add("settingsItem");
-                    settingsItem.innerText = menuItem.name;
-                    settingOverlayContainer.append(settingsItem);
-                    settingsItem.onclick = () => {
+                    const item = document.createElement("div");
+                    item.classList.add("settingsItem");
+                    
+                    // Icon + Name
+                    const labelContainer = document.createElement("div");
+                    labelContainer.classList.add("label-container");
+                    
+                    if (menuItem.icon) {
+                       const iconDiv = document.createElement("div");
+                       iconDiv.classList.add("icon");
+                       iconDiv.innerHTML = menuItem.icon;
+                       labelContainer.append(iconDiv);
+                    }
+                    
+                    const label = document.createElement("div");
+                    label.classList.add("label");
+                    label.innerText = menuItem.name;
+                    labelContainer.append(label);
+                    item.append(labelContainer);
+
+                    // Current Value
+                    if (menuItem.currentValue) {
+                        const value = document.createElement("div");
+                        value.classList.add("value");
+                        value.innerText = menuItem.currentValue;
+                        item.append(value);
+                    }
+
+                    // Chevron
+                    const chevron = document.createElement("div");
+                    chevron.classList.add("chevron");
+                    chevron.innerHTML = ICON_CHEVRON_RIGHT;
+                    item.append(chevron);
+
+                    item.onclick = () => {
                         renderCustomSettingOverlayIndex = i;
                         renderCustomSettingOverlay(false);
                     };
+                    content.append(item);
                 });
-            } else {
-                // submenu
-                const submenuItem =
-                    settingsList[renderCustomSettingOverlayIndex];
-                // add title to the top
-                const submenuTitle = document.createElement("div");
-                // add backbutton inside title
-                const submenuBackbutton = document.createElement("div");
-                submenuBackbutton.classList.add("submenuBackbutton");
-                submenuBackbutton.innerText = "<";
-                submenuTitle.append(submenuBackbutton);
+                container.append(content);
 
-                submenuTitle.classList.add("submenuTitle");
-                submenuTitle.append(
-                    document.createTextNode(submenuItem.name)
-                );
-                submenuTitle.onclick = () => {
+            } else {
+                // === Sub Menu ===
+                const submenuItem = settingsList[renderCustomSettingOverlayIndex];
+                
+                // Header
+                const header = document.createElement("div");
+                header.classList.add("settingsHeader");
+                
+                const backBtn = document.createElement("div");
+                backBtn.classList.add("back-btn");
+                backBtn.innerHTML = ICON_BACK;
+                backBtn.onclick = () => {
                     renderCustomSettingOverlayIndex = -1;
                     renderCustomSettingOverlay(false);
                 };
-                settingOverlayContainer.append(submenuTitle);
+                
+                header.append(backBtn);
+                header.append(document.createTextNode(submenuItem.name));
+                container.append(header);
 
-                // add menu list
+                // Content
+                const content = document.createElement("div");
+                content.classList.add("settingsContent");
+
                 submenuItem.items.forEach((menuItem) => {
-                    const settingsItem = document.createElement("div");
-                    settingsItem.classList.add("settingsItem");
-
-                    if (submenuItem.checkable) {
-                        const checkbox = document.createElement("input");
-                        checkbox.type = "checkbox";
-                        checkbox.checked = menuItem.active;
-                        checkbox.style.pointerEvents = "none";
-                        settingsItem.append(checkbox);
+                    const item = document.createElement("div");
+                    item.classList.add("settingsItem");
+                    if (menuItem.active) {
+                        item.classList.add("active");
                     }
 
-                    settingsItem.append(
-                        document.createTextNode(menuItem.name)
-                    );
-                    settingsItem.onclick = menuItem.click;
-                    settingOverlayContainer.append(settingsItem);
+                    // Check/Radio Icon
+                    if (submenuItem.checkable) {
+                        const checkDiv = document.createElement("div");
+                        checkDiv.classList.add("check-icon");
+                        checkDiv.innerHTML = ICON_CHECK;
+                        item.append(checkDiv);
+                    }
+
+                    const label = document.createElement("div");
+                    label.classList.add("label");
+                    label.innerText = menuItem.name;
+                    item.append(label);
+
+                    item.onclick = menuItem.click;
+                    content.append(item);
                 });
+                container.append(content);
             }
 
-            videoPlayerContainer.append(settingOverlayContainer);
+            videoPlayerContainer.append(container);
         }
 
         function toggleCustomSettingOverlay() {
-            document
-                .querySelector(".settingOverlayContainer")
-                .classList.toggle("hidden");
+            const el = document.querySelector(".settingOverlayContainer");
+            if (el) el.classList.toggle("hidden");
         }
 
-        function addButtonToPlyr(selectorName, iconId, buttonName) {
+        function addButtonToPlyr(selectorName, id, buttonName, svgContent) {
             const playerControlsEl = document.querySelector(
                 `.plyr__controls ${selectorName}`
             );
-            const randomId = Math.floor(Math.random() * 10000);
-            const id = `plyr__control-${randomId}`;
+            
+            // Avoid duplicate buttons if re-run
+            if (document.getElementById(id)) return document.getElementById(id);
+
             let button = document.createElement("button");
             button.setAttribute("id", id);
             button.classList.add("plyr__control");
-            button.innerHTML = `<svg role="presentation"><use xlink:href="/icons/svgs.svg#${iconId}"></use></svg>\n<span class="plyr__tooltip" role="tooltip">${buttonName}</span>`;
+            // Use custom SVG if provided, else rely on Plyr's icon system (or our own)
+            if (svgContent) {
+                 button.innerHTML = `${svgContent}<span class="plyr__tooltip" role="tooltip">${buttonName}</span>`;
+            } else {
+                 button.innerHTML = `<svg role="presentation"><use xlink:href="/icons/svgs.svg#settings"></use></svg><span class="plyr__tooltip" role="tooltip">${buttonName}</span>`;
+            }
+           
             playerControlsEl.insertAdjacentElement("afterend", button);
-            return document.getElementById(id);
+            return button;
         }
 
         function loadResource() {
@@ -750,10 +1018,8 @@
                 const hls = new Hls();
                 hls.config.startLevel = 99;
                 hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
-                    settingsList[0].name = `Quality (${qualityString(
-                        hls.levels[data.level].width,
-                        hls.levels[data.level].height
-                    )})`;
+                    const qualName = `${qualityString(hls.levels[data.level].width, hls.levels[data.level].height)}`;
+                    updateSettingsValue(0, qualName);
                     renderCustomSettingOverlaySameState();
                 });
                 hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
@@ -766,6 +1032,7 @@
                                 settingsListSetActive(0, 0);
                                 hls.currentLevel = -1;
                                 active_quality_index = -1;
+                                updateSettingsValue(0, "Auto");
                                 renderCustomSettingOverlay(false);
                             },
                         },
@@ -776,6 +1043,8 @@
                                 settingsListSetActive(0, hlslevelIndex + 1);
                                 hls.currentLevel = hlslevelIndex;
                                 active_quality_index = hlslevelIndex;
+                                const qName = qualityString(e.width, e.height);
+                                updateSettingsValue(0, qName);
                                 renderCustomSettingOverlay(false);
                             },
                         })),
@@ -845,79 +1114,80 @@
                 if (!CONTINUE_WATCHING_POPUP_ENABLED) {
                     return;
                 }
-                // render continue watching popup
+                
+                // Render Continue Watching Popup with new styles
+                const settingOverlayContainer = document.createElement("div");
+                settingOverlayContainer.classList.add("settingOverlayContainer");
+                settingOverlayContainer.classList.add("continuePositionContainer");
+                
+                // Title
+                const minutes = Math.floor(oldPosition / 60);
+                const seconds = oldPosition - minutes * 60;
+                
+                const title = document.createElement("div");
+                title.classList.add("continueTitle");
+                title.innerText = `Resume from ${minutes}m ${seconds}s?`;
+                settingOverlayContainer.append(title);
 
-                const settingOverlayContainer =
-                    document.createElement("div");
-                settingOverlayContainer.classList.add(
-                    "settingOverlayContainer"
-                );
+                const actions = document.createElement("div");
+                actions.classList.add("continueActions");
 
-                settingOverlayContainer.classList.add(
-                    "continuePositionContainer"
-                );
-                const submenuTitle = document.createElement("div");
-                submenuTitle.classList.add("submenuTitle");
-                let minutes = Math.floor(oldPosition / 60);
-                let seconds = oldPosition - minutes * 60;
-                submenuTitle.append(
-                    document.createTextNode(
-                        `Do you want to continue watching on: ${minutes}m ${seconds}s`
-                    )
-                );
-                settingOverlayContainer.append(submenuTitle);
-
-                const button_continue = document.createElement("div");
-                button_continue.classList.add("settingsItem");
-                button_continue.append(document.createTextNode("Continue"));
-                button_continue.onclick = () => {
+                // Continue Button
+                const btnContinue = document.createElement("div");
+                btnContinue.classList.add("btn", "btn-primary");
+                btnContinue.innerText = "Continue Watching";
+                btnContinue.onclick = () => {
                     onclose();
                     settingOverlayContainer.remove();
                     active_video_el.currentTime = oldPosition;
                     active_video_el.play();
                 };
-                const button_restart = document.createElement("div");
-                button_restart.classList.add("settingsItem");
-                button_restart.append(document.createTextNode("Restart"));
-                button_restart.onclick = () => {
+                
+                // Restart Button
+                const btnRestart = document.createElement("div");
+                btnRestart.classList.add("btn", "btn-secondary");
+                btnRestart.innerText = "Start from Beginning";
+                btnRestart.onclick = () => {
                     onclose();
                     settingOverlayContainer.remove();
                     active_video_el.currentTime = 0;
                     active_video_el.play();
                 };
 
-                const button_close = document.createElement("div");
-                button_close.classList.add("settingsItem");
-                button_close.innerHTML = `Close`;
-                button_close.onclick = () => {
+                // Close Button
+                const btnClose = document.createElement("div");
+                btnClose.classList.add("btn", "btn-ghost");
+                btnClose.innerText = "Dismiss";
+                btnClose.onclick = () => {
                     onclose();
                     settingOverlayContainer.remove();
                     active_video_el.play();
                 };
 
+                actions.append(btnContinue, btnRestart, btnClose);
+                settingOverlayContainer.append(actions);
+
+                // Auto close timer
                 let autoCloseSeconds = 15;
-                const autoclose_info = document.createElement("div");
-                autoclose_info.classList.add("settingsItem");
-                autoclose_info.innerHTML = `closes in ${autoCloseSeconds} seconds`;
+                const timerDiv = document.createElement("div");
+                timerDiv.style.textAlign = "center";
+                timerDiv.style.fontSize = "0.75rem";
+                timerDiv.style.opacity = "0.5";
+                timerDiv.style.marginTop = "0.5rem";
+                timerDiv.innerText = `Auto-closing in ${autoCloseSeconds}s`;
+                settingOverlayContainer.append(timerDiv);
 
-                // add items to list
-                settingOverlayContainer.append(button_continue);
-                settingOverlayContainer.append(button_restart);
-                settingOverlayContainer.append(button_close);
-                settingOverlayContainer.append(autoclose_info);
-
-                // add list to menu
                 videoPlayerContainer.append(settingOverlayContainer);
 
                 // autoclose logic
                 const timeToCloseIntv = setInterval(() => {
                     autoCloseSeconds--;
-                    autoclose_info.innerHTML = `closes in ${autoCloseSeconds} seconds`;
+                    timerDiv.innerText = `Auto-closing in ${autoCloseSeconds}s`;
+                    if(autoCloseSeconds <= 0) {
+                         onclose();
+                         settingOverlayContainer.remove();
+                    }
                 }, 1000);
-                setTimeout(
-                    () => settingOverlayContainer.remove(),
-                    autoCloseSeconds * 1000
-                );
 
                 // callbacks
                 function onclose() {
