@@ -28,6 +28,7 @@ func Models() {
 	mustRun(DB.AutoMigrate(&models.Tag{}))
 	mustRun(DB.AutoMigrate(&models.TagLinks{}))
 	mustRun(DB.AutoMigrate(&models.TrafficLog{}))
+	mustRun(DB.AutoMigrate(&models.UploadLog{}))
 
 	// init default admin user
 	// if no user exists

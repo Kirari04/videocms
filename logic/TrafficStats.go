@@ -89,6 +89,68 @@ func GetTrafficStats(from time.Time, to time.Time, points int, userID uint, file
 	return result, nil
 }
 
+func GetUploadStats(from time.Time, to time.Time, points int, userID uint) (TrafficStatsData, error) {
+	result := TrafficStatsData{
+		Traffic: make([]TrafficStatPoint, 0),
+	}
+
+	duration := to.Sub(from)
+	if duration <= 0 || points <= 0 {
+		return result, nil
+	}
+
+	// Calculate step in seconds
+	stepSeconds := int64(math.Ceil(duration.Seconds() / float64(points)))
+	if stepSeconds < 1 {
+		stepSeconds = 1
+	}
+
+	var aggregations []aggregatedTrafficResult
+
+	// Use strftime('%s') for comparison to handle timezone offsets correctly in SQLite
+	query := inits.DB.Model(&models.UploadLog{}).
+		Select(`
+			(CAST(strftime('%s', created_at) AS INTEGER) / ? ) * ? as ts,
+			CAST(SUM(bytes) AS INTEGER) as bytes
+		`, stepSeconds, stepSeconds).
+		Where("CAST(strftime('%s', created_at) AS INTEGER) >= ? AND CAST(strftime('%s', created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
+
+	if userID != 0 {
+		query = query.Where("user_id = ?", userID)
+	}
+
+	if err := query.Group("ts").
+		Order("ts asc").
+		Scan(&aggregations).Error; err != nil {
+		return result, err
+	}
+
+	// Convert aggregations to map for O(1) lookup
+	aggMap := make(map[int64]uint64)
+	for _, agg := range aggregations {
+		aggMap[agg.Ts] = uint64(agg.Bytes)
+	}
+
+	// Iterate through all buckets to fill gaps with zeros
+	startTs := from.Unix()
+	endTs := to.Unix()
+
+	// Align startTs to the grid
+	startTs = (startTs / stepSeconds) * stepSeconds
+
+	for ts := startTs; ts <= endTs; ts += stepSeconds {
+		pointTs := ts * 1000 // Convert to Milliseconds for ApexCharts
+
+		if val, ok := aggMap[ts]; ok {
+			result.Traffic = append(result.Traffic, TrafficStatPoint{pointTs, val})
+		} else {
+			result.Traffic = append(result.Traffic, TrafficStatPoint{pointTs, 0})
+		}
+	}
+
+	return result, nil
+}
+
 type TopTrafficResult struct {
 	ID    uint   `gorm:"column:id"`
 	Name  string `gorm:"-"`

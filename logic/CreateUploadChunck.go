@@ -77,5 +77,7 @@ func CreateUploadChunck(index uint, sessionToken string, fromFile string) (statu
 		return http.StatusInternalServerError, "", echo.ErrInternalServerError
 	}
 
+	helpers.TrackUpload(uploadSession.UserID, uint64(chunckFileStat.Size()))
+
 	return http.StatusOK, "ok", nil
 }

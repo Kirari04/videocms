@@ -18,3 +18,16 @@ type TrafficStatsGetValidation struct {
 	FileID    uint   `query:"file_id"`
 	QualityID uint   `query:"quality_id"`
 }
+
+type UploadLog struct {
+	Model
+	UserID uint `gorm:"index"`
+	Bytes  uint64
+}
+
+type UploadStatsGetValidation struct {
+	From   string `query:"from"`
+	To     string `query:"to"`
+	Points int    `query:"points"`
+	UserID uint   `query:"user_id"`
+}

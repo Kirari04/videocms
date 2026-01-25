@@ -62,6 +62,7 @@ func Api() {
 	protectedApi.PUT("/account/settings", controllers.UpdateUserSettingsController)
 	protectedApi.GET("/account/traffic", controllers.GetTrafficStats)
 	protectedApi.GET("/account/traffic/top", controllers.GetTopTrafficStats)
+	protectedApi.GET("/account/upload", controllers.GetUploadStats)
 
 	protectedApi.GET("/pages", controllers.ListWebPage, middlewares.IsAdmin())
 	protectedApi.POST("/page", controllers.CreateWebPage, middlewares.IsAdmin())
@@ -71,6 +72,7 @@ func Api() {
 	protectedApi.GET("/stats", controllers.GetSystemStats, middlewares.IsAdmin())
 	protectedApi.GET("/stats/traffic", controllers.GetAdminTrafficStats, middlewares.IsAdmin())
 	protectedApi.GET("/stats/traffic/top", controllers.GetAdminTopTrafficStats, middlewares.IsAdmin())
+	protectedApi.GET("/stats/upload", controllers.GetAdminUploadStats, middlewares.IsAdmin())
 	protectedApi.GET("/settings", controllers.GetSettings, middlewares.IsAdmin())
 	protectedApi.PUT("/settings", controllers.UpdateSettings, middlewares.IsAdmin())
 
