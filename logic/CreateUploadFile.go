@@ -122,6 +122,13 @@ func CreateUploadFile(sessionToken string, userId uint) (status int, response *m
 		os.Remove(filePath)
 	}
 
+	// Update UploadLog with the newly created FileID
+	if res := inits.DB.Model(&models.UploadLog{}).
+		Where("upload_session_id = ?", uploadSession.ID).
+		Update("file_id", dbLink.FileID); res.Error != nil {
+		log.Printf("[WARNING] Failed to update UploadLog with FileID: %v\n", res.Error)
+	}
+
 	helpers.TrackEncoding(userId, dbLink.FileID, "reconstruction", reconstructionDuration)
 
 	return status, dbLink, nil

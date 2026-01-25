@@ -19,13 +19,15 @@ func TrackTraffic(userID, fileID, qualityID, audioID uint, bytes uint64) {
 	inits.DB.Create(&traffic)
 }
 
-func TrackUpload(userID uint, bytes uint64) {
+func TrackUpload(userID uint, fileID uint, uploadSessionID uint, bytes uint64) {
 	if bytes == 0 {
 		return
 	}
 	upload := models.UploadLog{
-		UserID: userID,
-		Bytes:  bytes,
+		UserID:          userID,
+		FileID:          fileID,
+		UploadSessionID: uploadSessionID,
+		Bytes:           bytes,
 	}
 	inits.DB.Create(&upload)
 }

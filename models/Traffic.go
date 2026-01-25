@@ -21,8 +21,10 @@ type TrafficStatsGetValidation struct {
 
 type UploadLog struct {
 	Model
-	UserID uint `gorm:"index"`
-	Bytes  uint64
+	UserID          uint `gorm:"index"`
+	FileID          uint `gorm:"index"`
+	UploadSessionID uint `gorm:"index"`
+	Bytes           uint64
 }
 
 type UploadStatsGetValidation struct {
