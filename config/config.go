@@ -54,6 +54,16 @@ type Config struct {
 	EncodingEnabled   *bool
 	UploadEnabled     *bool
 	RatelimitEnabled  *bool
+
+	RatelimitRateGlobal  float64
+	RatelimitBurstGlobal int
+	RatelimitRateAuth    float64
+	RatelimitBurstAuth   int
+	RatelimitRateApi     float64
+	RatelimitBurstApi    int
+	RatelimitRateWeb     float64
+	RatelimitBurstWeb    int
+
 	CloudflareEnabled *bool
 	BunnyCDNEnabled   *bool
 	FastlyEnabled     *bool

@@ -1,6 +1,7 @@
-package helpers
+package middlewares
 
 import (
+	"ch/kirari04/videocms/config"
 	"net/http"
 	"time"
 
@@ -8,6 +9,24 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/time/rate"
 )
+
+var LimiterWhitelistIps = map[string]bool{
+	"127.0.0.1": true,
+}
+
+func LimiterWhitelistNext(c echo.Context) bool {
+	// disable ratelimit by env
+	if !*config.ENV.RatelimitEnabled {
+		return true
+	}
+	// disable ratelimit by ip
+	if LimiterWhitelistIps[c.RealIP()] {
+		return true
+	}
+
+	// ratelimit enabled
+	return false
+}
 
 func LimiterConfig(rate rate.Limit, burst int, expiration time.Duration) *middleware.RateLimiterConfig {
 	return &middleware.RateLimiterConfig{
@@ -27,5 +46,4 @@ func LimiterConfig(rate rate.Limit, burst int, expiration time.Duration) *middle
 			return c.String(http.StatusTooManyRequests, "Too fast")
 		},
 	}
-
 }

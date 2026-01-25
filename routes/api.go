@@ -1,31 +1,32 @@
 package routes
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/controllers"
-	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/middlewares"
 	"time"
 
 	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/time/rate"
 )
 
 func Api() {
-	inits.Api.Use(middleware.RateLimiterWithConfig(*helpers.LimiterConfig(10, 500, time.Minute*5)))
+	inits.Api.Use(middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateGlobal), config.ENV.RatelimitBurstGlobal, time.Minute*5)))
 
 	auth := inits.Api.Group("/auth")
 	auth.POST("/login",
 		controllers.AuthLogin,
-		middleware.RateLimiterWithConfig(*helpers.LimiterConfig(1, 2, time.Minute*5)))
+		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateAuth), config.ENV.RatelimitBurstAuth, time.Minute*5)))
 	auth.GET("/check",
 		controllers.AuthCheck,
-		middleware.RateLimiterWithConfig(*helpers.LimiterConfig(1, 2, time.Minute*5)))
+		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateAuth), config.ENV.RatelimitBurstAuth, time.Minute*5)))
 	auth.GET("/refresh",
 		controllers.AuthRefresh,
-		middleware.RateLimiterWithConfig(*helpers.LimiterConfig(1, 2, time.Minute*5)))
+		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateAuth), config.ENV.RatelimitBurstAuth, time.Minute*5)))
 	auth.POST("/apikey",
 		controllers.AuthApikey,
-		middleware.RateLimiterWithConfig(*helpers.LimiterConfig(1, 2, time.Minute*5)),
+		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateAuth), config.ENV.RatelimitBurstAuth, time.Minute*5)),
 		middlewares.Auth())
 
 	// Routes that dont require authentication
@@ -38,7 +39,9 @@ func Api() {
 	inits.Api.POST("/pcu/chunck", controllers.CreateUploadChunck)
 
 	// Routes that require to be authenticated
-	protectedApi := inits.Api.Group("", middlewares.Auth())
+	protectedApi := inits.Api.Group("",
+		middlewares.Auth(),
+		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateApi), config.ENV.RatelimitBurstApi, time.Minute*5)))
 	protectedApi.POST("/folder", controllers.CreateFolder)
 	protectedApi.PUT("/folder", controllers.UpdateFolder)
 	protectedApi.DELETE("/folder", controllers.DeleteFolder)

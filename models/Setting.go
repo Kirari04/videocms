@@ -22,6 +22,16 @@ type Setting struct {
 	EncodingEnabled   string `validate:"required,boolean"`
 	UploadEnabled     string `validate:"required,boolean"`
 	RatelimitEnabled  string `validate:"required,boolean"`
+
+	RatelimitRateGlobal  string `validate:"required,number,min=0"`
+	RatelimitBurstGlobal string `validate:"required,number,min=0"`
+	RatelimitRateAuth    string `validate:"required,number,min=0"`
+	RatelimitBurstAuth   string `validate:"required,number,min=0"`
+	RatelimitRateApi     string `validate:"required,number,min=0"`
+	RatelimitBurstApi    string `validate:"required,number,min=0"`
+	RatelimitRateWeb     string `validate:"required,number,min=0"`
+	RatelimitBurstWeb    string `validate:"required,number,min=0"`
+
 	CloudflareEnabled string `validate:"required,boolean"`
 	BunnyCDNEnabled   string `validate:"required,boolean"`
 	FastlyEnabled     string `validate:"required,boolean"`

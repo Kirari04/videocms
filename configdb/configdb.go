@@ -33,6 +33,16 @@ func Setup() {
 	config.ENV.EncodingEnabled = getEnvDb_bool(&setting.EncodingEnabled, boolPtr(true))
 	config.ENV.UploadEnabled = getEnvDb_bool(&setting.UploadEnabled, boolPtr(true))
 	config.ENV.RatelimitEnabled = getEnvDb_bool(&setting.RatelimitEnabled, boolPtr(false))
+
+	config.ENV.RatelimitRateGlobal = getEnvDb_float64(&setting.RatelimitRateGlobal, 10)
+	config.ENV.RatelimitBurstGlobal = getEnvDb_int(&setting.RatelimitBurstGlobal, 500)
+	config.ENV.RatelimitRateAuth = getEnvDb_float64(&setting.RatelimitRateAuth, 1)
+	config.ENV.RatelimitBurstAuth = getEnvDb_int(&setting.RatelimitBurstAuth, 2)
+	config.ENV.RatelimitRateApi = getEnvDb_float64(&setting.RatelimitRateApi, 5)
+	config.ENV.RatelimitBurstApi = getEnvDb_int(&setting.RatelimitBurstApi, 20)
+	config.ENV.RatelimitRateWeb = getEnvDb_float64(&setting.RatelimitRateWeb, 20)
+	config.ENV.RatelimitBurstWeb = getEnvDb_int(&setting.RatelimitBurstWeb, 100)
+
 	config.ENV.CloudflareEnabled = getEnvDb_bool(&setting.CloudflareEnabled, boolPtr(false))
 	config.ENV.BunnyCDNEnabled = getEnvDb_bool(&setting.BunnyCDNEnabled, boolPtr(false))
 	config.ENV.FastlyEnabled = getEnvDb_bool(&setting.FastlyEnabled, boolPtr(false))
@@ -280,6 +290,18 @@ func getEnvDb_int(value *string, defaultValue int) int {
 		return res
 	}
 	*value = fmt.Sprint(defaultValue)
+	return defaultValue
+}
+
+func getEnvDb_float64(value *string, defaultValue float64) float64 {
+	if value != nil && *value != "" {
+		res, err := strconv.ParseFloat(*value, 64)
+		if err != nil {
+			log.Panicf("Failed to parse float from value %v", value)
+		}
+		return res
+	}
+	*value = fmt.Sprintf("%v", defaultValue)
 	return defaultValue
 }
 

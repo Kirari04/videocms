@@ -2,6 +2,7 @@ package inits
 
 import (
 	"ch/kirari04/videocms/config"
+	"ch/kirari04/videocms/middlewares"
 	"context"
 	"fmt"
 	"html/template"
@@ -18,6 +19,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/net/http2"
+	"golang.org/x/time/rate"
 )
 
 var App *echo.Echo
@@ -139,6 +141,10 @@ func Server() {
 	}
 	app := echo.New()
 	app.Renderer = htmlTemplate
+
+	// global rate limiter
+	app.Use(middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateGlobal), config.ENV.RatelimitBurstGlobal, time.Minute*5)))
+
 	trustLocal := *config.ENV.TrustLocalTraffic
 	trustOptions := []echo.TrustOption{
 		echo.TrustLoopback(trustLocal),   // e.g. ipv4 start with 127.
@@ -175,9 +181,8 @@ func Server() {
 	app.Use(middleware.Recover())
 
 	// body limit
-	e := echo.New()
-	postMaxSize := int64(float64(config.ENV.MaxPostSize) / 1000)
-	e.Use(middleware.BodyLimit(fmt.Sprintf("%dk", postMaxSize)))
+	postMaxSize := int64(float64(config.ENV.MaxPostSize) / 1024)
+	app.Use(middleware.BodyLimit(fmt.Sprintf("%dk", postMaxSize)))
 
 	// Compression middleware
 	app.Use(middleware.GzipWithConfig(middleware.GzipConfig{
@@ -230,3 +235,4 @@ func ServerStart() {
 		App.Logger.Fatal(err)
 	}
 }
+
