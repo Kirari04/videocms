@@ -55,6 +55,11 @@ type Config struct {
 	UploadEnabled     *bool
 	RatelimitEnabled  *bool
 	CloudflareEnabled *bool
+	BunnyCDNEnabled   *bool
+	FastlyEnabled     *bool
+	KeyCDNEnabled     *bool
+	TrustedProxies    string
+	TrustLocalTraffic *bool
 
 	MaxItemsMultiDelete int64
 	MaxRunningEncodes   int64

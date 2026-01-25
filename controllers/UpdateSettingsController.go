@@ -38,6 +38,11 @@ func UpdateSettings(c echo.Context) error {
 	setting.UploadEnabled = validation.UploadEnabled
 	setting.RatelimitEnabled = validation.RatelimitEnabled
 	setting.CloudflareEnabled = validation.CloudflareEnabled
+	setting.BunnyCDNEnabled = validation.BunnyCDNEnabled
+	setting.FastlyEnabled = validation.FastlyEnabled
+	setting.KeyCDNEnabled = validation.KeyCDNEnabled
+	setting.TrustedProxies = validation.TrustedProxies
+	setting.TrustLocalTraffic = validation.TrustLocalTraffic
 	setting.MaxItemsMultiDelete = validation.MaxItemsMultiDelete
 	setting.MaxRunningEncodes = validation.MaxRunningEncodes
 	setting.MaxFramerate = validation.MaxFramerate

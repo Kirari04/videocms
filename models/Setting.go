@@ -23,6 +23,11 @@ type Setting struct {
 	UploadEnabled     string `validate:"required,boolean"`
 	RatelimitEnabled  string `validate:"required,boolean"`
 	CloudflareEnabled string `validate:"required,boolean"`
+	BunnyCDNEnabled   string `validate:"required,boolean"`
+	FastlyEnabled     string `validate:"required,boolean"`
+	KeyCDNEnabled     string `validate:"required,boolean"`
+	TrustedProxies    string `validate:"max=2000" gorm:"size:2000;"`
+	TrustLocalTraffic string `validate:"required,boolean"`
 
 	MaxItemsMultiDelete string `validate:"required,number,min=1"`
 	MaxRunningEncodes   string `validate:"required,number,min=1"`

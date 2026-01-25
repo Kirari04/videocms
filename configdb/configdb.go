@@ -34,6 +34,11 @@ func Setup() {
 	config.ENV.UploadEnabled = getEnvDb_bool(&setting.UploadEnabled, boolPtr(true))
 	config.ENV.RatelimitEnabled = getEnvDb_bool(&setting.RatelimitEnabled, boolPtr(false))
 	config.ENV.CloudflareEnabled = getEnvDb_bool(&setting.CloudflareEnabled, boolPtr(false))
+	config.ENV.BunnyCDNEnabled = getEnvDb_bool(&setting.BunnyCDNEnabled, boolPtr(false))
+	config.ENV.FastlyEnabled = getEnvDb_bool(&setting.FastlyEnabled, boolPtr(false))
+	config.ENV.KeyCDNEnabled = getEnvDb_bool(&setting.KeyCDNEnabled, boolPtr(false))
+	config.ENV.TrustedProxies = getEnvDb(&setting.TrustedProxies, "")
+	config.ENV.TrustLocalTraffic = getEnvDb_bool(&setting.TrustLocalTraffic, boolPtr(false))
 
 	config.ENV.MaxItemsMultiDelete = getEnvDb_int64(&setting.MaxItemsMultiDelete, 1000)
 	config.ENV.MaxRunningEncodes = getEnvDb_int64(&setting.MaxRunningEncodes, 1)
