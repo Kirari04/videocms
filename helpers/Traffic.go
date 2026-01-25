@@ -29,3 +29,16 @@ func TrackUpload(userID uint, bytes uint64) {
 	}
 	inits.DB.Create(&upload)
 }
+
+func TrackEncoding(userID uint, fileID uint, taskType string, seconds float64) {
+	if seconds <= 0 {
+		return
+	}
+	log := models.EncodingLog{
+		UserID:  userID,
+		FileID:  fileID,
+		Type:    taskType,
+		Seconds: seconds,
+	}
+	inits.DB.Create(&log)
+}

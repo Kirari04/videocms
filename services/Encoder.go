@@ -293,6 +293,7 @@ func runEncodeQuality(encodingTask models.Quality) {
 		}
 	}()
 
+	start := time.Now()
 	if err := cmd.Run(); err != nil {
 		encodingTask.Ready = false
 		encodingTask.Encoding = false
@@ -302,6 +303,8 @@ func runEncodeQuality(encodingTask models.Quality) {
 		log.Println(ffmpegCommand)
 		return
 	}
+	duration := time.Since(start).Seconds()
+	helpers.TrackEncoding(encodingTask.File.UserID, encodingTask.FileID, "quality", duration)
 
 	qualitySize, err := helpers.DirSize(absFolderOutput)
 	if err != nil {
@@ -385,6 +388,7 @@ func runEncodeAudio(encodingTask models.Audio) {
 		}
 	}()
 
+	start := time.Now()
 	if err := cmd.Run(); err != nil {
 		encodingTask.Ready = false
 		encodingTask.Encoding = false
@@ -394,6 +398,8 @@ func runEncodeAudio(encodingTask models.Audio) {
 		log.Println(ffmpegCommand)
 		return
 	}
+	duration := time.Since(start).Seconds()
+	helpers.TrackEncoding(encodingTask.File.UserID, encodingTask.FileID, "audio", duration)
 
 	encodingTask.Encoding = false
 	encodingTask.Ready = true
@@ -520,6 +526,7 @@ func runEncodeSub(encodingTask models.Subtitle) {
 		}
 	}()
 
+	start := time.Now()
 	if err := cmd.Run(); err != nil {
 		encodingTask.Ready = false
 		encodingTask.Encoding = false
@@ -529,6 +536,8 @@ func runEncodeSub(encodingTask models.Subtitle) {
 		log.Println(ffmpegCommand)
 		return
 	}
+	duration := time.Since(start).Seconds()
+	helpers.TrackEncoding(encodingTask.File.UserID, encodingTask.FileID, "sub", duration)
 
 	encodingTask.Encoding = false
 	encodingTask.Ready = true

@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -69,6 +70,7 @@ func CreateUploadFile(sessionToken string, userId uint) (status int, response *m
 	}
 
 	// copy uploaded chuncks into final file
+	start := time.Now()
 	var written int64
 	for _, uploadChunck := range uploadChuncks {
 		openedChunck, err := os.Open(uploadChunck.Path)
@@ -92,6 +94,7 @@ func CreateUploadFile(sessionToken string, userId uint) (status int, response *m
 		log.Printf("Failed to close final file: %v", err)
 		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
+	reconstructionDuration := time.Since(start).Seconds()
 
 	// check file size
 	finalFilePathInfo, err := os.Stat(finalFilePath)
@@ -118,6 +121,8 @@ func CreateUploadFile(sessionToken string, userId uint) (status int, response *m
 	if cloned {
 		os.Remove(filePath)
 	}
+
+	helpers.TrackEncoding(userId, dbLink.FileID, "reconstruction", reconstructionDuration)
 
 	return status, dbLink, nil
 }

@@ -151,6 +151,68 @@ func GetUploadStats(from time.Time, to time.Time, points int, userID uint) (Traf
 	return result, nil
 }
 
+type aggregatedEncodingResult struct {
+	Ts      int64   `gorm:"column:ts"`
+	Seconds float64 `gorm:"column:seconds"`
+}
+
+func GetEncodingStats(from time.Time, to time.Time, points int, userID uint) (TrafficStatsData, error) {
+	result := TrafficStatsData{
+		Traffic: make([]TrafficStatPoint, 0),
+	}
+
+	duration := to.Sub(from)
+	if duration <= 0 || points <= 0 {
+		return result, nil
+	}
+
+	// Calculate step in seconds
+	stepSeconds := int64(math.Ceil(duration.Seconds() / float64(points)))
+	if stepSeconds < 1 {
+		stepSeconds = 1
+	}
+
+	var aggregations []aggregatedEncodingResult
+
+	query := inits.DB.Model(&models.EncodingLog{}).
+		Select(`
+			(CAST(strftime('%s', created_at) AS INTEGER) / ? ) * ? as ts,
+			SUM(seconds) as seconds
+		`, stepSeconds, stepSeconds).
+		Where("CAST(strftime('%s', created_at) AS INTEGER) >= ? AND CAST(strftime('%s', created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
+
+	if userID != 0 {
+		query = query.Where("user_id = ?", userID)
+	}
+
+	if err := query.Group("ts").
+		Order("ts asc").
+		Scan(&aggregations).Error; err != nil {
+		return result, err
+	}
+
+	aggMap := make(map[int64]uint64)
+	for _, agg := range aggregations {
+		aggMap[agg.Ts] = uint64(agg.Seconds)
+	}
+
+	startTs := from.Unix()
+	endTs := to.Unix()
+	startTs = (startTs / stepSeconds) * stepSeconds
+
+	for ts := startTs; ts <= endTs; ts += stepSeconds {
+		pointTs := ts * 1000
+
+		if val, ok := aggMap[ts]; ok {
+			result.Traffic = append(result.Traffic, TrafficStatPoint{pointTs, val})
+		} else {
+			result.Traffic = append(result.Traffic, TrafficStatPoint{pointTs, 0})
+		}
+	}
+
+	return result, nil
+}
+
 type TopTrafficResult struct {
 	ID    uint   `gorm:"column:id"`
 	Name  string `gorm:"-"`
