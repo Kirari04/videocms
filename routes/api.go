@@ -12,8 +12,6 @@ import (
 )
 
 func Api() {
-	inits.Api.Use(middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateGlobal), config.ENV.RatelimitBurstGlobal, time.Minute*5)))
-
 	auth := inits.Api.Group("/auth")
 	auth.POST("/login",
 		controllers.AuthLogin,
@@ -36,7 +34,8 @@ func Api() {
 	inits.Api.GET("/p/page", controllers.GetPublicWebPage)
 
 	// requires uploadsession jwt inside body
-	inits.Api.POST("/pcu/chunck", controllers.CreateUploadChunck)
+	inits.Api.POST("/pcu/chunck", controllers.CreateUploadChunck,
+		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateUpload), config.ENV.RatelimitBurstUpload, time.Minute*5)))
 
 	// Routes that require to be authenticated
 	protectedApi := inits.Api.Group("",

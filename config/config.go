@@ -61,6 +61,8 @@ type Config struct {
 	RatelimitBurstAuth   int
 	RatelimitRateApi     float64
 	RatelimitBurstApi    int
+	RatelimitRateUpload  float64
+	RatelimitBurstUpload int
 	RatelimitRateWeb     float64
 	RatelimitBurstWeb    int
 

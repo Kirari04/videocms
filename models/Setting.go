@@ -29,6 +29,8 @@ type Setting struct {
 	RatelimitBurstAuth   string `validate:"required,number,min=0"`
 	RatelimitRateApi     string `validate:"required,number,min=0"`
 	RatelimitBurstApi    string `validate:"required,number,min=0"`
+	RatelimitRateUpload  string `validate:"required,number,min=0"`
+	RatelimitBurstUpload string `validate:"required,number,min=0"`
 	RatelimitRateWeb     string `validate:"required,number,min=0"`
 	RatelimitBurstWeb    string `validate:"required,number,min=0"`
 

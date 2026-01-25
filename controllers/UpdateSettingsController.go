@@ -43,6 +43,8 @@ func UpdateSettings(c echo.Context) error {
 	setting.RatelimitBurstAuth = validation.RatelimitBurstAuth
 	setting.RatelimitRateApi = validation.RatelimitRateApi
 	setting.RatelimitBurstApi = validation.RatelimitBurstApi
+	setting.RatelimitRateUpload = validation.RatelimitRateUpload
+	setting.RatelimitBurstUpload = validation.RatelimitBurstUpload
 	setting.RatelimitRateWeb = validation.RatelimitRateWeb
 	setting.RatelimitBurstWeb = validation.RatelimitBurstWeb
 	setting.CloudflareEnabled = validation.CloudflareEnabled
