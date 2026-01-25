@@ -14,6 +14,7 @@ func Web() {
 
 	videoData := inits.App.Group(config.ENV.FolderVideoQualitysPub)
 	videoData.GET("/:UUID/stream/muted/master.m3u8", controllers.GetM3u8Data, middlewares.JwtStream())
+	videoData.GET("/:UUID/stream/multi/master.m3u8", controllers.GetM3u8DataMulti, middlewares.JwtStream())
 	videoData.GET("/:UUID/image/thumb/:FILE", controllers.GetThumbnailData)
 	videoData.GET("/:UUID/:SUBUUID/subtitle/:FILE", controllers.GetSubtitleData, middlewares.JwtStream())
 	videoData.GET("/:UUID/:AUDIOUUID/stream/master.m3u8", controllers.GetM3u8Data, middlewares.JwtStream())

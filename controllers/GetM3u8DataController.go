@@ -39,3 +39,20 @@ func GetM3u8Data(c echo.Context) error {
 
 	return c.String(status, *m3u8Str)
 }
+
+func GetM3u8DataMulti(c echo.Context) error {
+	var requestValidationMuted logic.GetM3u8DataRequestMuted
+	requestValidationMuted.UUID = c.Param("UUID")
+	requestValidationMuted.JWT = c.QueryParam("jwt")
+
+	if errors := helpers.ValidateStruct(requestValidationMuted); len(errors) > 0 {
+		return c.String(http.StatusBadRequest, fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
+	}
+
+	status, m3u8Str, err := logic.GetM3u8DataMulti(requestValidationMuted.UUID, requestValidationMuted.JWT)
+	if err != nil {
+		return c.String(status, err.Error())
+	}
+
+	return c.String(status, *m3u8Str)
+}

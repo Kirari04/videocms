@@ -1,11 +1,316 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BETA</title>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- Meta Tags -->
+    <meta name="twitter:title" content="{{ .Title }}" />
+    <meta name="og:image:width" content="1920" />
+    <meta name="og:image:height" content="1080" />
+    <meta name="title" content="{{ .Title }}" />
+    <meta name="description" content="{{ .Description }}" />
+    <meta name="og:title" content="{{ .Title }}" />
+    <meta name="og:description" content="{{ .Description }}" />
+    <meta name="og:image" content="{{ .Thumbnail }}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="{{ .Thumbnail}}" />
+    <meta property="og:type" content="video">
+    <meta property="og:url" content="/v/{{.UUID}}">
+    <meta property="og:video" content="{{.BaseUrl}}{{.StreamUrl}}">
+    <meta property="og:video:secure_url" content="{{.BaseUrl}}{{.StreamUrl}}">
+    <meta property="og:video:width" content="{{.StreamUrlWidth}}">
+    <meta property="og:video:height" content="{{.StreamUrlHeight}}">
+    <meta property="og:site_name" content="{{.AppName}}">
+    
+    <title>{{ .Title }}</title>
+
+    <!-- Vidstack Styles -->
+    <link rel="stylesheet" href="https://cdn.vidstack.io/player/theme.css" />
+    <link rel="stylesheet" href="https://cdn.vidstack.io/player/video.css" />
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+    <style>
+        /* Base Theme & Reset */
+        :root {
+            --font-sans: "Inter", sans-serif;
+            --media-font-family: var(--font-sans);
+            --media-brand: white;
+            --media-focus-ring: 0 0 0 3px rgb(255 255 255 / 0.5);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #09090b; /* Zinc 950 */
+            color: #fff;
+            font-family: var(--font-sans);
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .player-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        media-player {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background-color: transparent;
+        }
+
+        /* Continue Watching Popup */
+        .continue-popup {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(9, 9, 11, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            min-width: 300px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .continue-popup.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .continue-popup h3 {
+            margin: 0;
+            font-size: 1.1rem;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .continue-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            border: 1px solid transparent;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background-color: #fff;
+            color: #09090b;
+        }
+        .btn-primary:hover {
+            background-color: #e4e4e7;
+        }
+
+        .btn-secondary {
+            background-color: #27272a;
+            color: #fff;
+            border-color: #3f3f46;
+        }
+        .btn-secondary:hover {
+            background-color: #3f3f46;
+        }
+
+        .btn-ghost {
+            background-color: transparent;
+            color: #a1a1aa;
+        }
+        .btn-ghost:hover {
+            color: #fff;
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+    </style>
 </head>
 <body>
-    <h1>BETA</h1>
+
+    <div class="player-container">
+        <media-player
+            title="{{ .Title }}"
+            poster="{{ .Thumbnail }}"
+            crossorigin
+            playsinline
+        >
+            <media-provider>
+                <!-- Tracks will be injected here -->
+            </media-provider>
+            
+            <media-video-layout></media-video-layout>
+        </media-player>
+    </div>
+
+    <!-- Continue Watching Popup -->
+    <div id="continue-popup" class="continue-popup">
+        <h3 id="continue-text">Resume playback?</h3>
+        <div class="continue-buttons">
+            <div class="btn btn-primary" id="btn-resume">Resume</div>
+            <div class="btn btn-secondary" id="btn-restart">Start from beginning</div>
+            <div class="btn btn-ghost" id="btn-close">Dismiss</div>
+        </div>
+    </div>
+
+    <!-- Vidstack Player Script -->
+    <script type="module" src="https://cdn.vidstack.io/player"></script>
+
+    <script>
+        // --- Go Variables ---
+        const JWT = "{{.JWT}}";
+        const UUID = "{{.UUID}}";
+        const FOLDER = "{{.Folder}}";
+        const THUMB = "{{ .Thumbnail }}";
+        const DOWNLOAD_ENABLED = "{{ .DownloadEnabled }}" === "true";
+        const CONTINUE_WATCHING_ENABLED = "{{ .ContinueWatchingPopupEnabled }}" === "true";
+        
+        let Qualitys = JSON.parse(decodeURI("{{.Qualitys}}")) || [];
+        let Subtitles = JSON.parse(decodeURI("{{.Subtitles}}")) || [];
+        let Audios = JSON.parse(decodeURI("{{.Audios}}")) || [];
+        let Webhooks = JSON.parse(decodeURI("{{.Webhooks}}")) || [];
+
+        // --- Helper: Decode Base64 Subtitles ---
+        function b64DecodeUnicode(str) {
+            return decodeURIComponent(
+                atob(str).split("").map(function (c) {
+                    return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join("")
+            );
+        }
+
+        // --- Setup Source ---
+        let streamUrl = `${FOLDER}/${UUID}/stream/multi/master.m3u8?jwt=${JWT}`;
+
+        const player = document.querySelector('media-player');
+        player.src = streamUrl;
+
+        // --- Setup Subtitles ---
+        const provider = document.querySelector('media-provider');
+        let trackCount = 0;
+        
+        Subtitles.forEach((sub, index) => {
+            // Drop ASS
+            if (sub.type === 'ass') return;
+
+            const blob = new Blob([b64DecodeUnicode(sub.data)], { type: 'text/vtt' });
+            const url = URL.createObjectURL(blob);
+            
+            const track = document.createElement('track');
+            track.kind = 'subtitles'; // or 'captions'
+            track.label = `${sub.name} (${sub.lang})`;
+            track.srclang = sub.lang;
+            track.src = url;
+                    
+            provider.appendChild(track);
+            trackCount++;
+        });
+
+        // --- Webhooks Logic ---
+        function activateWebhooks() {
+            Webhooks.forEach((Webhook) => {
+                setInterval(() => {
+                    if (!player || player.paused) return;
+                    
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const reqFieldValue = urlParams.get(Webhook.reqField);
+
+                    const formdata = new FormData();
+                    formdata.append("uuid", UUID);
+                    formdata.append("position", player.currentTime);
+                    formdata.append(Webhook.resField, reqFieldValue);
+
+                    fetch(Webhook.url, {
+                        method: "POST",
+                        body: formdata,
+                        redirect: "follow",
+                    }).catch((e) => {
+                        console.error("Webhook error", Webhook, e);
+                    });
+                }, (1000 * 60) / Webhook.rpm);
+            });
+        }
+        
+        // Wait for player to be ready for interactions
+        player.addEventListener('provider-change', (event) => {
+             // Provider (HLS) loaded
+             activateWebhooks();
+        });
+
+        // --- Position Tracking & Continue Watching ---
+        const STORAGE_KEY = `POSITION-${UUID}`;
+
+        // Save position every second
+        setInterval(() => {
+            if (player && !player.paused) {
+                localStorage.setItem(STORAGE_KEY, player.currentTime);
+            }
+        }, 1000);
+
+        // Check for resume on load
+        window.addEventListener('load', () => {
+            if (!CONTINUE_WATCHING_ENABLED) return;
+
+            const savedTime = parseFloat(localStorage.getItem(STORAGE_KEY));
+            if (savedTime && savedTime > 10) { // Only resume if > 10s watched
+                 showResumePopup(savedTime);
+            }
+        });
+
+        function showResumePopup(time) {
+            const popup = document.getElementById('continue-popup');
+            const title = document.getElementById('continue-text');
+            const btnResume = document.getElementById('btn-resume');
+            const btnRestart = document.getElementById('btn-restart');
+            const btnClose = document.getElementById('btn-close');
+
+            const minutes = Math.floor(time / 60);
+            const seconds = Math.floor(time % 60);
+            title.innerText = `Resume from ${minutes}m ${seconds}s?`;
+
+            popup.classList.add('visible');
+
+            btnResume.onclick = () => {
+                player.currentTime = time;
+                player.play();
+                popup.classList.remove('visible');
+            };
+
+            btnRestart.onclick = () => {
+                player.currentTime = 0;
+                player.play();
+                popup.classList.remove('visible');
+            };
+
+            btnClose.onclick = () => {
+                popup.classList.remove('visible');
+            };
+        }
+
+    </script>
 </body>
 </html>
