@@ -259,7 +259,24 @@
         player.addEventListener('provider-change', (event) => {
              // Provider (HLS) loaded
              activateWebhooks();
+             setupDownloads();
         });
+
+        // --- Download Logic ---
+        function setupDownloads() {
+            if (!DOWNLOAD_ENABLED) return;
+
+            const layout = document.querySelector('media-video-layout');
+            if (!layout || Qualitys.length === 0) return;
+
+            // Use the built-in 'download' prop
+            // We provide the highest available quality (the last one)
+            const highestQuality = Qualitys[Qualitys.length - 1];
+            layout.download = {
+                url: window.origin + highestQuality.url,
+                filename: (player.title || 'video') + '.mkv'
+            };
+        }
 
         // --- Position Tracking & Continue Watching ---
         const STORAGE_KEY = `POSITION-${UUID}`;
