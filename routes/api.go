@@ -60,6 +60,8 @@ func Api() {
 	protectedApi.GET("/account", controllers.GetAccount)
 	protectedApi.GET("/account/settings", controllers.GetUserSettingsController)
 	protectedApi.PUT("/account/settings", controllers.UpdateUserSettingsController)
+	protectedApi.GET("/account/traffic", controllers.GetTrafficStats)
+	protectedApi.GET("/account/traffic/top", controllers.GetTopTrafficStats)
 
 	protectedApi.GET("/pages", controllers.ListWebPage, middlewares.IsAdmin())
 	protectedApi.POST("/page", controllers.CreateWebPage, middlewares.IsAdmin())
@@ -67,6 +69,8 @@ func Api() {
 	protectedApi.DELETE("/page", controllers.DeleteWebPage, middlewares.IsAdmin())
 
 	protectedApi.GET("/stats", controllers.GetSystemStats, middlewares.IsAdmin())
+	protectedApi.GET("/stats/traffic", controllers.GetAdminTrafficStats, middlewares.IsAdmin())
+	protectedApi.GET("/stats/traffic/top", controllers.GetAdminTopTrafficStats, middlewares.IsAdmin())
 	protectedApi.GET("/settings", controllers.GetSettings, middlewares.IsAdmin())
 	protectedApi.PUT("/settings", controllers.UpdateSettings, middlewares.IsAdmin())
 
