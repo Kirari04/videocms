@@ -79,7 +79,7 @@ func Api() {
 	protectedApi.GET("/users/:id", controllers.GetUser, middlewares.IsAdmin())
 	protectedApi.PUT("/users/:id", controllers.UpdateUser, middlewares.IsAdmin())
 	protectedApi.DELETE("/users/:id", controllers.DeleteUser, middlewares.IsAdmin())
-	protectedApi.GET("/users/:id/password", controllers.ResetUserPassword, middlewares.IsAdmin())
+	protectedApi.POST("/users/:id/password", controllers.ResetUserPassword, middlewares.IsAdmin())
 
 	protectedApi.GET("/admin/encodings", controllers.GetAdminEncodingFiles, middlewares.IsAdmin())
 
