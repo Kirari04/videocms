@@ -150,7 +150,12 @@ func PlayerController(c echo.Context) error {
 		continueWatchingPopupEnabled = *config.ENV.ContinueWatchingPopupEnabled
 	}
 
-	return c.Render(http.StatusOK, "player.html", echo.Map{
+	playerTemplate := "player_v2.html"
+	if config.ENV.PlayerV2Enabled != nil && !*config.ENV.PlayerV2Enabled {
+		playerTemplate = "player.html"
+	}
+
+	return c.Render(http.StatusOK, playerTemplate, echo.Map{
 		"Title":                        fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
 		"Description":                  fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),
 		"Thumbnail":                    fmt.Sprintf("%s/%s/image/thumb/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, dbLink.File.Thumbnail),

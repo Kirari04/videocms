@@ -71,4 +71,5 @@ type Setting struct {
 
 	DownloadEnabled              string `validate:"required,boolean"`
 	ContinueWatchingPopupEnabled string `validate:"required,boolean"`
+	PlayerV2Enabled              string `validate:"required,boolean"`
 }

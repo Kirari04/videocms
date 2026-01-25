@@ -110,6 +110,7 @@ type Config struct {
 	ContinueWatchingPopupEnabled *bool
 
 	DownloadEnabled *bool
+	PlayerV2Enabled *bool
 }
 
 type PublicConfig struct {
@@ -133,6 +134,7 @@ type PublicConfig struct {
 	ContinueWatchingPopupEnabled bool
 
 	DownloadEnabled bool
+	PlayerV2Enabled bool
 }
 
 func (c Config) PublicConfig() PublicConfig {
@@ -157,6 +159,7 @@ func (c Config) PublicConfig() PublicConfig {
 		ContinueWatchingPopupEnabled: *c.ContinueWatchingPopupEnabled,
 
 		DownloadEnabled: *c.DownloadEnabled,
+		PlayerV2Enabled: *c.PlayerV2Enabled,
 	}
 }
 

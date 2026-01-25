@@ -82,6 +82,7 @@ func Setup() {
 
 	config.ENV.DownloadEnabled = getEnvDb_bool(&setting.DownloadEnabled, boolPtr(true))
 	config.ENV.ContinueWatchingPopupEnabled = getEnvDb_bool(&setting.ContinueWatchingPopupEnabled, boolPtr(true))
+	config.ENV.PlayerV2Enabled = getEnvDb_bool(&setting.PlayerV2Enabled, boolPtr(false))
 
 	// validate config before saving
 	validate := validator.New(validator.WithRequiredStructEnabled())
