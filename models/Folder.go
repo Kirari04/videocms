@@ -27,9 +27,8 @@ type FoldersDeleteValidation struct {
 }
 
 type FolderUpdateValidation struct {
-	Name           string `validate:"required,min=1,max=120" json:"Name" form:"Name"`
-	FolderID       uint   `validate:"required,number" json:"FolderID" form:"FolderID"`
-	ParentFolderID uint   `validate:"number" json:"ParentFolderID" form:"ParentFolderID"`
+	Name     string `validate:"required,min=1,max=120" json:"Name" form:"Name"`
+	FolderID uint   `validate:"required,number" json:"FolderID" form:"FolderID"`
 }
 
 type MoveItemsValidation struct {

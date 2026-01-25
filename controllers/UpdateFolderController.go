@@ -37,36 +37,8 @@ func UpdateFolder(c echo.Context) error {
 		return c.String(http.StatusForbidden, "Unauthorized access to folder")
 	}
 
-	/*
-		check if ParentfolderID aint root folder (=0)
-		check if requested parent folder id exists
-		TODO: also check if the new parent folder is not a child of current folder or the folder itself
-	*/
-	if folderValidation.ParentFolderID > 0 {
-		var targetParent models.Folder
-		if res := inits.DB.First(&targetParent, folderValidation.ParentFolderID); res.Error != nil {
-			return c.String(http.StatusBadRequest, "Parent folder doesn't exist")
-		}
-
-		if !isAdmin && targetParent.UserID != userID {
-			return c.String(http.StatusForbidden, "Unauthorized access to target parent folder")
-		}
-
-		// if the new parent folder is inside the current folder we return an
-		// error so the folders wont be in an infinite loop
-		containsFolder, err := helpers.FolderContainsFolder(dbFolder.ID, dbFolder.ParentFolderID)
-		if err != nil {
-			log.Printf("While running FolderContainsFolder the database returned an error: %v", err)
-			return c.NoContent(http.StatusInternalServerError)
-		}
-		if containsFolder {
-			return c.String(http.StatusBadRequest, "Parent folder aint a parent folder in relation to new  exist")
-		}
-	}
-
 	//update folder data
 	dbFolder.Name = folderValidation.Name
-	dbFolder.ParentFolderID = folderValidation.ParentFolderID
 	if res := inits.DB.Save(&dbFolder); res.Error != nil {
 		log.Printf("Failed to update folder: %v", res.Error)
 		return c.NoContent(http.StatusInternalServerError)

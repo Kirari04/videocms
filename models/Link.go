@@ -23,9 +23,8 @@ type LinkDeleteValidation struct {
 }
 
 type LinkUpdateValidation struct {
-	LinkID         uint   `validate:"required,number" form:"LinkID"`
-	Name           string `validate:"required,min=1,max=120" form:"Name"`
-	ParentFolderID uint   `validate:"number" form:"ParentFolderID"`
+	LinkID uint   `validate:"required,number" form:"LinkID"`
+	Name   string `validate:"required,min=1,max=120" form:"Name"`
 }
 
 type LinksDeleteValidation struct {

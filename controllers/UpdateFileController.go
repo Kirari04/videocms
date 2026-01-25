@@ -30,20 +30,8 @@ func UpdateFile(c echo.Context) error {
 		return c.String(http.StatusForbidden, "Unauthorized access to file")
 	}
 
-	if linkValidation.ParentFolderID > 0 {
-		var targetParent models.Folder
-		if res := inits.DB.First(&targetParent, linkValidation.ParentFolderID); res.Error != nil {
-			return c.String(http.StatusBadRequest, "Parent folder doesn't exist")
-		}
-
-		if !isAdmin && targetParent.UserID != userID {
-			return c.String(http.StatusForbidden, "Unauthorized access to target parent folder")
-		}
-	}
-
 	//update link data
 	dbLink.Name = linkValidation.Name
-	dbLink.ParentFolderID = linkValidation.ParentFolderID
 	if res := inits.DB.Save(&dbLink); res.Error != nil {
 		log.Printf("Failed to update link: %v", res.Error)
 		return c.NoContent(http.StatusInternalServerError)

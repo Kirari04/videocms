@@ -15,6 +15,7 @@ func MoveItems(userId uint, targetFolderId uint, folderIds []uint, linkIds []uin
 	}
 
 	// 1. Validate Target Folder
+	var targetFolderOwnerID uint
 	if targetFolderId > 0 {
 		var targetFolder models.Folder
 		if res := inits.DB.First(&targetFolder, targetFolderId); res.Error != nil {
@@ -23,6 +24,7 @@ func MoveItems(userId uint, targetFolderId uint, folderIds []uint, linkIds []uin
 		if !isAdmin && targetFolder.UserID != userId {
 			return http.StatusForbidden, errors.New("unauthorized access to target folder")
 		}
+		targetFolderOwnerID = targetFolder.UserID
 	}
 
 	// 2. Move Folders
@@ -39,6 +41,11 @@ func MoveItems(userId uint, targetFolderId uint, folderIds []uint, linkIds []uin
 
 		if !isAdmin && folder.UserID != userId {
 			return http.StatusForbidden, errors.New("unauthorized access to folder")
+		}
+
+		// Ensure target folder belongs to the same user as the item (even for admins)
+		if targetFolderId > 0 && folder.UserID != targetFolderOwnerID {
+			return http.StatusBadRequest, errors.New("cannot move folder to a destination owned by another user")
 		}
 
 		// Loop detection: Check if the folder we are moving contains the target folder
@@ -67,6 +74,11 @@ func MoveItems(userId uint, targetFolderId uint, folderIds []uint, linkIds []uin
 
 		if !isAdmin && link.UserID != userId {
 			return http.StatusForbidden, errors.New("unauthorized access to file")
+		}
+
+		// Ensure target folder belongs to the same user as the item (even for admins)
+		if targetFolderId > 0 && link.UserID != targetFolderOwnerID {
+			return http.StatusBadRequest, errors.New("cannot move file to a destination owned by another user")
 		}
 
 		link.ParentFolderID = targetFolderId
