@@ -253,6 +253,9 @@ func GetTopTraffic(from time.Time, to time.Time, userID uint, limit int, mode st
 		}
 
 	case "users":
+		if userID != 0 {
+			query = query.Where("user_id = ?", userID)
+		}
 		err := query.Select("user_id as id, CAST(SUM(bytes) AS INTEGER) as bytes").
 			Group("user_id").
 			Order("bytes DESC").
@@ -281,6 +284,10 @@ func GetTopUpload(from time.Time, to time.Time, userID uint, limit int) ([]TopTr
 
 	query := inits.DB.Model(&models.UploadLog{}).
 		Where("CAST(strftime('%s', created_at) AS INTEGER) >= ? AND CAST(strftime('%s', created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
+
+	if userID != 0 {
+		query = query.Where("user_id = ?", userID)
+	}
 
 	err := query.Select("user_id as id, CAST(SUM(bytes) AS INTEGER) as bytes").
 		Group("user_id").
@@ -332,6 +339,9 @@ func GetTopEncoding(from time.Time, to time.Time, userID uint, limit int, mode s
 			}
 		}
 	case "users":
+		if userID != 0 {
+			query = query.Where("user_id = ?", userID)
+		}
 		err := query.Select("user_id as id, CAST(SUM(seconds) AS INTEGER) as bytes").
 			Group("user_id").
 			Order("bytes DESC").
@@ -386,8 +396,11 @@ func GetTopStorage(userID uint, limit int, mode string) ([]TopTrafficResult, err
 
 	case "users":
 		// Sum of all file sizes per user
-		err := inits.DB.Model(&models.File{}).
-			Select("user_id as id, SUM(size) as bytes").
+		query := inits.DB.Model(&models.File{})
+		if userID != 0 {
+			query = query.Where("user_id = ?", userID)
+		}
+		err := query.Select("user_id as id, SUM(size) as bytes").
 			Group("user_id").
 			Order("bytes DESC").
 			Limit(limit).
