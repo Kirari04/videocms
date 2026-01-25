@@ -69,3 +69,32 @@ func GetAdminUploadStats(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, stats)
 }
+
+func GetTopUploadStats(c echo.Context) error {
+	from, to, _, _, err := parseUploadStatsRequest(c)
+	if err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
+
+	userID := c.Get("UserID").(uint)
+	limit := 10
+	results, err := logic.GetTopUpload(from, to, userID, limit)
+	if err != nil {
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	return c.JSON(http.StatusOK, results)
+}
+
+func GetAdminTopUploadStats(c echo.Context) error {
+	from, to, _, validatus, err := parseUploadStatsRequest(c)
+	if err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
+
+	limit := 10
+	results, err := logic.GetTopUpload(from, to, validatus.UserID, limit)
+	if err != nil {
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	return c.JSON(http.StatusOK, results)
+}

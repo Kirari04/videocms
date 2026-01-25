@@ -69,3 +69,37 @@ func GetAdminEncodingStats(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, stats)
 }
+
+func GetTopEncodingStats(c echo.Context) error {
+	from, to, _, _, err := parseEncodingStatsRequest(c)
+	if err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
+
+	userID := c.Get("UserID").(uint)
+	limit := 10
+	results, err := logic.GetTopEncoding(from, to, userID, limit, "files")
+	if err != nil {
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	return c.JSON(http.StatusOK, results)
+}
+
+func GetAdminTopEncodingStats(c echo.Context) error {
+	from, to, _, validatus, err := parseEncodingStatsRequest(c)
+	if err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
+
+	mode := c.QueryParam("mode")
+	if mode == "" {
+		mode = "users"
+	}
+
+	limit := 10
+	results, err := logic.GetTopEncoding(from, to, validatus.UserID, limit, mode)
+	if err != nil {
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	return c.JSON(http.StatusOK, results)
+}

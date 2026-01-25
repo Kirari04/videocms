@@ -232,20 +232,17 @@ func GetTopTraffic(from time.Time, to time.Time, userID uint, limit int, mode st
 		if userID != 0 {
 			query = query.Where("user_id = ?", userID)
 		}
-		
-		// Join with links or files to get a name
-		// We use links as they are the public representation
+
 		err := query.Select(selectStr).
 			Group("file_id").
 			Order("bytes DESC").
 			Limit(limit).
 			Scan(&results).Error
-		
+
 		if err != nil {
 			return nil, err
 		}
 
-		// Populate names from Link table (best effort)
 		for i := range results {
 			var link models.Link
 			if err := inits.DB.Where("file_id = ?", results[i].ID).First(&link).Error; err == nil {
@@ -256,18 +253,150 @@ func GetTopTraffic(from time.Time, to time.Time, userID uint, limit int, mode st
 		}
 
 	case "users":
-		// Rank users (Admin only context usually)
 		err := query.Select("user_id as id, CAST(SUM(bytes) AS INTEGER) as bytes").
 			Group("user_id").
 			Order("bytes DESC").
 			Limit(limit).
 			Scan(&results).Error
-		
+
 		if err != nil {
 			return nil, err
 		}
 
-		// Populate names from User table
+		for i := range results {
+			var user models.User
+			if err := inits.DB.First(&user, results[i].ID).Error; err == nil {
+				results[i].Name = user.Username
+			} else {
+				results[i].Name = "Deleted User"
+			}
+		}
+	}
+
+	return results, nil
+}
+
+func GetTopUpload(from time.Time, to time.Time, userID uint, limit int) ([]TopTrafficResult, error) {
+	var results []TopTrafficResult
+
+	query := inits.DB.Model(&models.UploadLog{}).
+		Where("CAST(strftime('%s', created_at) AS INTEGER) >= ? AND CAST(strftime('%s', created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
+
+	err := query.Select("user_id as id, CAST(SUM(bytes) AS INTEGER) as bytes").
+		Group("user_id").
+		Order("bytes DESC").
+		Limit(limit).
+		Scan(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range results {
+		var user models.User
+		if err := inits.DB.First(&user, results[i].ID).Error; err == nil {
+			results[i].Name = user.Username
+		} else {
+			results[i].Name = "Deleted User"
+		}
+	}
+
+	return results, nil
+}
+
+func GetTopEncoding(from time.Time, to time.Time, userID uint, limit int, mode string) ([]TopTrafficResult, error) {
+	var results []TopTrafficResult
+
+	query := inits.DB.Model(&models.EncodingLog{}).
+		Where("CAST(strftime('%s', created_at) AS INTEGER) >= ? AND CAST(strftime('%s', created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
+
+	switch mode {
+	case "files":
+		if userID != 0 {
+			query = query.Where("user_id = ?", userID)
+		}
+		err := query.Select("file_id as id, CAST(SUM(seconds) AS INTEGER) as bytes").
+			Group("file_id").
+			Order("bytes DESC").
+			Limit(limit).
+			Scan(&results).Error
+		if err != nil {
+			return nil, err
+		}
+		for i := range results {
+			var link models.Link
+			if err := inits.DB.Where("file_id = ?", results[i].ID).First(&link).Error; err == nil {
+				results[i].Name = link.Name
+			} else {
+				results[i].Name = "Unknown File"
+			}
+		}
+	case "users":
+		err := query.Select("user_id as id, CAST(SUM(seconds) AS INTEGER) as bytes").
+			Group("user_id").
+			Order("bytes DESC").
+			Limit(limit).
+			Scan(&results).Error
+		if err != nil {
+			return nil, err
+		}
+		for i := range results {
+			var user models.User
+			if err := inits.DB.First(&user, results[i].ID).Error; err == nil {
+				results[i].Name = user.Username
+			} else {
+				results[i].Name = "Deleted User"
+			}
+		}
+	}
+
+	return results, nil
+}
+
+func GetTopStorage(userID uint, limit int, mode string) ([]TopTrafficResult, error) {
+	var results []TopTrafficResult
+
+	switch mode {
+	case "files":
+		// Storage per file is the sum of file size + all its qualities + all its audios
+		// This is a complex query to do in one shot with GORM efficiently,
+		// so we'll approximate by ranking the File table's size or do a join.
+		query := inits.DB.Model(&models.File{})
+		if userID != 0 {
+			query = query.Where("user_id = ?", userID)
+		}
+
+		err := query.Select("id, size as bytes").
+			Order("size DESC").
+			Limit(limit).
+			Scan(&results).Error
+
+		if err != nil {
+			return nil, err
+		}
+
+		for i := range results {
+			var link models.Link
+			if err := inits.DB.Where("file_id = ?", results[i].ID).First(&link).Error; err == nil {
+				results[i].Name = link.Name
+			} else {
+				results[i].Name = "Orphaned File"
+			}
+		}
+
+	case "users":
+		// Sum of all file sizes per user
+		err := inits.DB.Model(&models.File{}).
+			Select("user_id as id, SUM(size) as bytes").
+			Group("user_id").
+			Order("bytes DESC").
+			Limit(limit).
+			Scan(&results).Error
+
+		if err != nil {
+			return nil, err
+		}
+
 		for i := range results {
 			var user models.User
 			if err := inits.DB.First(&user, results[i].ID).Error; err == nil {
