@@ -224,12 +224,9 @@ func runEncodeQuality(encodingTask models.Quality) {
 	os.MkdirAll(encodingTask.Path, 0777)
 
 	var frameRateString string
-	var gopSizeString string
 	var segmenDuration int = 4
 	if encodingTask.AvgFrameRate > 0 {
 		frameRateString = fmt.Sprintf("-r %.4f", encodingTask.AvgFrameRate)
-		gopSizeString = fmt.Sprintf("-g %d ", int(encodingTask.AvgFrameRate)*segmenDuration)
-		gopSizeString += fmt.Sprintf("-keyint_min %d", int(encodingTask.AvgFrameRate)*segmenDuration)
 	}
 
 	absFileInput, _ := filepath.Abs(encodingTask.File.Path)
@@ -252,7 +249,8 @@ func runEncodeQuality(encodingTask models.Quality) {
 			fmt.Sprintf("-maxrate %s ", encodingTask.VideoBitrate) + // setting max video bitrate
 			fmt.Sprintf("-bufsize %sk ", strconv.Itoa(helpers.ExtractNumber(encodingTask.VideoBitrate)*2)) + // setting video bufsize
 			fmt.Sprintf("%s ", frameRateString) + // (optional) setting framerate
-			fmt.Sprintf("%s ", gopSizeString) + // (optional) setting gop size
+			fmt.Sprintf("-force_key_frames \"expr:gte(t,n_forced*%d)\" ", segmenDuration) + // force keyframes every segmentDuration
+			"-flags +cgop " + // closed GOP
 			fmt.Sprintf("-s %dx%d ", encodingTask.Width, encodingTask.Height) + // setting resolution
 			fmt.Sprint("-sc_threshold 0 ") +
 			"-f hls " + // hls playlist
@@ -260,6 +258,7 @@ func runEncodeQuality(encodingTask models.Quality) {
 			fmt.Sprint("-hls_playlist_type vod ") +
 			fmt.Sprint("-hls_segment_type mpegts ") +
 			fmt.Sprint("-hls_list_size 0 ") +
+			"-hls_flags independent_segments " + // signals that segments can be decoded independently
 			fmt.Sprint("-start_number 0 ") + // start number
 			fmt.Sprintf("%s ", encFilePath) + // output file
 			fmt.Sprintf("-progress unix://%s -y", TempSock(
