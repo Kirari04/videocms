@@ -279,32 +279,58 @@ func GetTopTraffic(from time.Time, to time.Time, userID uint, limit int, mode st
 	return results, nil
 }
 
-func GetTopUpload(from time.Time, to time.Time, userID uint, limit int) ([]TopTrafficResult, error) {
+func GetTopUpload(from time.Time, to time.Time, userID uint, limit int, mode string) ([]TopTrafficResult, error) {
 	var results []TopTrafficResult
 
 	query := inits.DB.Model(&models.UploadLog{}).
 		Where("CAST(strftime('%s', created_at) AS INTEGER) >= ? AND CAST(strftime('%s', created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
 
-	if userID != 0 {
-		query = query.Where("user_id = ?", userID)
-	}
+	switch mode {
+	case "files":
+		if userID != 0 {
+			query = query.Where("user_id = ?", userID)
+		}
+		err := query.Select("file_id as id, CAST(SUM(bytes) AS INTEGER) as bytes").
+			Group("file_id").
+			Order("bytes DESC").
+			Limit(limit).
+			Scan(&results).Error
 
-	err := query.Select("user_id as id, CAST(SUM(bytes) AS INTEGER) as bytes").
-		Group("user_id").
-		Order("bytes DESC").
-		Limit(limit).
-		Scan(&results).Error
+		if err != nil {
+			return nil, err
+		}
 
-	if err != nil {
-		return nil, err
-	}
+		for i := range results {
+			var link models.Link
+			if err := inits.DB.Where("file_id = ?", results[i].ID).First(&link).Error; err == nil {
+				results[i].Name = link.Name
+			} else {
+				results[i].Name = "Unknown File"
+			}
+		}
 
-	for i := range results {
-		var user models.User
-		if err := inits.DB.First(&user, results[i].ID).Error; err == nil {
-			results[i].Name = user.Username
-		} else {
-			results[i].Name = "Deleted User"
+	case "users":
+		if userID != 0 {
+			query = query.Where("user_id = ?", userID)
+		}
+
+		err := query.Select("user_id as id, CAST(SUM(bytes) AS INTEGER) as bytes").
+			Group("user_id").
+			Order("bytes DESC").
+			Limit(limit).
+			Scan(&results).Error
+
+		if err != nil {
+			return nil, err
+		}
+
+		for i := range results {
+			var user models.User
+			if err := inits.DB.First(&user, results[i].ID).Error; err == nil {
+				results[i].Name = user.Username
+			} else {
+				results[i].Name = "Deleted User"
+			}
 		}
 	}
 

@@ -329,7 +329,12 @@ This documentation outlines the available API endpoints for the VideoCMS applica
 ### Top Upload Files
 *   **Method:** `GET`
 *   **Path:** `/account/upload/top`
+*   **Description:** Returns top uploaded files or users.
 *   **Auth Required:** Yes
+*   **Query Parameters:**
+    *   `mode` (string, optional, default="files"): "files" or "users"
+    *   `from` (RFC3339, optional)
+    *   `to` (RFC3339, optional)
 *   **Response (JSON):**
     ```json
     [

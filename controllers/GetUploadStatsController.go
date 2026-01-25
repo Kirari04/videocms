@@ -76,9 +76,14 @@ func GetTopUploadStats(c echo.Context) error {
 		return c.String(http.StatusBadRequest, err.Error())
 	}
 
+	mode := c.QueryParam("mode")
+	if mode == "" {
+		mode = "files"
+	}
+
 	userID := c.Get("UserID").(uint)
 	limit := 10
-	results, err := logic.GetTopUpload(from, to, userID, limit)
+	results, err := logic.GetTopUpload(from, to, userID, limit, mode)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
@@ -91,8 +96,13 @@ func GetAdminTopUploadStats(c echo.Context) error {
 		return c.String(http.StatusBadRequest, err.Error())
 	}
 
+	mode := c.QueryParam("mode")
+	if mode == "" {
+		mode = "users"
+	}
+
 	limit := 10
-	results, err := logic.GetTopUpload(from, to, validatus.UserID, limit)
+	results, err := logic.GetTopUpload(from, to, validatus.UserID, limit, mode)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
