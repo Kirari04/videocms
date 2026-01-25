@@ -17,8 +17,8 @@ type TrafficStatsData struct {
 }
 
 type aggregatedTrafficResult struct {
-	Ts    int64
-	Bytes uint64
+	Ts    int64   `gorm:"column:ts"`
+	Bytes float64 `gorm:"column:bytes"`
 }
 
 func GetTrafficStats(from time.Time, to time.Time, points int, userID uint, fileID uint, qualityID uint) (TrafficStatsData, error) {
@@ -39,12 +39,13 @@ func GetTrafficStats(from time.Time, to time.Time, points int, userID uint, file
 
 	var aggregations []aggregatedTrafficResult
 
-	query := inits.DB.Table("traffic_logs").
+	// Use strftime('%s') for comparison to handle timezone offsets correctly in SQLite
+	query := inits.DB.Model(&models.TrafficLog{}).
 		Select(`
 			(CAST(strftime('%s', created_at) AS INTEGER) / ? ) * ? as ts,
-			SUM(bytes) as bytes
+			CAST(SUM(bytes) AS INTEGER) as bytes
 		`, stepSeconds, stepSeconds).
-		Where("created_at >= ? AND created_at <= ?", from, to)
+		Where("CAST(strftime('%s', created_at) AS INTEGER) >= ? AND CAST(strftime('%s', created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
 
 	if userID != 0 {
 		query = query.Where("user_id = ?", userID)
@@ -65,7 +66,7 @@ func GetTrafficStats(from time.Time, to time.Time, points int, userID uint, file
 	// Convert aggregations to map for O(1) lookup
 	aggMap := make(map[int64]uint64)
 	for _, agg := range aggregations {
-		aggMap[agg.Ts] = agg.Bytes
+		aggMap[agg.Ts] = uint64(agg.Bytes)
 	}
 
 	// Iterate through all buckets to fill gaps with zeros
@@ -89,27 +90,21 @@ func GetTrafficStats(from time.Time, to time.Time, points int, userID uint, file
 }
 
 type TopTrafficResult struct {
-	ID    uint
-	Name  string
-	Bytes uint64
+	ID    uint   `gorm:"column:id"`
+	Name  string `gorm:"-"`
+	Bytes uint64 `gorm:"column:bytes"`
 }
 
 func GetTopTraffic(from time.Time, to time.Time, userID uint, limit int, mode string) ([]TopTrafficResult, error) {
 	var results []TopTrafficResult
 
-	query := inits.DB.Table("traffic_logs")
-
-	if !from.IsZero() {
-		query = query.Where("created_at >= ?", from)
-	}
-	if !to.IsZero() {
-		query = query.Where("created_at <= ?", to)
-	}
+	query := inits.DB.Model(&models.TrafficLog{}).
+		Where("CAST(strftime('%s', created_at) AS INTEGER) >= ? AND CAST(strftime('%s', created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
 
 	switch mode {
 	case "files":
 		// Rank files
-		selectStr := "file_id as id, SUM(bytes) as bytes"
+		selectStr := "file_id as id, CAST(SUM(bytes) AS INTEGER) as bytes"
 		if userID != 0 {
 			query = query.Where("user_id = ?", userID)
 		}
@@ -138,7 +133,7 @@ func GetTopTraffic(from time.Time, to time.Time, userID uint, limit int, mode st
 
 	case "users":
 		// Rank users (Admin only context usually)
-		err := query.Select("user_id as id, SUM(bytes) as bytes").
+		err := query.Select("user_id as id, CAST(SUM(bytes) AS INTEGER) as bytes").
 			Group("user_id").
 			Order("bytes DESC").
 			Limit(limit).
