@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Check</title>
+    <style>
+        body { background-color: #000; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { text-align: center; background: #1a1a1a; padding: 2rem; border-radius: 8px; }
+        .error { color: #ff6b6b; margin-bottom: 1rem; }
+        button { background-color: #333; color: white; border: 1px solid #555; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-top: 15px; }
+        button:hover { background-color: #444; }
+    </style>
+    {{if eq .CaptchaType "recaptcha"}}
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    {{else if eq .CaptchaType "hcaptcha"}}
+    <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+    {{else if eq .CaptchaType "turnstile"}}
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    {{end}}
+</head>
+<body>
+    <div class="container">
+        <h2>Security Check</h2>
+        <p>Please complete the captcha to continue.</p>
+        {{if .Error}}
+        <div class="error">{{.Error}}</div>
+        {{end}}
+        <form action="/captcha/verify" method="POST">
+            <input type="hidden" name="uuid" value="{{.UUID}}">
+            
+            <div style="display: flex; justify-content: center;">
+                {{if eq .CaptchaType "recaptcha"}}
+                <div class="g-recaptcha" data-sitekey="{{.CaptchaKey}}"></div>
+                {{else if eq .CaptchaType "hcaptcha"}}
+                <div class="h-captcha" data-sitekey="{{.CaptchaKey}}"></div>
+                {{else if eq .CaptchaType "turnstile"}}
+                <div class="cf-turnstile" data-sitekey="{{.CaptchaKey}}"></div>
+                {{end}}
+            </div>
+            
+            <button type="submit">Verify</button>
+        </form>
+    </div>
+</body>
+</html>

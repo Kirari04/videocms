@@ -55,11 +55,15 @@ type Setting struct {
 	CorsAllowCredentials string `validate:"required,boolean"`
 
 	CaptchaEnabled               string `validate:"required,boolean"`
+	CaptchaLoginEnabled          string `validate:"required,boolean"`
+	CaptchaPlayerEnabled         string `validate:"required,boolean"`
 	CaptchaType                  string `validate:"required_if=CaptchaEnabled 1,omitempty,min=1,max=10" gorm:"size:10;"`
 	Captcha_Recaptcha_PrivateKey string `validate:"required_if=CaptchaType recaptcha,omitempty,min=1,max=40" gorm:"size:40;"`
 	Captcha_Recaptcha_PublicKey  string `validate:"required_if=CaptchaType recaptcha,omitempty,min=1,max=40" gorm:"size:40;"`
 	Captcha_Hcaptcha_PrivateKey  string `validate:"required_if=CaptchaType hcaptcha,omitempty,min=1,max=42" gorm:"size:42;"`
 	Captcha_Hcaptcha_PublicKey   string `validate:"required_if=CaptchaType hcaptcha,omitempty,uuid_rfc4122"`
+	Captcha_Turnstile_PrivateKey string `validate:"required_if=CaptchaType turnstile,omitempty,min=1,max=100" gorm:"size:100;"`
+	Captcha_Turnstile_PublicKey  string `validate:"required_if=CaptchaType turnstile,omitempty,min=1,max=100" gorm:"size:100;"`
 
 	EncodeHls240p        string `validate:"required,boolean"`
 	Hls240pVideoBitrate  string `validate:"required,min=1,max=7" gorm:"size:7;"`

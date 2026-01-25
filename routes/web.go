@@ -14,6 +14,9 @@ import (
 func Web() {
 	inits.App.Static("/", "public/")
 
+	inits.App.GET("/captcha/challenge", controllers.GetCaptchaChallenge)
+	inits.App.POST("/captcha/verify", controllers.VerifyCaptchaChallenge)
+
 	inits.App.GET("/v/:UUID", controllers.PlayerController,
 		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateWeb), config.ENV.RatelimitBurstWeb, time.Minute*5)))
 

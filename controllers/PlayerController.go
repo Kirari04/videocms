@@ -45,19 +45,30 @@ func PlayerController(c echo.Context) error {
 		return c.Render(http.StatusNotFound, "404.html", echo.Map{})
 	}
 
+	if *config.ENV.CaptchaPlayerEnabled {
+		cookie, err := c.Cookie("captcha_bypass")
+		if err != nil || !auth.VerifyCaptchaJWT(cookie.Value, c.RealIP()) {
+			return c.Redirect(http.StatusSeeOther, "/captcha/challenge?uuid="+dbLink.UUID)
+		}
+	}
+
+	var tkn string
+	var streamIsReady bool
+	var jsonQualitys []map[string]string
+	var jsonSubtitles []map[string]string
+	var jsonAudios []map[string]string
+	var jsonWebhooks []map[string]any
+	var streamUrl, streamUrlWidth, streamUrlHeight, firstAudio string
+
 	// generate jwt token that allows the user to access the stream
-	tkn, _, err := auth.GenerateJWTStream(dbLink.UUID)
+	var err error
+	tkn, _, err = auth.GenerateJWTStream(dbLink.UUID)
 	if err != nil {
 		log.Printf("Failed to generate jwt stream token: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
 	// List qualitys non hls & check if has some file is ready
-	var streamIsReady bool
-	var jsonQualitys []map[string]string
-	streamUrl := ""
-	streamUrlWidth := ""
-	streamUrlHeight := ""
 	for _, qualiItem := range dbLink.File.Qualitys {
 		if qualiItem.Ready {
 			streamIsReady = true
@@ -72,10 +83,8 @@ func PlayerController(c echo.Context) error {
 			streamUrlWidth = strconv.Itoa(int(qualiItem.Width))
 		}
 	}
-	rawQuality, _ := json.Marshal(jsonQualitys)
 
 	// List subtitles
-	var jsonSubtitles []map[string]string
 	for _, subItem := range dbLink.File.Subtitles {
 		if subItem.Ready {
 			subPath := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, subItem.UUID, subItem.OutputFile)
@@ -89,11 +98,8 @@ func PlayerController(c echo.Context) error {
 			}
 		}
 	}
-	rawSubtitles, _ := json.Marshal(jsonSubtitles)
 
 	// List audios
-	var jsonAudios []map[string]string
-	var firstAudio string
 	for _, audioItem := range dbLink.File.Audios {
 		if audioItem.Ready {
 			jsonAudios = append(jsonAudios, map[string]string{
@@ -106,7 +112,6 @@ func PlayerController(c echo.Context) error {
 			firstAudio = audioItem.UUID
 		}
 	}
-	rawAudios, _ := json.Marshal(jsonAudios)
 
 	// List webhooks
 	var webhooks []models.Webhook
@@ -118,7 +123,6 @@ func PlayerController(c echo.Context) error {
 		log.Printf("Failed to query webhooks of file owner: %v", res.Error)
 		return c.NoContent(http.StatusInternalServerError)
 	}
-	var jsonWebhooks []map[string]any
 	for _, webhookItem := range webhooks {
 		jsonWebhooks = append(jsonWebhooks, map[string]any{
 			"url":      webhookItem.Url,
@@ -127,6 +131,10 @@ func PlayerController(c echo.Context) error {
 			"resField": webhookItem.ResField,
 		})
 	}
+
+	rawQuality, _ := json.Marshal(jsonQualitys)
+	rawSubtitles, _ := json.Marshal(jsonSubtitles)
+	rawAudios, _ := json.Marshal(jsonAudios)
 	rawWebhooks, _ := json.Marshal(jsonWebhooks)
 
 	// "{{.UUID}}={{.JWT}}; path=/; domain=" + window.location.hostname + ";SameSite=None; Secure; HttpOnly"

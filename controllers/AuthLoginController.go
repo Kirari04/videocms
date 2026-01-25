@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/auth"
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
@@ -19,12 +20,14 @@ func AuthLogin(c echo.Context) error {
 	}
 
 	// validate captcha
-	success, err := helpers.CaptchaValid(c)
-	if err != nil {
-		return c.String(http.StatusBadRequest, fmt.Sprint("Captcha error: ", err.Error()))
-	}
-	if !success {
-		return c.String(http.StatusBadRequest, "Captcha incorrect")
+	if *config.ENV.CaptchaLoginEnabled {
+		success, err := helpers.CaptchaValid(c)
+		if err != nil {
+			return c.String(http.StatusBadRequest, fmt.Sprint("Captcha error: ", err.Error()))
+		}
+		if !success {
+			return c.String(http.StatusBadRequest, "Captcha incorrect")
+		}
 	}
 
 	var user models.User

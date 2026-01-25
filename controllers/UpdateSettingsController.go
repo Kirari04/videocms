@@ -64,11 +64,15 @@ func UpdateSettings(c echo.Context) error {
 	setting.CorsAllowOrigins = validation.CorsAllowOrigins
 	setting.CorsAllowCredentials = validation.CorsAllowCredentials
 	setting.CaptchaEnabled = validation.CaptchaEnabled
+	setting.CaptchaLoginEnabled = validation.CaptchaLoginEnabled
+	setting.CaptchaPlayerEnabled = validation.CaptchaPlayerEnabled
 	setting.CaptchaType = validation.CaptchaType
 	setting.Captcha_Recaptcha_PrivateKey = validation.Captcha_Recaptcha_PrivateKey
 	setting.Captcha_Recaptcha_PublicKey = validation.Captcha_Recaptcha_PublicKey
 	setting.Captcha_Hcaptcha_PrivateKey = validation.Captcha_Hcaptcha_PrivateKey
 	setting.Captcha_Hcaptcha_PublicKey = validation.Captcha_Hcaptcha_PublicKey
+	setting.Captcha_Turnstile_PrivateKey = validation.Captcha_Turnstile_PrivateKey
+	setting.Captcha_Turnstile_PublicKey = validation.Captcha_Turnstile_PublicKey
 	setting.EncodeHls240p = validation.EncodeHls240p
 	setting.Hls240pVideoBitrate = validation.Hls240pVideoBitrate
 	setting.Hls240pCrf = validation.Hls240pCrf

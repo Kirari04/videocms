@@ -66,11 +66,15 @@ func Setup() {
 	config.ENV.CorsAllowCredentials = getEnvDb_bool(&setting.CorsAllowCredentials, boolPtr(true))
 
 	config.ENV.CaptchaEnabled = getEnvDb_bool(&setting.CaptchaEnabled, boolPtr(false))
+	config.ENV.CaptchaLoginEnabled = getEnvDb_bool(&setting.CaptchaLoginEnabled, boolPtr(false))
+	config.ENV.CaptchaPlayerEnabled = getEnvDb_bool(&setting.CaptchaPlayerEnabled, boolPtr(false))
 	config.ENV.CaptchaType = getEnvDb(&setting.CaptchaType, "")
 	config.ENV.Captcha_Recaptcha_PrivateKey = getEnvDb(&setting.Captcha_Recaptcha_PrivateKey, "")
 	config.ENV.Captcha_Recaptcha_PublicKey = getEnvDb(&setting.Captcha_Recaptcha_PublicKey, "")
 	config.ENV.Captcha_Hcaptcha_PrivateKey = getEnvDb(&setting.Captcha_Hcaptcha_PrivateKey, "")
 	config.ENV.Captcha_Hcaptcha_PublicKey = getEnvDb(&setting.Captcha_Hcaptcha_PublicKey, "")
+	config.ENV.Captcha_Turnstile_PrivateKey = getEnvDb(&setting.Captcha_Turnstile_PrivateKey, "")
+	config.ENV.Captcha_Turnstile_PublicKey = getEnvDb(&setting.Captcha_Turnstile_PublicKey, "")
 
 	config.ENV.EncodeHls240p = getEnvDb_bool(&setting.EncodeHls240p, boolPtr(true))
 	config.ENV.Hls240pVideoBitrate = getEnvDb(&setting.Hls240pVideoBitrate, "600k")

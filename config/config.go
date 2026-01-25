@@ -91,11 +91,15 @@ type Config struct {
 	CorsAllowCredentials *bool
 
 	CaptchaEnabled               *bool
+	CaptchaLoginEnabled          *bool
+	CaptchaPlayerEnabled         *bool
 	CaptchaType                  string
 	Captcha_Recaptcha_PrivateKey string
 	Captcha_Recaptcha_PublicKey  string
 	Captcha_Hcaptcha_PrivateKey  string
 	Captcha_Hcaptcha_PublicKey   string
+	Captcha_Turnstile_PrivateKey string
+	Captcha_Turnstile_PublicKey  string
 
 	EncodeHls240p        *bool
 	Hls240pVideoBitrate  string
@@ -144,9 +148,12 @@ type PublicConfig struct {
 	FolderVideoQualitys string
 
 	CaptchaEnabled              bool
+	CaptchaLoginEnabled         bool
+	CaptchaPlayerEnabled        bool
 	CaptchaType                 string
 	Captcha_Recaptcha_PublicKey string
 	Captcha_Hcaptcha_PublicKey  string
+	Captcha_Turnstile_PublicKey string
 
 	ContinueWatchingPopupEnabled bool
 
@@ -169,9 +176,12 @@ func (c Config) PublicConfig() PublicConfig {
 		FolderVideoQualitys: c.FolderVideoQualitysPub,
 
 		CaptchaEnabled:              *c.CaptchaEnabled,
+		CaptchaLoginEnabled:         *c.CaptchaLoginEnabled,
+		CaptchaPlayerEnabled:        *c.CaptchaPlayerEnabled,
 		CaptchaType:                 c.CaptchaType,
 		Captcha_Recaptcha_PublicKey: c.Captcha_Recaptcha_PublicKey,
 		Captcha_Hcaptcha_PublicKey:  c.Captcha_Hcaptcha_PublicKey,
+		Captcha_Turnstile_PublicKey: c.Captcha_Turnstile_PublicKey,
 
 		ContinueWatchingPopupEnabled: *c.ContinueWatchingPopupEnabled,
 
