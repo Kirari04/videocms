@@ -1,3 +1,27 @@
+FROM alpine:latest AS frontend
+
+WORKDIR /app
+
+RUN apk add --no-cache git
+
+# Clone the frontend repository
+RUN git clone https://github.com/Kirari04/videocms-frontend.git .
+
+FROM oven/bun:latest AS frontend_build
+
+WORKDIR /app
+
+COPY --from=frontend /app .
+
+RUN echo "NUXT_PUBLIC_API_URL=/api" >> .env
+RUN echo "NUXT_PUBLIC_BASE_URL=" >> .env
+RUN echo "NUXT_PUBLIC_DOCKER_HUB_TAG=kirari04/videocms:beta" >> .env
+RUN echo "NUXT_PUBLIC_NAME=VideoCMS" >> .env
+RUN echo "NUXT_PUBLIC_DEMO=false" >> .env
+
+RUN bun install
+RUN bun run generate
+
 FROM golang:latest AS builder
 
 WORKDIR /build
@@ -38,6 +62,7 @@ COPY --from=builder /build/sbom.spdx.json /app/sbom.spdx.json
 # Copy other necessary application files
 COPY ./views ./views/
 COPY ./public ./public/
+COPY --from=frontend_build /app/.output/public ./public/
 
 # Set up volumes for persistent data
 VOLUME /app/videos

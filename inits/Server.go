@@ -167,8 +167,27 @@ func Server() {
 			code = he.Code
 		}
 
+		// in case the route starts with api we respond with json
+		if strings.HasPrefix(c.Path(), "/api") {
+			c.JSON(code, map[string]string{"error": "Not found"})
+			return
+		}
+
 		if code == 404 {
-			if err := c.Render(code, "404.html", echo.Map{}); err != nil {
+			// the backend has 2 types of websites.
+			// one is /v/<UUID> containing the player
+			// one is config.ENV.FolderVideoQualitysPub containing the video data
+			// in case its one of thiose and still 404 we render the backend 404 page
+			if strings.HasPrefix(c.Path(), config.ENV.FolderVideoQualitysPub) || strings.HasPrefix(c.Path(), "/v/") {
+				if err := c.Render(code, "404.html", echo.Map{}); err != nil {
+					c.Logger().Error(err)
+				}
+				return
+			}
+
+			// now at this point we know its the frontend
+			// the frontend is a spa so we can just respond the index.html of the public folder
+			if err := c.File("public/index.html"); err != nil {
 				c.Logger().Error(err)
 			}
 		} else {
@@ -235,4 +254,3 @@ func ServerStart() {
 		App.Logger.Fatal(err)
 	}
 }
-
