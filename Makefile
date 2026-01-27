@@ -2,7 +2,7 @@ dev:
 	Host=:3000 air serve:main
 
 publish:
-	docker build -f Dockerfile --platform linux/amd64 -t kirari04/videocms:beta --push .
+	docker build -f Dockerfile --platform linux/amd64 -t kirari04/videocms:beta --push . --no-cache
 
 dckb:
 	docker build -f Dockerfile --platform linux/amd64 -t kirari04/videocms:beta --load .

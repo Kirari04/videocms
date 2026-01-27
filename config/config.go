@@ -34,7 +34,7 @@ var EXTENSIONS []string = []string{
 	"dv",   // Digital Video format
 }
 
-var VERSION string = "v0.0.9"
+var VERSION string = "v0.1.0"
 
 type Config struct {
 	Host string `validate:"required,min=1,max=120"`
@@ -50,10 +50,10 @@ type Config struct {
 	JwtSecretKey       string
 	JwtUploadSecretKey string
 
-	ReloadHtml        *bool
-	EncodingEnabled   *bool
-	UploadEnabled     *bool
-	RatelimitEnabled  *bool
+	ReloadHtml       *bool
+	EncodingEnabled  *bool
+	UploadEnabled    *bool
+	RatelimitEnabled *bool
 
 	RatelimitRateGlobal  float64
 	RatelimitBurstGlobal int
