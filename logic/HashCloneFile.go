@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func CloneFileByHash(fromHash string, toFolder uint, fileName string, userId uint) (status int, newFile *models.Link, err error) {
+func CloneFileByHash(fromHash string, toFolder uint, fileName string, userId uint, excludeSessionUUID string) (status int, newFile *models.Link, err error) {
 	// check if requested folder exists (if set)
 	if toFolder > 0 {
 		res := inits.DB.First(&models.Folder{}, toFolder)
@@ -26,6 +26,11 @@ func CloneFileByHash(fromHash string, toFolder uint, fileName string, userId uin
 			Hash: fromHash,
 		}).First(&existingFile); res.Error != nil {
 		return http.StatusNotFound, nil, errors.New("requested hash doesnt match any file")
+	}
+
+	// check storage quota
+	if status, err := CheckStorageQuota(userId, existingFile.Size, excludeSessionUUID); err != nil {
+		return status, nil, err
 	}
 
 	// file is dublicate and can be linked

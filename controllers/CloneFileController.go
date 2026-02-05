@@ -16,7 +16,7 @@ func CloneFile(c echo.Context) error {
 	}
 
 	// business logic
-	status, dbLink, err := logic.CloneFileByHash(fileValidation.Sha256, fileValidation.ParentFolderID, fileValidation.Name, c.Get("UserID").(uint))
+	status, dbLink, err := logic.CloneFileByHash(fileValidation.Sha256, fileValidation.ParentFolderID, fileValidation.Name, c.Get("UserID").(uint), "")
 	if err != nil {
 		return c.String(status, err.Error())
 	}

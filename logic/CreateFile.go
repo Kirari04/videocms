@@ -23,7 +23,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint) (status int, newFile *models.Link, cloned bool, err error) {
+func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint, excludeSessionUUID string) (status int, newFile *models.Link, cloned bool, err error) {
 	//check if requested folder exists (if set)
 	if toFolder > 0 {
 		res := inits.DB.First(&models.Folder{}, toFolder)
@@ -40,9 +40,14 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 	}
 
 	// check file hash with database
-	status, newLink, err := CloneFileByHash(FileHash, toFolder, fileName, userId)
+	status, newLink, err := CloneFileByHash(FileHash, toFolder, fileName, userId, excludeSessionUUID)
 	if err == nil {
 		return status, newLink, true, err
+	}
+
+	// check storage quota for new file
+	if status, err := CheckStorageQuota(userId, fileSize, excludeSessionUUID); err != nil {
+		return status, nil, false, err
 	}
 
 	// run file through ffmpeg so the metadata is more accurate

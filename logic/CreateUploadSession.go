@@ -49,6 +49,11 @@ func CreateUploadSession(toFolder uint, fileName string, uploadSessionUUID strin
 		return http.StatusRequestEntityTooLarge, nil, fmt.Errorf("exceeded max upload filesize: %v", config.ENV.MaxUploadFilesize)
 	}
 
+	// check storage quota
+	if status, err := CheckStorageQuota(userId, fileSize, ""); err != nil {
+		return status, nil, err
+	}
+
 	// get user settings
 	User, err := helpers.GetUser(userId)
 	if err != nil {
