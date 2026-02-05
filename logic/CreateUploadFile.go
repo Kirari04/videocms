@@ -113,7 +113,7 @@ func CreateUploadFile(sessionToken string, userId uint) (status int, response *m
 		log.Printf("Failed to copy final file to destination: %v", err)
 		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
-	status, dbLink, cloned, err := CreateFile(&filePath, uploadSession.ParentFolderID, uploadSession.Name, fileId, uploadSession.Size, userId)
+	status, dbLink, cloned, err := CreateFile(&filePath, uploadSession.ParentFolderID, uploadSession.Name, fileId, uploadSession.Size, userId, uploadSession.UUID)
 	if err != nil {
 		os.Remove(filePath)
 		return status, nil, err

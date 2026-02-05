@@ -5,6 +5,7 @@ import (
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
+	"fmt"
 	"net/http"
 )
 
@@ -163,6 +164,41 @@ func ResetUserPassword(id uint64, newPassword string) (int, error) {
 	user.Hash = hash
 	if result := inits.DB.Save(&user); result.Error != nil {
 		return http.StatusInternalServerError, errors.New("failed to update password")
+	}
+
+	return http.StatusOK, nil
+}
+
+func CheckStorageQuota(userId uint, additionalSize int64, excludeSessionUUID string) (int, error) {
+	var user models.User
+	if err := inits.DB.First(&user, userId).Error; err != nil {
+		return http.StatusInternalServerError, errors.New("failed to fetch user")
+	}
+
+	if user.Storage == 0 {
+		return http.StatusOK, nil
+	}
+
+	var usedStorage int64
+	if err := inits.DB.Model(&models.Link{}).
+		Joins("inner join files on files.id = links.file_id").
+		Where("links.user_id = ?", userId).
+		Select("COALESCE(SUM(files.size), 0)").
+		Scan(&usedStorage).Error; err != nil {
+		return http.StatusInternalServerError, errors.New("failed to calculate used storage")
+	}
+
+	var pendingStorage int64
+	query := inits.DB.Model(&models.UploadSession{}).Where("user_id = ?", userId)
+	if excludeSessionUUID != "" {
+		query = query.Where("uuid != ?", excludeSessionUUID)
+	}
+	if err := query.Select("COALESCE(SUM(size), 0)").Scan(&pendingStorage).Error; err != nil {
+		return http.StatusInternalServerError, errors.New("failed to calculate pending storage")
+	}
+
+	if usedStorage+pendingStorage+additionalSize > user.Storage {
+		return http.StatusForbidden, fmt.Errorf("storage quota exceeded: %d/%d bytes used", usedStorage+pendingStorage, user.Storage)
 	}
 
 	return http.StatusOK, nil
