@@ -46,10 +46,16 @@ RUN /go/bin/syft packages . -o spdx-json=sbom.spdx.json
 RUN sha256sum main_linux_amd64.bin > main_linux_amd64.bin.sha256sum
 
 
-FROM alpine:latest
+FROM alpine:latest AS alpine_upgraded
+
+RUN apk upgrade --no-cache
+
+
+FROM alpine_upgraded
 
 WORKDIR /app
 
+# update packages
 # System dependencies
 RUN apk add --no-cache ffmpeg bash
 
