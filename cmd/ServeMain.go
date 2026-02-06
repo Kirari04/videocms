@@ -21,6 +21,9 @@ func ServeMain() {
 		go services.Encoder()
 	}
 
+	// start remote downloader
+	go services.Downloader()
+
 	// start cleanup process
 	go services.EncoderCleanup()
 	go services.Deleter()

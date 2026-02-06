@@ -18,10 +18,10 @@ type Setting struct {
 	JwtSecretKey       string `validate:"required,min=8,max=512" gorm:"size:512;"`
 	JwtUploadSecretKey string `validate:"required,min=8,max=512" gorm:"size:512;"`
 
-	ReloadHtml        string `validate:"required,boolean"`
-	EncodingEnabled   string `validate:"required,boolean"`
-	UploadEnabled     string `validate:"required,boolean"`
-	RatelimitEnabled  string `validate:"required,boolean"`
+	ReloadHtml       string `validate:"required,boolean"`
+	EncodingEnabled  string `validate:"required,boolean"`
+	UploadEnabled    string `validate:"required,boolean"`
+	RatelimitEnabled string `validate:"required,boolean"`
 
 	RatelimitRateGlobal  string `validate:"required,number,min=0"`
 	RatelimitBurstGlobal string `validate:"required,number,min=0"`
@@ -93,4 +93,7 @@ type Setting struct {
 	DownloadEnabled              string `validate:"required,boolean"`
 	ContinueWatchingPopupEnabled string `validate:"required,boolean"`
 	PlayerV2Enabled              string `validate:"required,boolean"`
+
+	MaxParallelDownloads  string `validate:"required,number,min=1"`
+	RemoteDownloadTimeout string `validate:"required,number,min=1"`
 }

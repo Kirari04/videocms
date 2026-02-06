@@ -105,6 +105,9 @@ func Setup() {
 	config.ENV.ContinueWatchingPopupEnabled = getEnvDb_bool(&setting.ContinueWatchingPopupEnabled, boolPtr(true))
 	config.ENV.PlayerV2Enabled = getEnvDb_bool(&setting.PlayerV2Enabled, boolPtr(true))
 
+	config.ENV.MaxParallelDownloads = getEnvDb_int64(&setting.MaxParallelDownloads, 1)
+	config.ENV.RemoteDownloadTimeout = getEnvDb_int64(&setting.RemoteDownloadTimeout, 3600) // 1 hour
+
 	// validate config before saving
 	validate := validator.New(validator.WithRequiredStructEnabled())
 	err := validate.Struct(&setting)

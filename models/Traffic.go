@@ -36,9 +36,9 @@ type UploadStatsGetValidation struct {
 
 type EncodingLog struct {
 	Model
-	UserID  uint    `gorm:"index"`
-	FileID  uint    `gorm:"index"`
-	Type    string  `gorm:"size:32"` // reconstruction, quality, audio, sub
+	UserID  uint   `gorm:"index"`
+	FileID  uint   `gorm:"index"`
+	Type    string `gorm:"size:32"` // reconstruction, quality, audio, sub
 	Seconds float64
 }
 

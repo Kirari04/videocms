@@ -215,8 +215,8 @@ func GetEncodingStats(from time.Time, to time.Time, points int, userID uint) (Tr
 
 type TopTrafficResult struct {
 	ID    uint   `gorm:"column:id"`
-	Name  string `gorm:"-"`
-	Bytes uint64 `gorm:"column:bytes"`
+	Name  string `gorm:"column:name"`
+	Value uint64 `gorm:"column:value" json:"value"`
 }
 
 func GetTopTraffic(from time.Time, to time.Time, userID uint, limit int, mode string) ([]TopTrafficResult, error) {
@@ -228,14 +228,14 @@ func GetTopTraffic(from time.Time, to time.Time, userID uint, limit int, mode st
 	switch mode {
 	case "files":
 		// Rank files
-		selectStr := "file_id as id, CAST(SUM(bytes) AS INTEGER) as bytes"
+		selectStr := "file_id as id, CAST(SUM(bytes) AS INTEGER) as value"
 		if userID != 0 {
 			query = query.Where("user_id = ?", userID)
 		}
 
 		err := query.Select(selectStr).
 			Group("file_id").
-			Order("bytes DESC").
+			Order("value DESC").
 			Limit(limit).
 			Scan(&results).Error
 
@@ -256,9 +256,9 @@ func GetTopTraffic(from time.Time, to time.Time, userID uint, limit int, mode st
 		if userID != 0 {
 			query = query.Where("user_id = ?", userID)
 		}
-		err := query.Select("user_id as id, CAST(SUM(bytes) AS INTEGER) as bytes").
+		err := query.Select("user_id as id, CAST(SUM(bytes) AS INTEGER) as value").
 			Group("user_id").
-			Order("bytes DESC").
+			Order("value DESC").
 			Limit(limit).
 			Scan(&results).Error
 
@@ -290,9 +290,9 @@ func GetTopUpload(from time.Time, to time.Time, userID uint, limit int, mode str
 		if userID != 0 {
 			query = query.Where("user_id = ?", userID)
 		}
-		err := query.Select("file_id as id, CAST(SUM(bytes) AS INTEGER) as bytes").
+		err := query.Select("file_id as id, CAST(SUM(bytes) AS INTEGER) as value").
 			Group("file_id").
-			Order("bytes DESC").
+			Order("value DESC").
 			Limit(limit).
 			Scan(&results).Error
 
@@ -314,9 +314,9 @@ func GetTopUpload(from time.Time, to time.Time, userID uint, limit int, mode str
 			query = query.Where("user_id = ?", userID)
 		}
 
-		err := query.Select("user_id as id, CAST(SUM(bytes) AS INTEGER) as bytes").
+		err := query.Select("user_id as id, CAST(SUM(bytes) AS INTEGER) as value").
 			Group("user_id").
-			Order("bytes DESC").
+			Order("value DESC").
 			Limit(limit).
 			Scan(&results).Error
 
@@ -348,9 +348,9 @@ func GetTopEncoding(from time.Time, to time.Time, userID uint, limit int, mode s
 		if userID != 0 {
 			query = query.Where("user_id = ?", userID)
 		}
-		err := query.Select("file_id as id, CAST(SUM(seconds) AS INTEGER) as bytes").
+		err := query.Select("file_id as id, CAST(SUM(seconds) AS INTEGER) as value").
 			Group("file_id").
-			Order("bytes DESC").
+			Order("value DESC").
 			Limit(limit).
 			Scan(&results).Error
 		if err != nil {
@@ -368,9 +368,9 @@ func GetTopEncoding(from time.Time, to time.Time, userID uint, limit int, mode s
 		if userID != 0 {
 			query = query.Where("user_id = ?", userID)
 		}
-		err := query.Select("user_id as id, CAST(SUM(seconds) AS INTEGER) as bytes").
+		err := query.Select("user_id as id, CAST(SUM(seconds) AS INTEGER) as value").
 			Group("user_id").
-			Order("bytes DESC").
+			Order("value DESC").
 			Limit(limit).
 			Scan(&results).Error
 		if err != nil {
@@ -402,8 +402,8 @@ func GetTopStorage(userID uint, limit int, mode string) ([]TopTrafficResult, err
 			query = query.Where("user_id = ?", userID)
 		}
 
-		err := query.Select("id, size as bytes").
-			Order("size DESC").
+		err := query.Select("id, size as value").
+			Order("value DESC").
 			Limit(limit).
 			Scan(&results).Error
 
@@ -426,9 +426,9 @@ func GetTopStorage(userID uint, limit int, mode string) ([]TopTrafficResult, err
 		if userID != 0 {
 			query = query.Where("user_id = ?", userID)
 		}
-		err := query.Select("user_id as id, SUM(size) as bytes").
+		err := query.Select("user_id as id, SUM(size) as value").
 			Group("user_id").
-			Order("bytes DESC").
+			Order("value DESC").
 			Limit(limit).
 			Scan(&results).Error
 

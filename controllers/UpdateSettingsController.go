@@ -99,6 +99,8 @@ func UpdateSettings(c echo.Context) error {
 	setting.DownloadEnabled = validation.DownloadEnabled
 	setting.ContinueWatchingPopupEnabled = validation.ContinueWatchingPopupEnabled
 	setting.PlayerV2Enabled = validation.PlayerV2Enabled
+	setting.MaxParallelDownloads = validation.MaxParallelDownloads
+	setting.RemoteDownloadTimeout = validation.RemoteDownloadTimeout
 
 	if res := inits.DB.Save(&setting); res.Error != nil {
 		log.Fatalln("Failed to save settings", res.Error)

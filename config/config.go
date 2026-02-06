@@ -34,7 +34,7 @@ var EXTENSIONS []string = []string{
 	"dv",   // Digital Video format
 }
 
-var VERSION string = "v0.1.1"
+var VERSION string = "v0.1.2"
 
 type Config struct {
 	Host string `validate:"required,min=1,max=120"`
@@ -132,6 +132,9 @@ type Config struct {
 
 	DownloadEnabled *bool
 	PlayerV2Enabled *bool
+
+	MaxParallelDownloads  int64
+	RemoteDownloadTimeout int64
 }
 
 type PublicConfig struct {

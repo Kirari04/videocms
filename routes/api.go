@@ -109,4 +109,16 @@ func Api() {
 	protectedApi.DELETE("/pcu/session", controllers.DeleteUploadSession)
 	// protectedApi.Post("/pcu/chunck", controllers.CreateUploadChunck)
 	protectedApi.POST("/pcu/file", controllers.CreateUploadFile)
+
+	// Remote Download
+	protectedApi.POST("/remote/download", controllers.CreateRemoteDownload)
+	protectedApi.GET("/remote/downloads", controllers.ListRemoteDownloads)
+	protectedApi.GET("/account/remote-download", controllers.GetRemoteDownloadStats)
+	protectedApi.GET("/account/remote-download/duration", controllers.GetRemoteDownloadDurationStats)
+	protectedApi.GET("/account/remote-download/top", controllers.GetTopRemoteDownloadStats)
+
+	// Admin Stats
+	protectedApi.GET("/stats/remote-download", controllers.GetAdminRemoteDownloadStats, middlewares.IsAdmin())
+	protectedApi.GET("/stats/remote-download/duration", controllers.GetAdminRemoteDownloadDurationStats, middlewares.IsAdmin())
+	protectedApi.GET("/stats/remote-download/top", controllers.GetAdminTopRemoteDownloadStats, middlewares.IsAdmin())
 }
