@@ -30,6 +30,8 @@ func Models() {
 	mustRun(DB.AutoMigrate(&models.TrafficLog{}))
 	mustRun(DB.AutoMigrate(&models.UploadLog{}))
 	mustRun(DB.AutoMigrate(&models.EncodingLog{}))
+	mustRun(DB.AutoMigrate(&models.RemoteDownload{}))
+	mustRun(DB.AutoMigrate(&models.RemoteDownloadLog{}))
 
 	// init default admin user
 	// if no user exists

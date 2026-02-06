@@ -10,11 +10,12 @@ import (
 )
 
 type UpdateUserRequest struct {
-	Username string   `json:"username"`
-	Email    string   `json:"email" validate:"omitempty,email"`
-	Admin    *bool    `json:"admin"`
-	Storage  *int64   `json:"storage"`
-	Balance  *float64 `json:"balance"`
+	Username           string   `json:"username"`
+	Email              string   `json:"email" validate:"omitempty,email"`
+	Admin              *bool    `json:"admin"`
+	Storage            *int64   `json:"storage"`
+	Balance            *float64 `json:"balance"`
+	MaxRemoteDownloads *int     `json:"maxRemoteDownloads" validate:"omitempty,min=0"`
 }
 
 func UpdateUser(c echo.Context) error {
@@ -29,7 +30,7 @@ func UpdateUser(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	status, user, err := logic.UpdateUser(id, req.Username, req.Email, req.Admin, req.Storage, req.Balance)
+	status, user, err := logic.UpdateUser(id, req.Username, req.Email, req.Admin, req.Storage, req.Balance, req.MaxRemoteDownloads)
 	if err != nil {
 		return c.String(status, err.Error())
 	}

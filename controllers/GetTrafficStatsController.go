@@ -78,11 +78,7 @@ func GetTrafficStats(c echo.Context) error {
 
 	}
 
-
-
 	userID := c.Get("UserID").(uint)
-
-
 
 	stats, err := logic.GetTrafficStats(from, to, points, userID, validatus.FileID, validatus.QualityID)
 
@@ -91,8 +87,6 @@ func GetTrafficStats(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 
 	}
-
-
 
 	return c.JSON(http.StatusOK, stats)
 }
@@ -147,4 +141,3 @@ func GetAdminTopTrafficStats(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, results)
 }
-

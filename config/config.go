@@ -132,6 +132,9 @@ type Config struct {
 
 	DownloadEnabled *bool
 	PlayerV2Enabled *bool
+
+	MaxParallelDownloads  int64
+	RemoteDownloadTimeout int64
 }
 
 type PublicConfig struct {

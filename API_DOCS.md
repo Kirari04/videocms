@@ -322,7 +322,7 @@ This documentation outlines the available API endpoints for the VideoCMS applica
 *   **Response (JSON):**
     ```json
     [
-      {"ID": 10, "Name": "popular.mp4", "Bytes": 1024000000}
+      {"ID": 10, "Name": "popular.mp4", "Value": 1024000000}
     ]
     ```
 
@@ -338,7 +338,7 @@ This documentation outlines the available API endpoints for the VideoCMS applica
 *   **Response (JSON):**
     ```json
     [
-      {"ID": 10, "Name": "heavy_upload.mp4", "Bytes": 5000000000}
+      {"ID": 10, "Name": "heavy_upload.mp4", "Value": 5000000000}
     ]
     ```
 
@@ -349,7 +349,92 @@ This documentation outlines the available API endpoints for the VideoCMS applica
 *   **Response (JSON):**
     ```json
     [
-       {"ID": 12, "Name": "backup.zip", "Bytes": 5000000000}
+       {"ID": 12, "Name": "backup.zip", "Value": 5000000000}
+    ]
+    ```
+
+## Remote Downloads
+
+### Create Remote Download
+*   **Method:** `POST`
+*   **Path:** `/remote/download`
+*   **Auth Required:** Yes
+*   **Request Body (JSON):**
+    *   `urls` (array of strings, required, valid URLs)
+    *   `parentFolderID` (number, optional)
+*   **Response (JSON):**
+    ```json
+    [
+      {
+        "ID": 1,
+        "Url": "https://example.com/video.mp4",
+        "Status": "pending",
+        ...
+      }
+    ]
+    ```
+
+### List Remote Downloads
+*   **Method:** `GET`
+*   **Path:** `/remote/downloads`
+*   **Auth Required:** Yes
+*   **Response (JSON):**
+    ```json
+    [
+      {
+        "ID": 1,
+        "Url": "https://example.com/video.mp4",
+        "Status": "downloading",
+        "Progress": 0.45,
+        "BytesDownloaded": 47185920,
+        "TotalSize": 104857600,
+        ...
+      }
+    ]
+    ```
+
+### Remote Download Traffic Stats
+*   **Method:** `GET`
+*   **Path:** `/account/remote-download`
+*   **Auth Required:** Yes
+*   **Query Parameters:** `from` (RFC3339, optional), `to` (RFC3339, optional), `points` (optional)
+*   **Response (JSON):**
+    ```json
+    {
+      "Traffic": [
+        {"Timestamp": 1698300000000, "Bytes": 500000},
+        ...
+      ]
+    }
+    ```
+
+### Remote Download Duration Stats
+*   **Method:** `GET`
+*   **Path:** `/account/remote-download/duration`
+*   **Auth Required:** Yes
+*   **Query Parameters:** `from` (RFC3339, optional), `to` (RFC3339, optional), `points` (optional)
+*   **Response (JSON):**
+    ```json
+    {
+      "Traffic": [
+        {"Timestamp": 1698300000000, "Bytes": 300},
+        ...
+      ]
+    }
+    ```
+
+### Top Remote Download Traffic
+*   **Method:** `GET`
+*   **Path:** `/account/remote-download/top`
+*   **Auth Required:** Yes
+*   **Query Parameters:**
+    *   `from` (RFC3339, optional)
+    *   `to` (RFC3339, optional)
+    *   `mode` (string, optional, default="domains"): "domains", "users", "duration"
+*   **Response (JSON):**
+    ```json
+    [
+      {"ID": 0, "Name": "example.com", "Value": 1024000000}
     ]
     ```
 

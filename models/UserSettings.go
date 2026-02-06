@@ -12,6 +12,7 @@ type UserSettings struct {
 	WebhooksMax         int
 	UploadSessionsMax   int64
 	EnablePlayerCaptcha bool
+	MaxRemoteDownloads  int
 }
 
 // Scan scan value into Jsonb, implements sql.Scanner interface
@@ -39,4 +40,5 @@ func (j UserSettings) Value() (driver.Value, error) {
 type UserSettingsUpdateValidation struct {
 	EnablePlayerCaptcha *bool   `validate:"required,boolean"`
 	NewPassword         *string `validate:"omitempty,min=8,max=64"`
+	MaxRemoteDownloads  *int    `validate:"omitempty,min=0"`
 }

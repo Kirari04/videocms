@@ -99,7 +99,7 @@ func GetUser(id uint64) (int, *models.User, error) {
 	return http.StatusOK, &user, nil
 }
 
-func UpdateUser(id uint64, username, email string, admin *bool, storage *int64, balance *float64) (int, *models.User, error) {
+func UpdateUser(id uint64, username, email string, admin *bool, storage *int64, balance *float64, maxRemoteDownloads *int) (int, *models.User, error) {
 	var user models.User
 	if result := inits.DB.First(&user, id); result.Error != nil {
 		return http.StatusNotFound, nil, errors.New("user not found")
@@ -134,6 +134,9 @@ func UpdateUser(id uint64, username, email string, admin *bool, storage *int64, 
 	}
 	if balance != nil {
 		user.Balance = *balance
+	}
+	if maxRemoteDownloads != nil {
+		user.Settings.MaxRemoteDownloads = *maxRemoteDownloads
 	}
 
 	if result := inits.DB.Save(&user); result.Error != nil {
