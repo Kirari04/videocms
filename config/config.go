@@ -34,7 +34,7 @@ var EXTENSIONS []string = []string{
 	"dv",   // Digital Video format
 }
 
-var VERSION string = "v0.1.2"
+var VERSION string = "v0.1.3"
 
 type Config struct {
 	Host string `validate:"required,min=1,max=120"`
