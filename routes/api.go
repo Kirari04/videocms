@@ -5,6 +5,7 @@ import (
 	"ch/kirari04/videocms/controllers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/middlewares"
+	"fmt"
 	"time"
 
 	"github.com/labstack/echo/v4/middleware"
@@ -31,7 +32,8 @@ func Api() {
 
 	// requires uploadsession jwt inside body
 	inits.Api.POST("/pcu/chunck", controllers.CreateUploadChunck,
-		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateUpload), config.ENV.RatelimitBurstUpload, time.Minute*5)))
+		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateUpload), config.ENV.RatelimitBurstUpload, time.Minute*5)),
+		middleware.BodyLimit(fmt.Sprintf("%dk", config.ENV.MaxUploadChuncksize/1024+1024)))
 
 	// Routes that require to be authenticated
 	protectedApi := inits.Api.Group("",
@@ -54,6 +56,8 @@ func Api() {
 	protectedApi.DELETE("/files", controllers.DeleteFilesController)
 	protectedApi.POST("/file/tag", controllers.CreateTagController)
 	protectedApi.DELETE("/file/tag", controllers.DeleteTagController)
+	protectedApi.POST("/file/upload", controllers.SimpleUploadController,
+		middleware.BodyLimit(fmt.Sprintf("%dk", config.ENV.MaxUploadFilesize/1024+1024)))
 
 	protectedApi.GET("/account", controllers.GetAccount)
 	protectedApi.GET("/account/settings", controllers.GetUserSettingsController)

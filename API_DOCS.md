@@ -220,6 +220,17 @@ This documentation outlines the available API endpoints for the VideoCMS applica
     }
     ```
 
+### Simple File Upload (Single Request)
+*   **Method:** `POST`
+*   **Path:** `/file/upload`
+*   **Description:** Uploads a file in a single request. Recommended for smaller files or simple integrations (e.g., via API Key).
+*   **Auth Required:** Yes
+*   **Request Body (Multipart/Form-Data):**
+    *   `file` (file, required)
+    *   `Name` (string, required)
+    *   `ParentFolderID` (number, optional)
+*   **Response (JSON):** Returns the standard File/Link object.
+
 ### Create File (Clone)
 *   **Method:** `POST`
 *   **Path:** `/file/clone`

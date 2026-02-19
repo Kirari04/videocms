@@ -201,7 +201,13 @@ func Server() {
 
 	// body limit
 	postMaxSize := int64(float64(config.ENV.MaxPostSize) / 1024)
-	app.Use(middleware.BodyLimit(fmt.Sprintf("%dk", postMaxSize)))
+	app.Use(middleware.BodyLimitWithConfig(middleware.BodyLimitConfig{
+		Limit: fmt.Sprintf("%dk", postMaxSize),
+		Skipper: func(c echo.Context) bool {
+			// Skip body limit for upload routes, they handle their own limits
+			return strings.HasPrefix(c.Path(), "/api/file/upload") || strings.HasPrefix(c.Path(), "/api/pcu/chunck")
+		},
+	}))
 
 	// Compression middleware
 	app.Use(middleware.GzipWithConfig(middleware.GzipConfig{
