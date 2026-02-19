@@ -22,10 +22,6 @@ func Api() {
 	auth.GET("/refresh",
 		controllers.AuthRefresh,
 		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateAuth), config.ENV.RatelimitBurstAuth, time.Minute*5)))
-	auth.POST("/apikey",
-		controllers.AuthApikey,
-		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateAuth), config.ENV.RatelimitBurstAuth, time.Minute*5)),
-		middlewares.Auth())
 
 	// Routes that dont require authentication
 	inits.Api.GET("/config", controllers.GetConfig)
@@ -39,7 +35,7 @@ func Api() {
 
 	// Routes that require to be authenticated
 	protectedApi := inits.Api.Group("",
-		middlewares.Auth(),
+		middlewares.Auth(inits.DB),
 		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateApi), config.ENV.RatelimitBurstApi, time.Minute*5)))
 	protectedApi.POST("/folder", controllers.CreateFolder)
 	protectedApi.PUT("/folder", controllers.UpdateFolder)
@@ -69,6 +65,11 @@ func Api() {
 	protectedApi.GET("/account/encoding", controllers.GetEncodingStats)
 	protectedApi.GET("/account/encoding/top", controllers.GetTopEncodingStats)
 	protectedApi.GET("/account/storage/top", controllers.GetTopStorageStats)
+
+	protectedApi.GET("/apikeys", controllers.ListApiKeys)
+	protectedApi.POST("/apikey", controllers.CreateApiKey)
+	protectedApi.DELETE("/apikey/:id", controllers.DeleteApiKey)
+	protectedApi.GET("/apikey/:id/audit", controllers.GetApiKeyAudit)
 
 	protectedApi.GET("/pages", controllers.ListWebPage, middlewares.IsAdmin())
 	protectedApi.POST("/page", controllers.CreateWebPage, middlewares.IsAdmin())

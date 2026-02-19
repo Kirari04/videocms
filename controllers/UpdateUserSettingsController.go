@@ -23,6 +23,11 @@ func UpdateUserSettingsController(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	isApiKey, _ := c.Get("IsApiKey").(bool)
+	if isApiKey {
+		return c.String(http.StatusForbidden, "API Key Not Permitted to Update Settings")
+	}
+
 	var user models.User
 	if res := inits.DB.First(&user, userId); res.Error != nil {
 		log.Println("Failed to catch userID on db")

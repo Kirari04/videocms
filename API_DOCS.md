@@ -37,7 +37,7 @@ This documentation outlines the available API endpoints for the VideoCMS applica
 ### Refresh Token
 *   **Method:** `GET`
 *   **Path:** `/auth/refresh`
-*   **Description:** Refreshes the current JWT token.
+*   **Description:** Refreshes the current JWT token. API Keys cannot be refreshed.
 *   **Auth Required:** Yes (Bearer Token)
 *   **Response (JSON):**
     ```json
@@ -45,6 +45,70 @@ This documentation outlines the available API endpoints for the VideoCMS applica
       "token": "eyJhbGciOiJIUzI1NiIsInR...",
       "exp": "2023-10-27T10:00:00Z"
     }
+    ```
+
+## API Keys
+
+### List API Keys
+*   **Method:** `GET`
+*   **Path:** `/apikeys`
+*   **Description:** Returns a list of all API keys for the authenticated user. **The actual key is hidden for security.**
+*   **Auth Required:** Yes (JWT only)
+*   **Response (JSON):**
+    ```json
+    [
+      {
+        "ID": 1,
+        "Name": "My API Key",
+        "Prefix": "ak_72f...",
+        "ExpiresAt": "2024-10-27T10:00:00Z",
+        "LastUsedAt": "2024-02-19T10:00:00Z"
+      }
+    ]
+    ```
+
+### Create API Key
+*   **Method:** `POST`
+*   **Path:** `/apikey`
+*   **Description:** Generates a new API key. **This is the ONLY time the full key is shown.**
+*   **Auth Required:** Yes (JWT only)
+*   **Request Body (JSON/Form):**
+    *   `name` (string, required, min=3, max=32)
+    *   `expires_at` (date, optional, e.g. "2024-10-27T10:00:00Z")
+*   **Response (JSON):**
+    ```json
+    {
+      "ID": 1,
+      "Name": "My API Key",
+      "Key": "ak_72f...",
+      "ExpiresAt": "2024-10-27T10:00:00Z"
+    }
+    ```
+
+### Delete API Key
+*   **Method:** `DELETE`
+*   **Path:** `/apikey/:id`
+*   **Description:** Deletes an API key. **This will also permanently delete all associated audit logs.**
+*   **Auth Required:** Yes (JWT only)
+*   **Response:** HTTP 204 No Content
+
+### Get API Key Audit
+*   **Method:** `GET`
+*   **Path:** `/apikey/:id/audit`
+*   **Description:** Returns the last 100 requests made using this API key.
+*   **Auth Required:** Yes (JWT only)
+*   **Response (JSON):**
+    ```json
+    [
+      {
+        "ID": 50,
+        "ApiKeyID": 1,
+        "Method": "GET",
+        "Path": "/files",
+        "IP": "1.2.3.4",
+        "CreatedAt": "2024-02-19T10:00:00Z"
+      }
+    ]
     ```
 
 ## Folders

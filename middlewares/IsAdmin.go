@@ -9,6 +9,10 @@ import (
 func IsAdmin() echo.MiddlewareFunc {
 	return echo.MiddlewareFunc(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			isApiKey, _ := c.Get("IsApiKey").(bool)
+			if isApiKey {
+				return c.String(http.StatusForbidden, "API Key Not Permitted for Admin Routes")
+			}
 			isAdmin, ok := c.Get("Admin").(bool)
 			if !ok {
 				c.Logger().Error("Failed to catch Admin")

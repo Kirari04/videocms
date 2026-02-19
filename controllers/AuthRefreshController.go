@@ -15,6 +15,11 @@ func AuthRefresh(c echo.Context) error {
 	}
 	bearerHeader := strings.Split(bearer, " ")
 	tokenString := bearerHeader[len(bearerHeader)-1]
+
+	if strings.HasPrefix(tokenString, "ak_") {
+		return c.String(http.StatusForbidden, "API Keys cannot be refreshed")
+	}
+
 	newTokenString, expirationTime, err := auth.RefreshJWT(tokenString)
 	if err != nil {
 		return c.String(http.StatusForbidden, err.Error())

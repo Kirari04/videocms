@@ -24,6 +24,8 @@ func Models() {
 	mustRun(DB.AutoMigrate(&models.Webhook{}))
 	mustRun(DB.AutoMigrate(&models.WebPage{}))
 	mustRun(DB.AutoMigrate(&models.Setting{}))
+	mustRun(DB.AutoMigrate(&models.ApiKey{}))
+	mustRun(DB.AutoMigrate(&models.ApiKeyAuditLog{}))
 	mustRun(DB.AutoMigrate(&models.SystemResource{}))
 	mustRun(DB.AutoMigrate(&models.Tag{}))
 	mustRun(DB.AutoMigrate(&models.TagLinks{}))

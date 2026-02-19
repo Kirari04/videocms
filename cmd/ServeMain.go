@@ -27,6 +27,7 @@ func ServeMain() {
 	// start cleanup process
 	go services.EncoderCleanup()
 	go services.Deleter()
+	go services.AuditCleanup()
 
 	// start system resource tracker
 	go services.Resources()
