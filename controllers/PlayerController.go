@@ -179,7 +179,6 @@ func PlayerController(c echo.Context) error {
 		"Webhooks":                     string(rawWebhooks),
 		"StreamIsReady":                streamIsReady,
 		"UUID":                         requestValidation.UUID,
-		"PROJECTURL":                   config.ENV.Project,
 		"Folder":                       config.ENV.FolderVideoQualitysPub,
 		"JWT":                          tkn,
 		"AppName":                      config.ENV.AppName,

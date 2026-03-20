@@ -7,13 +7,10 @@ type SettingValidation struct {
 
 type Setting struct {
 	Model
-	AppName string `validate:"required,min=1,max=120" gorm:"size:120;"`
-	BaseUrl string `validate:"required,min=1,max=255" gorm:"size:255;"`
+	AppName              string `validate:"required,min=1,max=120" gorm:"size:120;"`
+	BaseUrl              string `validate:"required,min=1,max=120" gorm:"size:120;"`
 
-	Project              string `validate:"required,min=1,max=512" gorm:"size:512;"`
-	ProjectDocumentation string `validate:"required,min=1,max=512" gorm:"size:512;"`
-	ProjectDownload      string `validate:"required,min=1,max=512" gorm:"size:512;"`
-	ProjectExampleVideo  string `validate:"required,min=1,max=512" gorm:"size:512;"`
+	ProjectExampleVideo string `validate:"required,min=1,max=512" gorm:"size:512;"`
 
 	JwtSecretKey       string `validate:"required,min=8,max=512" gorm:"size:512;"`
 	JwtUploadSecretKey string `validate:"required,min=8,max=512" gorm:"size:512;"`

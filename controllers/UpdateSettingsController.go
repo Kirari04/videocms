@@ -27,9 +27,6 @@ func UpdateSettings(c echo.Context) error {
 	setting.ID = validation.ID
 	setting.AppName = validation.AppName
 	setting.BaseUrl = validation.BaseUrl
-	setting.Project = validation.Project
-	setting.ProjectDocumentation = validation.ProjectDocumentation
-	setting.ProjectDownload = validation.ProjectDownload
 	setting.ProjectExampleVideo = validation.ProjectExampleVideo
 	setting.JwtSecretKey = validation.JwtSecretKey
 	setting.JwtUploadSecretKey = validation.JwtUploadSecretKey
