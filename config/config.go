@@ -42,9 +42,6 @@ type Config struct {
 	AppName string
 	BaseUrl string
 
-	Project              string
-	ProjectDocumentation string
-	ProjectDownload      string
 	ProjectExampleVideo  string
 
 	JwtSecretKey       string
@@ -138,9 +135,8 @@ type Config struct {
 }
 
 type PublicConfig struct {
-	AppName         string
-	BaseUrl         string
-	Project         string
+	AppName string
+	BaseUrl string
 	EncodingEnabled bool
 	UploadEnabled   bool
 
@@ -168,7 +164,6 @@ func (c Config) PublicConfig() PublicConfig {
 	return PublicConfig{
 		AppName:         c.AppName,
 		BaseUrl:         c.BaseUrl,
-		Project:         c.Project,
 		EncodingEnabled: *c.EncodingEnabled,
 		UploadEnabled:   *c.UploadEnabled,
 

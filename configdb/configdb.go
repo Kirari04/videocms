@@ -21,9 +21,6 @@ func Setup() {
 	config.ENV.AppName = getEnvDb(&setting.AppName, "VideoCMS")
 	config.ENV.BaseUrl = getEnvDb(&setting.BaseUrl, "http://127.0.0.1:3000")
 
-	config.ENV.Project = getEnvDb(&setting.Project, "https://github.com/notfound")
-	config.ENV.ProjectDocumentation = getEnvDb(&setting.ProjectDocumentation, "https://github.com/notfound")
-	config.ENV.ProjectDownload = getEnvDb(&setting.ProjectDownload, "https://github.com/notfound")
 	config.ENV.ProjectExampleVideo = getEnvDb(&setting.ProjectExampleVideo, "notfound")
 
 	config.ENV.JwtSecretKey = getEnvDb(&setting.JwtSecretKey, randomstring.CookieFriendlyString(64))
