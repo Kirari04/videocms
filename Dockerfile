@@ -27,7 +27,7 @@ FROM golang:latest AS builder
 WORKDIR /build
 
 # Install Syft for SBOM generation
-RUN go install github.com/anchore/syft/cmd/syft@latest
+RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /go/bin
 
 # Copy source code
 COPY . .
