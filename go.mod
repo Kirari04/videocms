@@ -4,15 +4,15 @@ go 1.25.5
 
 require (
 	github.com/dpapathanasiou/go-recaptcha v0.0.0-20190121160230-be5090b17804
-	github.com/go-playground/validator/v10 v10.30.2
+	github.com/go-playground/validator/v10 v10.30.3
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/imroc/req/v3 v3.57.0
-	github.com/labstack/echo/v4 v4.15.1
+	github.com/labstack/echo/v4 v4.15.2
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/thatisuday/commando v1.0.4
 	github.com/xyproto/randomstring v1.2.0
-	golang.org/x/net v0.53.0
-	golang.org/x/term v0.42.0
+	golang.org/x/net v0.55.0
+	golang.org/x/term v0.43.0
 	golang.org/x/time v0.15.0
 	gopkg.in/vansante/go-ffprobe.v2 v2.3.0
 	gorm.io/driver/sqlite v1.6.0
@@ -55,9 +55,9 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.42 // indirect
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	golang.org/x/crypto v0.50.0
-	golang.org/x/sys v0.43.0
-	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/crypto v0.52.0
+	golang.org/x/sys v0.45.0
+	golang.org/x/text v0.37.0 // indirect
 )
 
 replace github.com/quic-go/quic-go => github.com/quic-go/quic-go v0.58.0
