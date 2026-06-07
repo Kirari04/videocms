@@ -5,6 +5,7 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>{{.AppName}} || Upload Example</title>
+        <script src="https://cdn.jsdelivr.net/npm/tus-js-client@4.3.1/dist/tus.min.js"></script>
     </head>
     <body>
         <img src="/logo.png" alt="Logo" width="100" />
@@ -17,15 +18,10 @@
             <input id="file" type="file" name="file" />
         </div>
         <br />
-        <div>
-            <input
-                id="parrallelUploads"
-                type="number"
-                value="4"
-                min="1"
-                max="12"
-            />
-        </div>
+        <label>
+            Parallel uploads
+            <input id="parallelUploads" type="number" value="4" min="1" max="12" />
+        </label>
         <div>
             <input id="origin" type="url" value="//localhost:3000" />
         </div>
@@ -46,204 +42,118 @@
             }
 
             const log = (msg) =>
-                (logfield.innerHTML = `[${new Date().toLocaleString()}] ${msg}\n${
-                    logfield.innerHTML
-                }`);
+                (logfield.innerHTML = `[${new Date().toLocaleString()}] ${msg}\n${logfield.innerHTML}`);
 
-            // keep active token up to date
             let token = "";
             let timeout = new Date();
             let refreshing = false;
+
             setInterval(async () => {
-                if (
-                    token !== "" &&
-                    timeout.getTime() - 10_000 < new Date().getTime()
-                ) {
-                    log(`Try Refreshing auth token`);
+                if (token !== "" && timeout.getTime() - 10_000 < new Date().getTime()) {
                     if (refreshing) return;
-                    log(`Refreshing auth token`);
                     refreshing = true;
                     try {
                         const authHeaders = new Headers();
                         authHeaders.append("Authorization", `Bearer ${token}`);
-
-                        const authRefresh = await fetch(
-                            origininput.value + "/api/auth/refresh",
-                            {
-                                method: "get",
-                                headers: authHeaders,
-                                redirect: "follow",
-                            }
-                        ).then((response) => response.json());
-
+                        const authRefresh = await fetch(origininput.value + "/api/auth/refresh", {
+                            method: "get",
+                            headers: authHeaders,
+                            redirect: "follow",
+                        }).then((response) => response.json());
                         token = authRefresh.token;
                         timeout = new Date(authRefresh.exp);
-                        log(`New auth token has been generated`);
+                        log("Auth token refreshed");
                     } catch (error) {
-                        log(`Failed to generate mew auth token: ${error}`);
-                        return;
+                        log(`Failed to refresh auth token: ${error}`);
+                    } finally {
+                        refreshing = false;
                     }
-                    refreshing = false;
                 }
             }, 1000);
 
-            const upload = async () => {
-                log("Script Started");
-                fileinput.style.opacity = ".4";
-                fileinput.style.pointerEvents = "none";
-
-                const file = fileinput.files[0];
-                log(`File Selected: ${file.name}`);
-
-                log(`login using default credentials (admin)`);
-                var formdata = new FormData();
+            const login = async () => {
+                const formdata = new FormData();
                 formdata.append("username", "admin");
                 formdata.append("password", "12345678");
-                try {
-                    const result = await fetch(
-                        origininput.value + "/api/auth/login",
-                        {
-                            method: "POST",
-                            body: formdata,
-                            redirect: "follow",
-                        }
-                    ).then((response) => response.json());
-                    log(
-                        `login response: ${JSON.stringify(result).substring(
-                            0,
-                            50
-                        )}`
-                    );
-                    token = result.token;
-                    timeout = new Date(result.exp);
-                } catch (error) {
-                    log(`Failed to login`);
+                const result = await fetch(origininput.value + "/api/auth/login", {
+                    method: "POST",
+                    body: formdata,
+                    redirect: "follow",
+                }).then((response) => response.json());
+                token = result.token;
+                timeout = new Date(result.exp);
+                log("Logged in using default admin credentials");
+            };
+
+            const finalizeUpload = async (uploadUrl) => {
+                const uploadID = uploadUrl.split("/").filter(Boolean).pop();
+                return await fetch(origininput.value + `/api/uploads/${encodeURIComponent(uploadID)}/finalize`, {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                    redirect: "follow",
+                }).then((response) => response.json());
+            };
+
+            const upload = async () => {
+                log("Script started");
+                const file = fileinput.files[0];
+                if (!file) {
+                    log("No file selected");
                     return;
                 }
-                const percentalProgress = () =>
-                    Math.round(
-                        (100 / file.size) * (loopCounter * 65536) * 1000
-                    ) / 1000;
-                log(`Create upload session`);
-                const authHeaders = () => {
-                    const x = new Headers();
-                    x.append("Authorization", `Bearer ${token}`);
-                    return x;
-                };
+                fileinput.style.opacity = ".4";
+                fileinput.style.pointerEvents = "none";
+                log(`File selected: ${file.name}`);
 
-                var formdata = new FormData();
-                formdata.append("Name", file.name);
-                formdata.append("Size", file.size);
-
-                let uploadsession;
                 try {
-                    uploadsession = await fetch(
-                        origininput.value + "/api/pcu/session",
-                        {
-                            method: "POST",
-                            headers: authHeaders(),
-                            body: formdata,
-                            redirect: "follow",
-                        }
-                    ).then((response) => response.json());
+                    await login();
                 } catch (error) {
-                    log(`Failed to generate upload session: ${error}`);
+                    log(`Failed to login: ${error}`);
                     return;
                 }
 
-                log(
-                    `uploadsession response: ${JSON.stringify(
-                        uploadsession
-                    ).substring(0, 50)}`
-                );
-
-                const fileSliceSize = Math.ceil(
-                    file.size / uploadsession.ChunckCount
-                );
-                log(
-                    `Upload all ${uploadsession.ChunckCount} chuncks by ${fileSliceSize}bytes`
-                );
-
-                const uploadChunck = async (fileChunck, i) => {
-                    formdata = new FormData();
-                    formdata.append("file", fileChunck, "mha.mkv");
-                    formdata.append("Index", i);
-                    formdata.append("SessionJwtToken", uploadsession.Token);
-
-                    const chunckRes = await fetch(
-                        origininput.value + "/api/pcu/chunck",
-                        {
-                            method: "POST",
-                            headers: authHeaders(),
-                            body: formdata,
-                            redirect: "follow",
-                        }
-                    ).then((response) => {
-                        if (
-                            response.status !== 200 &&
-                            response.status !== 404 &&
-                            response.status !== 400
-                        ) {
-                            log(`Retry Chunck ${i}`);
-                            uploadChunck(fileChunck, i);
-                        }
-                        return response.text();
-                    });
-                    log(`Chunck ${i} response: ${chunckRes}`);
+                const clientUploadUUID = crypto.randomUUID();
+                const parallelUploads = Number(document.getElementById("parallelUploads").value || 1);
+                const metadata = {
+                    filename: file.name,
+                    client_upload_uuid: clientUploadUUID,
                 };
 
-                const parrallelUploads = parseInt(
-                    document.getElementById("parrallelUploads").value
-                );
-                progress.min = 0;
-                progress.value = 0;
-                progress.max = uploadsession.ChunckCount;
-                let pthreads = Math.ceil(
-                    uploadsession.ChunckCount / parrallelUploads
-                );
-                const forLoop = async (i, max) => {
-                    const fileChunck = file.slice(
-                        i * fileSliceSize,
-                        (i + 1) * fileSliceSize
-                    );
-                    console.log("start index", i);
-                    await uploadChunck(fileChunck, i);
+                const tusUpload = new tus.Upload(file, {
+                    endpoint: origininput.value + "/api/uploads",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                    metadata,
+                    metadataForPartialUploads: metadata,
+                    parallelUploads,
+                    chunkSize: 20 * 1024 * 1024,
+                    retryDelays: [0, 1000, 3000, 5000, 10000],
+                    storeFingerprintForResuming: true,
+                    removeFingerprintOnSuccess: true,
+                    onProgress(bytesUploaded, bytesTotal) {
+                        progress.value = Math.floor((bytesUploaded / bytesTotal) * 100);
+                    },
+                    async onSuccess() {
+                        log(`Tus upload complete: ${tusUpload.url}`);
+                        const uploadedFile = await finalizeUpload(tusUpload.url);
+                        progress.value = 100;
+                        log(`Finalize response: ${JSON.stringify(uploadedFile).substring(0, 120)}`);
+                        log(`${origininput.value}/v/${uploadedFile.UUID}`);
+                    },
+                    onError(error) {
+                        log(`Upload failed: ${error}`);
+                    },
+                });
 
-                    progress.value += 1;
-                    if (max > i) {
-                        await forLoop(i + 1, max);
-                    }
-                };
-                let promisses = [];
-                for (let p = 0; p < parrallelUploads; p++) {
-                    promisses.push(forLoop(p * pthreads, (p + 1) * pthreads));
+                const previousUploads = await tusUpload.findPreviousUploads();
+                if (previousUploads.length > 0) {
+                    tusUpload.resumeFromPreviousUpload(previousUploads[previousUploads.length - 1]);
+                    log("Resuming previous tus upload");
                 }
-                await Promise.all(promisses);
-
-                log(`Finalizing Upload`);
-                formdata = new FormData();
-                formdata.append("SessionJwtToken", uploadsession.Token);
-                let uploadedFile;
-                try {
-                    uploadedFile = await fetch(
-                        origininput.value + "/api/pcu/file",
-                        {
-                            method: "POST",
-                            headers: authHeaders(),
-                            body: formdata,
-                            redirect: "follow",
-                        }
-                    ).then((response) => response.json());
-                } catch (error) {
-                    log(`Failed to finalize upload: ${error}`);
-                    return;
-                }
-                log(
-                    `uploadedFile response: ${JSON.stringify(
-                        uploadedFile
-                    ).substring(0, 100)}`
-                );
-                log(`http://localhost:3000/${uploadedFile.UUID}`);
+                tusUpload.start();
             };
         </script>
     </body>

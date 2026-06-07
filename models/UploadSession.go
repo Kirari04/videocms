@@ -1,34 +1,76 @@
 package models
 
-import "github.com/golang-jwt/jwt/v5"
+import "time"
+
+const (
+	UploadProtocolTus    = "tus"
+	UploadProtocolSimple = "simple"
+
+	UploadKindSingle  = "single"
+	UploadKindPartial = "partial"
+	UploadKindFinal   = "final"
+
+	UploadStatusCreated   = "created"
+	UploadStatusUploading = "uploading"
+	UploadStatusUploaded  = "uploaded"
+	UploadStatusImporting = "importing"
+	UploadStatusDone      = "done"
+	UploadStatusFailed    = "failed"
+	UploadStatusCanceled  = "canceled"
+	UploadStatusExpired   = "expired"
+)
 
 type UploadSession struct {
 	Model
-	Name           string `gorm:"size:128;"`
-	UUID           string
-	Hash           string `gorm:"size:128;" json:"-"`
-	Size           int64
-	ChunckCount    int
-	SessionFolder  string  `gorm:"size:120;" json:"-"`
-	ParentFolder   *Folder `json:"-"`
-	ParentFolderID uint    `json:"-"`
-	User           User    `json:"-"`
-	UserID         uint
-	UploadChuncks  []UploadChunck `json:"-"`
+	UUID             string
+	ClientUploadUUID string
+	TusID            string `gorm:"index"`
+	Protocol         string `gorm:"size:16;index"`
+	Kind             string `gorm:"size:16;index"`
+	Status           string `gorm:"size:16;index"`
+	Name             string `gorm:"size:128;"`
+	Hash             string `gorm:"size:128;" json:"-"`
+	Size             int64
+	Offset           int64
+	QuotaBytes       int64
+	PartCount        int
+	StoragePath      string `gorm:"size:255;" json:"-"`
+	InfoPath         string `gorm:"size:255;" json:"-"`
+	ParentFolder     *Folder
+	ParentFolderID   uint
+	User             User `json:"-"`
+	UserID           uint
+	File             *File `json:"-"`
+	FileID           uint
+	Link             *Link `json:"-"`
+	LinkID           uint
+	ExpiresAt        *time.Time
+	CompletedAt      *time.Time
+	FinalizedAt      *time.Time
+	Error            string       `gorm:"size:1000;"`
+	UploadParts      []UploadPart `gorm:"foreignKey:UploadSessionID" json:"-"`
 }
 
-type UploadSessionClaims struct {
-	UUID   string `json:"uuid"`
-	UserID uint   `json:"userid"`
-	jwt.RegisteredClaims
+type UploadPart struct {
+	Model
+	UploadSession          UploadSession `json:"-"`
+	UploadSessionID        uint
+	PartialUploadSession   UploadSession `json:"-"`
+	PartialUploadSessionID uint
+	Index                  int
+	TusID                  string `gorm:"index"`
 }
 
-type UploadSessionValidation struct {
-	Name           string `validate:"required,min=1,max=128" json:"Name" form:"Name"`
-	Size           int64  `validate:"required,number,min=1" json:"Size" form:"Size"`
-	ParentFolderID uint   `validate:"number" json:"ParentFolderID" form:"ParentFolderID"`
-}
-
-type DeleteUploadSessionValidation struct {
-	UploadSessionUUID string `validate:"required,uuid_rfc4122" json:"UploadSessionUUID" form:"UploadSessionUUID"`
+type UploadSessionsGetResponse struct {
+	ID               uint       `json:"ID"`
+	CreatedAt        *time.Time `json:"CreatedAt"`
+	Name             string     `json:"Name"`
+	UUID             string     `json:"UUID"`
+	ClientUploadUUID string     `json:"ClientUploadUUID"`
+	TusID            string     `json:"TusID"`
+	Size             int64      `json:"Size"`
+	Offset           int64      `json:"Offset"`
+	PartCount        int        `json:"PartCount"`
+	Status           string     `json:"Status"`
+	ExpiresAt        *time.Time `json:"ExpiresAt"`
 }

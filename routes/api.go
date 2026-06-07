@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/time/rate"
 )
@@ -29,11 +30,6 @@ func Api() {
 	inits.Api.GET("/file/example", controllers.GetFileExample)
 	inits.Api.GET("/p/pages", controllers.ListPublicWebPage)
 	inits.Api.GET("/p/page", controllers.GetPublicWebPage)
-
-	// requires uploadsession jwt inside body
-	inits.Api.POST("/pcu/chunck", controllers.CreateUploadChunck,
-		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateUpload), config.ENV.RatelimitBurstUpload, time.Minute*5)),
-		middleware.BodyLimit(fmt.Sprintf("%dk", config.ENV.MaxUploadChuncksize/1024+1024)))
 
 	// Routes that require to be authenticated
 	protectedApi := inits.Api.Group("",
@@ -109,11 +105,8 @@ func Api() {
 
 	protectedApi.GET("/encodings", controllers.GetEncodingFiles)
 
-	protectedApi.GET("/pcu/sessions", controllers.GetUploadSessions)
-	protectedApi.POST("/pcu/session", controllers.CreateUploadSession)
-	protectedApi.DELETE("/pcu/session", controllers.DeleteUploadSession)
-	// protectedApi.Post("/pcu/chunck", controllers.CreateUploadChunck)
-	protectedApi.POST("/pcu/file", controllers.CreateUploadFile)
+	protectedApi.GET("/uploads/sessions", controllers.GetUploadSessions)
+	protectedApi.POST("/uploads/:upload_id/finalize", controllers.FinalizeTusUpload)
 
 	// Remote Download
 	protectedApi.POST("/remote/download", controllers.CreateRemoteDownload)
@@ -130,4 +123,11 @@ func Api() {
 	protectedApi.GET("/stats/remote-download", controllers.GetAdminRemoteDownloadStats, middlewares.IsAdmin())
 	protectedApi.GET("/stats/remote-download/duration", controllers.GetAdminRemoteDownloadDurationStats, middlewares.IsAdmin())
 	protectedApi.GET("/stats/remote-download/top", controllers.GetAdminTopRemoteDownloadStats, middlewares.IsAdmin())
+
+	uploadMiddlewares := []echo.MiddlewareFunc{
+		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateUpload), config.ENV.RatelimitBurstUpload, time.Minute*5)),
+		middleware.BodyLimit(fmt.Sprintf("%dk", config.ENV.MaxUploadChunkSize/1024+1024)),
+	}
+	inits.Api.Any("/uploads", controllers.TusUpload, uploadMiddlewares...)
+	inits.Api.Any("/uploads/*", controllers.TusUpload, uploadMiddlewares...)
 }

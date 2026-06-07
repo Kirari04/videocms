@@ -12,9 +12,8 @@ type Setting struct {
 
 	ProjectExampleVideo string `validate:"required,min=1,max=512" gorm:"size:512;"`
 
-	JwtSecretKey       string `validate:"required,min=8,max=512" gorm:"size:512;"`
-	JwtUploadSecretKey string `validate:"required,min=8,max=512" gorm:"size:512;"`
-	JwtMediaSecretKey  string `validate:"required,min=8,max=512" gorm:"size:512;"`
+	JwtSecretKey      string `validate:"required,min=8,max=512" gorm:"size:512;"`
+	JwtMediaSecretKey string `validate:"required,min=8,max=512" gorm:"size:512;"`
 
 	ReloadHtml       string `validate:"required,boolean"`
 	EncodingEnabled  string `validate:"required,boolean"`
@@ -43,10 +42,11 @@ type Setting struct {
 	MaxRunningEncodes   string `validate:"required,number,min=1"`
 	MaxFramerate        string `validate:"required,number,min=1"`
 
-	MaxUploadFilesize   string `validate:"required,number,min=1"`
-	MaxUploadChuncksize string `validate:"required,number,min=1"`
-	MaxUploadSessions   string `validate:"required,number,min=1"`
-	MaxPostSize         string `validate:"required,number,min=1"`
+	MaxUploadFilesize        string `validate:"required,number,min=1"`
+	MaxUploadChunkSize       string `validate:"required,number,min=1"`
+	LegacyMaxUploadChunkSize string `json:"-" gorm:"column:max_upload_chuncksize"`
+	MaxUploadSessions        string `validate:"required,number,min=1"`
+	MaxPostSize              string `validate:"required,number,min=1"`
 
 	CorsAllowOrigins     string `validate:"required,min=1,max=1000" gorm:"size:1000;"`
 	CorsAllowHeaders     string `validate:"required,min=1,max=1000" gorm:"size:1000;"`

@@ -379,23 +379,124 @@
             z-index: 9999;
         }
 
-        .msgdiv {
+        .encoding-state {
             position: absolute;
             left: 50%;
             top: 50%;
             transform: translate(-50%, -50%);
             color: #fff;
-            background-color: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(10px);
-            padding: 2rem;
-            font-size: 2rem;
+            width: min(480px, calc(100% - 32px));
+            background-color: rgba(9, 9, 11, 0.88);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            backdrop-filter: blur(12px);
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 24px 50px rgba(0, 0, 0, 0.45);
+            z-index: 20;
+        }
+
+        .encoding-status-label {
+            display: inline-flex;
+            align-items: center;
+            height: 24px;
+            padding: 0 10px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #d4d4d8;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .encoding-title {
+            margin: 14px 0 8px;
+            font-size: 1.35rem;
+            line-height: 1.25;
             font-weight: 700;
-            border-radius: 1rem;
+        }
+
+        .encoding-message,
+        .encoding-help {
+            margin: 0;
+            color: #c4c4cc;
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+
+        .encoding-progress {
+            margin-top: 18px;
+        }
+
+        .encoding-progress-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 8px;
+            color: #e4e4e7;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+
+        .encoding-progress-track {
+            height: 8px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .encoding-progress-fill {
+            width: 0%;
+            height: 100%;
+            border-radius: inherit;
+            background: #f4f4f5;
+            transition: width 0.25s ease;
+        }
+
+        .encoding-tasks {
+            display: grid;
+            gap: 8px;
+            margin: 18px 0;
+        }
+
+        .encoding-task {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            min-height: 36px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.07);
+            color: #f4f4f5;
+            font-size: 0.86rem;
+        }
+
+        .encoding-task span:first-child {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .encoding-task span:last-child {
+            flex: 0 0 auto;
+            color: #a1a1aa;
+            font-size: 0.78rem;
         }
 
         @media only screen and (max-width: 800px) {
             .plyr__controls__item.plyr__volume {
                 display: none;
+            }
+
+            .encoding-state {
+                padding: 20px;
+            }
+
+            .encoding-title {
+                font-size: 1.18rem;
             }
         }
     </style>
@@ -429,6 +530,8 @@
         if (Audios == null) Audios = [];
         let Webhooks = JSON.parse(decodeURI("{{.Webhooks}}"));
         if (Webhooks == null) Webhooks = [];
+        let PlayerStatus = JSON.parse(decodeURI("{{.PlayerStatus}}"));
+        if (PlayerStatus == null) PlayerStatus = {};
         const UUID = "{{.UUID}}";
 
         const TITLE = "{{.Title}}";
@@ -564,15 +667,146 @@
 
         const videoPlayerContainer = document.querySelector(".videoPlayer");
 
+        function clampProgress(value) {
+            const progress = Number(value);
+            if (!Number.isFinite(progress)) return 0;
+            return Math.max(0, Math.min(100, progress));
+        }
+
+        function stateLabel(state) {
+            switch (state) {
+                case "ready":
+                    return "Ready";
+                case "encoding":
+                    return "Encoding";
+                case "failed":
+                    return "Encoding failed";
+                case "captcha_required":
+                    return "Captcha required";
+                case "not_found":
+                    return "Not found";
+                default:
+                    return "Queued";
+            }
+        }
+
+        function renderEncodingStatus(status) {
+            const root = document.querySelector("[data-encoding-state]");
+            if (!root || !status) return;
+
+            const playbackProgress = clampProgress(status.playback_progress || 0);
+            const activeProgress = clampProgress(status.active_task_progress || 0);
+            const progress = playbackProgress || activeProgress;
+            const label = root.querySelector("[data-encoding-label]");
+            const message = root.querySelector("[data-encoding-message]");
+            const progressLabel = root.querySelector("[data-encoding-progress-label]");
+            const progressValue = root.querySelector("[data-encoding-progress-value]");
+            const progressFill = root.querySelector("[data-encoding-progress-fill]");
+            const tasks = root.querySelector("[data-encoding-tasks]");
+
+            label.textContent = stateLabel(status.state);
+            message.textContent = status.message || "Playback will start automatically once the first quality is ready.";
+            progressLabel.textContent = playbackProgress > 0
+                ? "First playable quality"
+                : activeProgress > 0
+                    ? "Current encoding task"
+                    : "Waiting for encoder";
+            progressValue.textContent = `${Math.round(progress)}%`;
+            progressFill.style.width = `${progress}%`;
+
+            const visibleTasks = (status.tasks || [])
+                .filter((task) => task.status !== "ready")
+                .slice(0, 4);
+            tasks.innerHTML = "";
+            visibleTasks.forEach((task) => {
+                const row = document.createElement("div");
+                row.className = "encoding-task";
+
+                const name = document.createElement("span");
+                name.textContent = `${task.type}: ${task.name}`;
+
+                const taskState = document.createElement("span");
+                const taskProgress = clampProgress(task.progress);
+                taskState.textContent = taskProgress > 0
+                    ? `${stateLabel(task.status)} ${Math.round(taskProgress)}%`
+                    : stateLabel(task.status);
+
+                row.append(name, taskState);
+                tasks.append(row);
+            });
+        }
+
+        function createEncodingState() {
+            videoPlayerContainer.innerHTML = "";
+            document.getElementById("thumb").style.filter = "blur(2rem)";
+
+            const root = document.createElement("section");
+            root.className = "encoding-state";
+            root.setAttribute("data-encoding-state", "");
+            root.setAttribute("aria-live", "polite");
+
+            root.innerHTML = `
+                <div class="encoding-status-label" data-encoding-label>Queued</div>
+                <h1 class="encoding-title">Video is still being encoded</h1>
+                <p class="encoding-message" data-encoding-message>Playback will start automatically once the first quality is ready.</p>
+                <div class="encoding-progress">
+                    <div class="encoding-progress-meta">
+                        <span data-encoding-progress-label>Waiting for encoder</span>
+                        <span data-encoding-progress-value>0%</span>
+                    </div>
+                    <div class="encoding-progress-track">
+                        <div class="encoding-progress-fill" data-encoding-progress-fill></div>
+                    </div>
+                </div>
+                <div class="encoding-tasks" data-encoding-tasks></div>
+                <p class="encoding-help">Playback will start automatically once the first quality is ready.</p>
+            `;
+
+            videoPlayerContainer.append(root);
+            renderEncodingStatus(PlayerStatus);
+        }
+
+        function startEncodingStatusPolling() {
+            let failedPolls = 0;
+
+            const poll = () => {
+                fetch(`/v/${UUID}/status`, {
+                    credentials: "same-origin",
+                    headers: {
+                        "Accept": "application/json",
+                    },
+                })
+                    .then((response) => response.json())
+                    .then((status) => {
+                        failedPolls = 0;
+                        if (status.state === "ready") {
+                            window.location.reload();
+                            return;
+                        }
+
+                        renderEncodingStatus(status);
+                        if (["failed", "captcha_required", "not_found"].includes(status.state)) {
+                            return;
+                        }
+
+                        window.setTimeout(poll, 5000);
+                    })
+                    .catch(() => {
+                        failedPolls++;
+                        if (failedPolls < 3) {
+                            window.setTimeout(poll, 5000);
+                        }
+                    });
+            };
+
+            window.setTimeout(poll, 5000);
+        }
+
         window.onload = () => main();
         function main() {
             if (!StreamIsReady) {
-                const msgdiv = document.createElement("div");
-                msgdiv.classList.add("msgdiv");
-                msgdiv.append(
-                    document.createTextNode("File is not ready yet!")
-                );
-                videoPlayerContainer.append(msgdiv);
+                createEncodingState();
+                startEncodingStatusPolling();
                 return;
             }
             createVideoPlayer();

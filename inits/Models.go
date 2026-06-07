@@ -20,7 +20,7 @@ func Models() {
 	mustRun(DB.AutoMigrate(&models.Subtitle{}))
 	mustRun(DB.AutoMigrate(&models.Audio{}))
 	mustRun(DB.AutoMigrate(&models.UploadSession{}))
-	mustRun(DB.AutoMigrate(&models.UploadChunck{}))
+	mustRun(DB.AutoMigrate(&models.UploadPart{}))
 	mustRun(DB.AutoMigrate(&models.Webhook{}))
 	mustRun(DB.AutoMigrate(&models.WebPage{}))
 	mustRun(DB.AutoMigrate(&models.Setting{}))

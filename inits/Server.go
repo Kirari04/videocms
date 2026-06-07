@@ -205,7 +205,7 @@ func Server() {
 		Limit: fmt.Sprintf("%dk", postMaxSize),
 		Skipper: func(c echo.Context) bool {
 			// Skip body limit for upload routes, they handle their own limits
-			return strings.HasPrefix(c.Path(), "/api/file/upload") || strings.HasPrefix(c.Path(), "/api/pcu/chunck")
+			return strings.HasPrefix(c.Path(), "/api/file/upload") || strings.HasPrefix(c.Path(), "/api/uploads")
 		},
 	}))
 
@@ -225,7 +225,9 @@ func Server() {
 	// cors configuration
 	app.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     []string{config.ENV.CorsAllowOrigins},
-		AllowHeaders:     []string{config.ENV.CorsAllowHeaders},
+		AllowMethods:     []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
+		AllowHeaders:     append([]string{config.ENV.CorsAllowHeaders}, tusCorsHeaders()...),
+		ExposeHeaders:    tusCorsExposeHeaders(),
 		AllowCredentials: *config.ENV.CorsAllowCredentials,
 		MaxAge:           7200,
 	}))
@@ -235,6 +237,34 @@ func Server() {
 
 	App = app
 	Api = *app.Group("/api")
+}
+
+func tusCorsHeaders() []string {
+	return []string{
+		"Authorization",
+		"Content-Type",
+		"Tus-Resumable",
+		"Upload-Length",
+		"Upload-Offset",
+		"Upload-Metadata",
+		"Upload-Concat",
+		"X-HTTP-Method-Override",
+	}
+}
+
+func tusCorsExposeHeaders() []string {
+	return []string{
+		"Location",
+		"Tus-Resumable",
+		"Tus-Version",
+		"Tus-Extension",
+		"Tus-Max-Size",
+		"Upload-Expires",
+		"Upload-Length",
+		"Upload-Offset",
+		"Upload-Metadata",
+		"Upload-Concat",
+	}
 }
 
 func ServerStart() {

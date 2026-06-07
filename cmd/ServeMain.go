@@ -6,6 +6,7 @@ import (
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/routes"
 	"ch/kirari04/videocms/services"
+	"ch/kirari04/videocms/services/tusupload"
 )
 
 func ServeMain() {
@@ -28,6 +29,7 @@ func ServeMain() {
 	go services.EncoderCleanup()
 	go services.Deleter()
 	go services.AuditCleanup()
+	go tusupload.StartCleanup()
 
 	// start system resource tracker
 	go services.Resources()

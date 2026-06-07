@@ -38,8 +38,11 @@ require (
 	github.com/thatisuday/clapper v1.0.10 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
+	github.com/tus/lockfile v1.2.0 // indirect
+	github.com/tus/tusd/v2 v2.9.2 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8 // indirect
 )
 
 require (

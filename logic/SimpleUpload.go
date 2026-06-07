@@ -17,7 +17,7 @@ import (
 )
 
 func SimpleUpload(parentFolderID uint, name string, file io.Reader, fileSize int64, userID uint) (status int, response *models.Link, err error) {
-	// check if user is blocked (standard check from CreateUploadSession)
+	// check if user is blocked by another asynchronous user operation
 	if helpers.UserRequestAsyncObj.Blocked(userID) {
 		return http.StatusTooManyRequests, nil, errors.New("wait until the previous delete request finished")
 	}
@@ -38,13 +38,23 @@ func SimpleUpload(parentFolderID uint, name string, file io.Reader, fileSize int
 		return status, nil, err
 	}
 
-	// check upload session limit (to maintain consistency with chunked upload)
+	// check upload session limit (to maintain consistency with resumable upload)
 	user, err := helpers.GetUser(userID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
 	var activeUploadSessions int64
-	inits.DB.Model(&models.UploadSession{}).Where("user_id = ?", userID).Count(&activeUploadSessions)
+	inits.DB.Model(&models.UploadSession{}).
+		Where("user_id = ?", userID).
+		Where("status IN ?", []string{
+			models.UploadStatusCreated,
+			models.UploadStatusUploading,
+			models.UploadStatusUploaded,
+			models.UploadStatusImporting,
+			models.UploadStatusFailed,
+		}).
+		Distinct("client_upload_uuid").
+		Count(&activeUploadSessions)
 	if activeUploadSessions >= config.ENV.MaxUploadSessions && activeUploadSessions >= user.Settings.UploadSessionsMax {
 		return http.StatusBadRequest, nil, fmt.Errorf("exceeded max upload sessions")
 	}
@@ -57,7 +67,7 @@ func SimpleUpload(parentFolderID uint, name string, file io.Reader, fileSize int
 		log.Printf("Failed to create temp upload file: %v", err)
 		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
-	
+
 	// ensure cleanup if something fails before CreateFile
 	defer func() {
 		if err != nil {
@@ -80,37 +90,48 @@ func SimpleUpload(parentFolderID uint, name string, file io.Reader, fileSize int
 
 	// Create a dummy upload session for tracking (matches parity with chunked)
 	session := models.UploadSession{
-		Name:           name,
-		UUID:           uploadUUID,
-		Size:           fileSize,
-		ChunckCount:    1,
-		SessionFolder:  "", // not needed for simple upload
-		ParentFolderID: parentFolderID,
-		UserID:         userID,
+		Name:             name,
+		UUID:             uploadUUID,
+		ClientUploadUUID: uploadUUID,
+		Protocol:         models.UploadProtocolSimple,
+		Kind:             models.UploadKindSingle,
+		Status:           models.UploadStatusUploaded,
+		Size:             fileSize,
+		Offset:           fileSize,
+		QuotaBytes:       fileSize,
+		PartCount:        1,
+		StoragePath:      tempPath,
+		ParentFolderID:   parentFolderID,
+		UserID:           userID,
 	}
 	if err := inits.DB.Create(&session).Error; err != nil {
 		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
-	
+
 	// Track upload
 	helpers.TrackUpload(userID, 0, session.ID, uint64(fileSize))
 
 	// finalize with CreateFile
 	status, dbLink, cloned, err := CreateFile(&tempPath, parentFolderID, name, uploadUUID, fileSize, userID, uploadUUID)
-	
+
 	// cleanup dummy session
 	defer inits.DB.Delete(&session)
-	
+
 	if err != nil {
 		return status, nil, err
 	}
-	
+
 	if cloned {
 		os.Remove(tempPath)
 	}
 
 	// Update UploadLog with FileID
 	inits.DB.Model(&models.UploadLog{}).Where("upload_session_id = ?", session.ID).Update("file_id", dbLink.FileID)
+	inits.DB.Model(&session).Updates(map[string]interface{}{
+		"status":  models.UploadStatusDone,
+		"file_id": dbLink.FileID,
+		"link_id": dbLink.ID,
+	})
 
 	return http.StatusOK, dbLink, nil
 }
