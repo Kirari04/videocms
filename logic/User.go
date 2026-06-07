@@ -9,6 +9,36 @@ import (
 	"net/http"
 )
 
+type UserResponse struct {
+	models.Model
+	Username              string
+	Admin                 bool
+	Email                 string
+	Balance               float64
+	Storage               int64
+	Settings              models.UserSettings
+	MaxRemoteDownloads    int
+	RemoteDownloadEnabled bool
+	UsedStorage           int64 `json:"used_storage"`
+	FileCount             int64 `json:"file_count"`
+}
+
+func NewUserResponse(user models.User, usedStorage int64, fileCount int64) UserResponse {
+	return UserResponse{
+		Model:                 user.Model,
+		Username:              user.Username,
+		Admin:                 user.Admin,
+		Email:                 user.Email,
+		Balance:               user.Balance,
+		Storage:               user.Storage,
+		Settings:              user.Settings,
+		MaxRemoteDownloads:    user.Settings.EffectiveMaxRemoteDownloads(),
+		RemoteDownloadEnabled: user.Settings.EffectiveRemoteDownloadEnabled(),
+		UsedStorage:           usedStorage,
+		FileCount:             fileCount,
+	}
+}
+
 func GetUsers(page, limit int, search string) (int, interface{}, error) {
 	type UserWithUsage struct {
 		models.User
@@ -44,8 +74,13 @@ func GetUsers(page, limit int, search string) (int, interface{}, error) {
 		return http.StatusInternalServerError, nil, errors.New("failed to fetch users")
 	}
 
+	userResponses := make([]UserResponse, 0, len(users))
+	for _, user := range users {
+		userResponses = append(userResponses, NewUserResponse(user.User, user.UsedStorage, user.FileCount))
+	}
+
 	return http.StatusOK, map[string]interface{}{
-		"data": users,
+		"data": userResponses,
 		"meta": map[string]interface{}{
 			"total": total,
 			"page":  page,
@@ -54,7 +89,7 @@ func GetUsers(page, limit int, search string) (int, interface{}, error) {
 	}, nil
 }
 
-func CreateUser(username, password, email string, admin bool, storage int64, balance float64) (int, *models.User, error) {
+func CreateUser(username, password, email string, admin bool, storage int64, balance float64, maxRemoteDownloads *int, remoteDownloadEnabled *bool) (int, *UserResponse, error) {
 	// Check for existing username
 	var count int64
 	inits.DB.Model(&models.User{}).Where("username = ?", username).Count(&count)
@@ -75,6 +110,15 @@ func CreateUser(username, password, email string, admin bool, storage int64, bal
 		return http.StatusInternalServerError, nil, errors.New("failed to process password")
 	}
 
+	effectiveMaxRemoteDownloads := models.DefaultMaxRemoteDownloads
+	if maxRemoteDownloads != nil && *maxRemoteDownloads > 0 {
+		effectiveMaxRemoteDownloads = *maxRemoteDownloads
+	}
+	effectiveRemoteDownloadEnabled := true
+	if remoteDownloadEnabled != nil {
+		effectiveRemoteDownloadEnabled = *remoteDownloadEnabled
+	}
+
 	user := models.User{
 		Username: username,
 		Hash:     hash,
@@ -82,24 +126,30 @@ func CreateUser(username, password, email string, admin bool, storage int64, bal
 		Admin:    admin,
 		Storage:  storage,
 		Balance:  balance,
+		Settings: models.UserSettings{
+			MaxRemoteDownloads:    effectiveMaxRemoteDownloads,
+			RemoteDownloadEnabled: &effectiveRemoteDownloadEnabled,
+		},
 	}
 
 	if result := inits.DB.Create(&user); result.Error != nil {
 		return http.StatusInternalServerError, nil, errors.New("failed to create user")
 	}
 
-	return http.StatusCreated, &user, nil
+	response := NewUserResponse(user, 0, 0)
+	return http.StatusCreated, &response, nil
 }
 
-func GetUser(id uint64) (int, *models.User, error) {
+func GetUser(id uint64) (int, *UserResponse, error) {
 	var user models.User
 	if result := inits.DB.First(&user, id); result.Error != nil {
 		return http.StatusNotFound, nil, errors.New("user not found")
 	}
-	return http.StatusOK, &user, nil
+	response := NewUserResponse(user, 0, 0)
+	return http.StatusOK, &response, nil
 }
 
-func UpdateUser(id uint64, username, email string, admin *bool, storage *int64, balance *float64, maxRemoteDownloads *int) (int, *models.User, error) {
+func UpdateUser(id uint64, username, email string, admin *bool, storage *int64, balance *float64, maxRemoteDownloads *int, remoteDownloadEnabled *bool) (int, *UserResponse, error) {
 	var user models.User
 	if result := inits.DB.First(&user, id); result.Error != nil {
 		return http.StatusNotFound, nil, errors.New("user not found")
@@ -138,12 +188,17 @@ func UpdateUser(id uint64, username, email string, admin *bool, storage *int64, 
 	if maxRemoteDownloads != nil {
 		user.Settings.MaxRemoteDownloads = *maxRemoteDownloads
 	}
+	if remoteDownloadEnabled != nil {
+		user.Settings.RemoteDownloadEnabled = remoteDownloadEnabled
+	}
 
 	if result := inits.DB.Save(&user); result.Error != nil {
 		return http.StatusInternalServerError, nil, errors.New("failed to update user")
 	}
 
-	return http.StatusOK, &user, nil
+	inits.Cache.Delete(fmt.Sprintf("account-%d", id))
+	response := NewUserResponse(user, 0, 0)
+	return http.StatusOK, &response, nil
 }
 
 func DeleteUser(id uint64) (int, error) {

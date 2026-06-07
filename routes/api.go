@@ -118,6 +118,10 @@ func Api() {
 	// Remote Download
 	protectedApi.POST("/remote/download", controllers.CreateRemoteDownload)
 	protectedApi.GET("/remote/downloads", controllers.ListRemoteDownloads)
+	protectedApi.DELETE("/remote/downloads", controllers.ClearRemoteDownloads)
+	protectedApi.POST("/remote/download/:id/cancel", controllers.CancelRemoteDownload)
+	protectedApi.POST("/remote/download/:id/retry", controllers.RetryRemoteDownload)
+	protectedApi.DELETE("/remote/download/:id", controllers.DeleteRemoteDownload)
 	protectedApi.GET("/account/remote-download", controllers.GetRemoteDownloadStats)
 	protectedApi.GET("/account/remote-download/duration", controllers.GetRemoteDownloadDurationStats)
 	protectedApi.GET("/account/remote-download/top", controllers.GetTopRemoteDownloadStats)

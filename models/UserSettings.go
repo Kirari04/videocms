@@ -8,11 +8,28 @@ import (
 )
 
 type UserSettings struct {
-	WebhooksEnabled     bool
-	WebhooksMax         int
-	UploadSessionsMax   int64
-	EnablePlayerCaptcha bool
-	MaxRemoteDownloads  int
+	WebhooksEnabled       bool
+	WebhooksMax           int
+	UploadSessionsMax     int64
+	EnablePlayerCaptcha   bool
+	MaxRemoteDownloads    int
+	RemoteDownloadEnabled *bool
+}
+
+const DefaultMaxRemoteDownloads = 5
+
+func (j UserSettings) EffectiveRemoteDownloadEnabled() bool {
+	if j.RemoteDownloadEnabled == nil {
+		return true
+	}
+	return *j.RemoteDownloadEnabled
+}
+
+func (j UserSettings) EffectiveMaxRemoteDownloads() int {
+	if j.MaxRemoteDownloads <= 0 {
+		return DefaultMaxRemoteDownloads
+	}
+	return j.MaxRemoteDownloads
 }
 
 // Scan scan value into Jsonb, implements sql.Scanner interface

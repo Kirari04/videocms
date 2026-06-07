@@ -430,6 +430,10 @@ This documentation outlines the available API endpoints for the VideoCMS applica
 
 ## Remote Downloads
 
+Remote downloads are globally controlled by `RemoteDownloadEnabled` and per-user controlled by `RemoteDownloadEnabled` in user settings. Both default to enabled. If an administrator disables the global setting, all pending/running remote downloads are canceled. Remote downloads accept HTTP/HTTPS URLs only; unsafe internal/private network targets are blocked by the downloader.
+
+Statuses: `pending`, `downloading`, `importing`, `completed`, `failed`, `canceling`, `canceled`.
+
 ### Create Remote Download
 *   **Method:** `POST`
 *   **Path:** `/remote/download`
@@ -446,27 +450,69 @@ This documentation outlines the available API endpoints for the VideoCMS applica
         "Status": "pending",
         ...
       }
-    ]
-    ```
+	    ]
+	    ```
+*   **Errors:** `403` user disabled, `503` globally disabled, `429` queue limit reached.
 
 ### List Remote Downloads
 *   **Method:** `GET`
 *   **Path:** `/remote/downloads`
 *   **Auth Required:** Yes
+*   **Query Parameters:** `status` (optional), `limit` (default 50, max 200), `offset` (optional)
 *   **Response (JSON):**
-    ```json
-    [
-      {
-        "ID": 1,
-        "Url": "https://example.com/video.mp4",
-        "Status": "downloading",
-        "Progress": 0.45,
-        "BytesDownloaded": 47185920,
-        "TotalSize": 104857600,
-        ...
-      }
-    ]
-    ```
+	    ```json
+	    [
+	      {
+	        "ID": 1,
+	        "Name": "video.mp4",
+	        "Url": "https://example.com/video.mp4",
+	        "Status": "downloading",
+	        "Progress": 0.45,
+	        "BytesDownloaded": 47185920,
+	        "TotalSize": 104857600,
+	        "LinkUUID": "",
+	        ...
+	      }
+	    ]
+	    ```
+
+### Cancel Remote Download
+*   **Method:** `POST`
+*   **Path:** `/remote/download/{id}/cancel`
+*   **Auth Required:** Yes
+*   **Response:** `"ok"`
+*   **Notes:** Pending jobs become `canceled`; running jobs become `canceling` until the worker stops and cleans up.
+
+### Retry Remote Download
+*   **Method:** `POST`
+*   **Path:** `/remote/download/{id}/retry`
+*   **Auth Required:** Yes
+*   **Response:** The reset remote download row.
+*   **Notes:** Only `failed` and `canceled` jobs can be retried.
+
+### Delete Remote Download
+*   **Method:** `DELETE`
+*   **Path:** `/remote/download/{id}`
+*   **Auth Required:** Yes
+*   **Response:** `204 No Content`
+*   **Notes:** Only terminal jobs (`completed`, `failed`, `canceled`) can be removed from history.
+
+### Clear Remote Downloads
+*   **Method:** `DELETE`
+*   **Path:** `/remote/downloads`
+*   **Auth Required:** Yes
+*   **Request Body (JSON):**
+	    ```json
+	    {
+	      "statuses": ["completed", "failed", "canceled"]
+	    }
+	    ```
+*   **Response (JSON):**
+	    ```json
+	    {
+	      "deleted": 3
+	    }
+	    ```
 
 ### Remote Download Traffic Stats
 *   **Method:** `GET`

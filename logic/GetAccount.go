@@ -16,14 +16,16 @@ import (
 )
 
 type GetAccountResponse struct {
-	Username string
-	Admin    bool
-	Email    string
-	Balance  float64
-	Storage  int64
-	Used     int64
-	Files    int64
-	Settings models.UserSettings
+	Username              string
+	Admin                 bool
+	Email                 string
+	Balance               float64
+	Storage               int64
+	Used                  int64
+	Files                 int64
+	Settings              models.UserSettings
+	MaxRemoteDownloads    int
+	RemoteDownloadEnabled bool
 }
 
 func GetAccount(userID uint) (status int, response *GetAccountResponse, err error) {
@@ -71,14 +73,16 @@ func GetAccount(userID uint) (status int, response *GetAccountResponse, err erro
 	}
 
 	newResponse := GetAccountResponse{
-		Username: dbUser.Username,
-		Admin:    dbUser.Admin,
-		Email:    dbUser.Email,
-		Balance:  dbUser.Balance,
-		Storage:  dbUser.Storage,
-		Settings: dbUser.Settings,
-		Used:     dbUsed.StorageUsed,
-		Files:    dbUsed.UploadedFiles,
+		Username:              dbUser.Username,
+		Admin:                 dbUser.Admin,
+		Email:                 dbUser.Email,
+		Balance:               dbUser.Balance,
+		Storage:               dbUser.Storage,
+		Settings:              dbUser.Settings,
+		MaxRemoteDownloads:    dbUser.Settings.EffectiveMaxRemoteDownloads(),
+		RemoteDownloadEnabled: dbUser.Settings.EffectiveRemoteDownloadEnabled(),
+		Used:                  dbUsed.StorageUsed,
+		Files:                 dbUsed.UploadedFiles,
 	}
 	// save in cache
 	inits.Cache.Set(fmt.Sprintf("account-%d", userID), newResponse, time.Minute)

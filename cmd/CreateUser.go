@@ -53,13 +53,16 @@ func CreateUser() {
 	}
 
 	hash, _ := helpers.HashPassword(password)
+	remoteDownloadEnabled := true
 	user := models.User{
 		Username: username,
 		Hash:     hash,
 		Admin:    isAdmin,
 		Settings: models.UserSettings{
-			WebhooksEnabled: true,
-			WebhooksMax:     10,
+			WebhooksEnabled:       true,
+			WebhooksMax:           10,
+			MaxRemoteDownloads:    models.DefaultMaxRemoteDownloads,
+			RemoteDownloadEnabled: &remoteDownloadEnabled,
 		},
 	}
 	if res := inits.DB.Create(&user); res.Error != nil {
