@@ -34,7 +34,7 @@ var EXTENSIONS []string = []string{
 	"dv",   // Digital Video format
 }
 
-var VERSION string = "v0.1.7"
+var VERSION string = "v0.1.8"
 
 type Config struct {
 	Host string `validate:"required,min=1,max=120"`
@@ -44,9 +44,8 @@ type Config struct {
 
 	ProjectExampleVideo string
 
-	JwtSecretKey       string
-	JwtUploadSecretKey string
-	JwtMediaSecretKey  string
+	JwtSecretKey      string
+	JwtMediaSecretKey string
 
 	ReloadHtml       *bool
 	EncodingEnabled  *bool
@@ -75,10 +74,10 @@ type Config struct {
 	MaxRunningEncodes   int64
 	MaxFramerate        int64
 
-	MaxUploadFilesize   int64
-	MaxUploadChuncksize int64
-	MaxUploadSessions   int64
-	MaxPostSize         int64
+	MaxUploadFilesize  int64
+	MaxUploadChunkSize int64
+	MaxUploadSessions  int64
+	MaxPostSize        int64
 
 	FolderVideoQualitysPub  string `validate:"required,min=1,max=255"`
 	FolderVideoQualitysPriv string `validate:"required,min=1,max=255"`
@@ -142,9 +141,9 @@ type PublicConfig struct {
 	EncodingEnabled bool
 	UploadEnabled   bool
 
-	MaxUploadFilesize   int64
-	MaxUploadChuncksize int64
-	MaxUploadSessions   int64
+	MaxUploadFilesize  int64
+	MaxUploadChunkSize int64
+	MaxUploadSessions  int64
 
 	FolderVideoQualitys string
 
@@ -170,9 +169,9 @@ func (c Config) PublicConfig() PublicConfig {
 		EncodingEnabled: *c.EncodingEnabled,
 		UploadEnabled:   *c.UploadEnabled,
 
-		MaxUploadFilesize:   c.MaxUploadFilesize,
-		MaxUploadChuncksize: c.MaxUploadChuncksize,
-		MaxUploadSessions:   c.MaxUploadSessions,
+		MaxUploadFilesize:  c.MaxUploadFilesize,
+		MaxUploadChunkSize: c.MaxUploadChunkSize,
+		MaxUploadSessions:  c.MaxUploadSessions,
 
 		FolderVideoQualitys: c.FolderVideoQualitysPub,
 

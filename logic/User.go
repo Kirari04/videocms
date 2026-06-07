@@ -227,7 +227,7 @@ func ResetUserPassword(id uint64, newPassword string) (int, error) {
 	return http.StatusOK, nil
 }
 
-func CheckStorageQuota(userId uint, additionalSize int64, excludeSessionUUID string) (int, error) {
+func CheckStorageQuota(userId uint, additionalSize int64, excludeClientUploadUUID string) (int, error) {
 	var user models.User
 	if err := inits.DB.First(&user, userId).Error; err != nil {
 		return http.StatusInternalServerError, errors.New("failed to fetch user")
@@ -247,11 +247,19 @@ func CheckStorageQuota(userId uint, additionalSize int64, excludeSessionUUID str
 	}
 
 	var pendingStorage int64
-	query := inits.DB.Model(&models.UploadSession{}).Where("user_id = ?", userId)
-	if excludeSessionUUID != "" {
-		query = query.Where("uuid != ?", excludeSessionUUID)
+	query := inits.DB.Model(&models.UploadSession{}).
+		Where("user_id = ?", userId).
+		Where("status IN ?", []string{
+			models.UploadStatusCreated,
+			models.UploadStatusUploading,
+			models.UploadStatusUploaded,
+			models.UploadStatusImporting,
+			models.UploadStatusFailed,
+		})
+	if excludeClientUploadUUID != "" {
+		query = query.Where("client_upload_uuid != ?", excludeClientUploadUUID)
 	}
-	if err := query.Select("COALESCE(SUM(size), 0)").Scan(&pendingStorage).Error; err != nil {
+	if err := query.Select("COALESCE(SUM(quota_bytes), 0)").Scan(&pendingStorage).Error; err != nil {
 		return http.StatusInternalServerError, errors.New("failed to calculate pending storage")
 	}
 

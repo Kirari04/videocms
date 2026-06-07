@@ -34,7 +34,6 @@ func UpdateSettings(c echo.Context) error {
 	setting.BaseUrl = validation.BaseUrl
 	setting.ProjectExampleVideo = validation.ProjectExampleVideo
 	setting.JwtSecretKey = validation.JwtSecretKey
-	setting.JwtUploadSecretKey = validation.JwtUploadSecretKey
 	setting.JwtMediaSecretKey = validation.JwtMediaSecretKey
 	setting.ReloadHtml = validation.ReloadHtml
 	setting.EncodingEnabled = validation.EncodingEnabled
@@ -60,7 +59,7 @@ func UpdateSettings(c echo.Context) error {
 	setting.MaxRunningEncodes = validation.MaxRunningEncodes
 	setting.MaxFramerate = validation.MaxFramerate
 	setting.MaxUploadFilesize = validation.MaxUploadFilesize
-	setting.MaxUploadChuncksize = validation.MaxUploadChuncksize
+	setting.MaxUploadChunkSize = validation.MaxUploadChunkSize
 	setting.MaxUploadSessions = validation.MaxUploadSessions
 	setting.MaxPostSize = validation.MaxPostSize
 	setting.CorsAllowHeaders = validation.CorsAllowHeaders

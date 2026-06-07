@@ -19,6 +19,8 @@ func Web() {
 
 	inits.App.GET("/v/:UUID", controllers.PlayerController,
 		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateWeb), config.ENV.RatelimitBurstWeb, time.Minute*5)))
+	inits.App.GET("/v/:UUID/status", controllers.PlayerStatusController,
+		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateWeb), config.ENV.RatelimitBurstWeb, time.Minute*5)))
 
 	videoData := inits.App.Group(config.ENV.FolderVideoQualitysPub,
 		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateWeb), config.ENV.RatelimitBurstWeb, time.Minute*5)))

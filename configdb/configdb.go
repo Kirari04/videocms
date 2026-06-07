@@ -24,7 +24,6 @@ func Setup() {
 	config.ENV.ProjectExampleVideo = getEnvDb(&setting.ProjectExampleVideo, "notfound")
 
 	config.ENV.JwtSecretKey = getEnvDb(&setting.JwtSecretKey, randomstring.CookieFriendlyString(64))
-	config.ENV.JwtUploadSecretKey = getEnvDb(&setting.JwtUploadSecretKey, randomstring.CookieFriendlyString(64))
 	config.ENV.JwtMediaSecretKey = getEnvDb(&setting.JwtMediaSecretKey, randomstring.CookieFriendlyString(64))
 
 	config.ENV.ReloadHtml = getEnvDb_bool(&setting.ReloadHtml, boolPtr(false))
@@ -54,8 +53,11 @@ func Setup() {
 	config.ENV.MaxRunningEncodes = getEnvDb_int64(&setting.MaxRunningEncodes, 1)
 	config.ENV.MaxFramerate = getEnvDb_int64(&setting.MaxFramerate, 60)
 
+	if setting.MaxUploadChunkSize == "" && setting.LegacyMaxUploadChunkSize != "" {
+		setting.MaxUploadChunkSize = setting.LegacyMaxUploadChunkSize
+	}
 	config.ENV.MaxUploadFilesize = getEnvDb_int64(&setting.MaxUploadFilesize, 5*1024*1024*1024) // 5gb
-	config.ENV.MaxUploadChuncksize = getEnvDb_int64(&setting.MaxUploadChuncksize, 20*1024*1024) // 20mb
+	config.ENV.MaxUploadChunkSize = getEnvDb_int64(&setting.MaxUploadChunkSize, 20*1024*1024)   // 20mb
 	config.ENV.MaxUploadSessions = getEnvDb_int64(&setting.MaxUploadSessions, 10)
 	config.ENV.MaxPostSize = getEnvDb_int64(&setting.MaxPostSize, 100*1024*1024) // 100mb
 
