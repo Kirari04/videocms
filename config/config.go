@@ -46,6 +46,7 @@ type Config struct {
 
 	JwtSecretKey       string
 	JwtUploadSecretKey string
+	JwtMediaSecretKey  string
 
 	ReloadHtml       *bool
 	EncodingEnabled  *bool
