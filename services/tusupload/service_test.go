@@ -213,6 +213,121 @@ func TestTusCreateUsesUpdatedMaxUploadFilesize(t *testing.T) {
 	}
 }
 
+func TestRewriteTusUploadURLUsesForwardedHTTPS(t *testing.T) {
+	setupTusTest(t)
+
+	req := httptest.NewRequest(http.MethodPost, "http://videocms.senpai.one/api/uploads", nil)
+	req.Header.Set("X-Forwarded-Proto", "https,http")
+
+	got := rewriteTusUploadURL(req, "http://videocms.senpai.one/api/uploads/upload-id")
+	want := "https://videocms.senpai.one/api/uploads/upload-id"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestRewriteTusUploadURLUsesBaseURLForInternalHost(t *testing.T) {
+	setupTusTest(t)
+	config.ENV.BaseUrl = "https://videocms.senpai.one"
+
+	req := httptest.NewRequest(http.MethodPost, "http://videocms:3000/api/uploads", nil)
+
+	got := rewriteTusUploadURL(req, "http://videocms:3000/api/uploads/upload-id")
+	want := "https://videocms.senpai.one/api/uploads/upload-id"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestRewriteTusUploadURLLeavesNonUploadLocationUnchanged(t *testing.T) {
+	setupTusTest(t)
+
+	req := httptest.NewRequest(http.MethodPost, "http://videocms.senpai.one/api/uploads", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+
+	location := "http://videocms.senpai.one/api/other/upload-id"
+	if got := rewriteTusUploadURL(req, location); got != location {
+		t.Fatalf("expected non-upload location to remain %q, got %q", location, got)
+	}
+}
+
+func TestRewriteTusUploadURLIgnoresForwardedHost(t *testing.T) {
+	setupTusTest(t)
+
+	req := httptest.NewRequest(http.MethodPost, "http://videocms.senpai.one/api/uploads", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "evil.example")
+
+	got := rewriteTusUploadURL(req, "http://videocms.senpai.one/api/uploads/upload-id")
+	want := "https://videocms.senpai.one/api/uploads/upload-id"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestRewriteTusUploadConcatHeader(t *testing.T) {
+	setupTusTest(t)
+
+	req := httptest.NewRequest(http.MethodHead, "http://videocms.senpai.one/api/uploads/final-id", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+
+	got := rewriteTusUploadConcatHeader(req, "final;http://videocms.senpai.one/api/uploads/one http://videocms.senpai.one/api/uploads/two")
+	want := "final;https://videocms.senpai.one/api/uploads/one https://videocms.senpai.one/api/uploads/two"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestTusCreateLocationUsesForwardedHTTPS(t *testing.T) {
+	env := setupTusTest(t)
+	srv, err := GetServer()
+	if err != nil {
+		t.Fatalf("get server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "http://videocms.senpai.one/api/uploads", nil)
+	setTusAuthHeaders(req, env.token)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("Upload-Length", "10")
+	req.Header.Set("Upload-Metadata", tusMetadata(map[string]string{"filename": "movie.mp4"}))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	location := rec.Header().Get("Location")
+	if !strings.HasPrefix(location, "https://videocms.senpai.one/api/uploads/") {
+		t.Fatalf("expected HTTPS public Location, got %q", location)
+	}
+	waitForTusStoragePath(t, env, path.Base(location))
+}
+
+func TestTusCreateLocationUsesBaseURLForInternalHost(t *testing.T) {
+	env := setupTusTest(t)
+	config.ENV.BaseUrl = "https://videocms.senpai.one"
+	srv, err := GetServer()
+	if err != nil {
+		t.Fatalf("get server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "http://videocms:3000/api/uploads", nil)
+	setTusAuthHeaders(req, env.token)
+	req.Header.Set("Upload-Length", "10")
+	req.Header.Set("Upload-Metadata", tusMetadata(map[string]string{"filename": "movie.mp4"}))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	location := rec.Header().Get("Location")
+	if !strings.HasPrefix(location, "https://videocms.senpai.one/api/uploads/") {
+		t.Fatalf("expected BaseUrl public Location, got %q", location)
+	}
+	waitForTusStoragePath(t, env, path.Base(location))
+}
+
 func TestTusCreateRejectsInvalidParentFolder(t *testing.T) {
 	env := setupTusTest(t)
 
@@ -742,6 +857,17 @@ func waitFor(t *testing.T, condition func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("condition was not met before timeout")
+}
+
+func waitForTusStoragePath(t *testing.T, env tusTestEnv, tusID string) {
+	t.Helper()
+	waitFor(t, func() bool {
+		var session models.UploadSession
+		if err := env.db.Where("tus_id = ?", tusID).First(&session).Error; err != nil {
+			return false
+		}
+		return session.StoragePath != "" && session.InfoPath != ""
+	})
 }
 
 type deadlineResponseWriter struct {

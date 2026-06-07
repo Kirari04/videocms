@@ -149,6 +149,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	rw := &expirationResponseWriter{
 		ResponseWriter: w,
+		request:        r,
 		expiresAt:      expiresAt,
 	}
 	s.handler.ServeHTTP(rw, r)
@@ -775,6 +776,7 @@ func cleanupLegacyUploadSessions() {
 
 type expirationResponseWriter struct {
 	http.ResponseWriter
+	request   *http.Request
 	expiresAt *time.Time
 	wrote     bool
 }
@@ -802,6 +804,12 @@ func (w *expirationResponseWriter) WriteHeader(statusCode int) {
 	}
 	if w.expiresAt != nil && statusCode < http.StatusBadRequest {
 		header.Set("Upload-Expires", w.expiresAt.UTC().Format(http.TimeFormat))
+	}
+	if location := header.Get("Location"); location != "" {
+		header.Set("Location", rewriteTusUploadURL(w.request, location))
+	}
+	if concat := header.Get("Upload-Concat"); concat != "" {
+		header.Set("Upload-Concat", rewriteTusUploadConcatHeader(w.request, concat))
 	}
 	w.ResponseWriter.WriteHeader(statusCode)
 }
