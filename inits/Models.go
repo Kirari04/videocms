@@ -49,8 +49,10 @@ func Models() {
 			Hash:     string(rawhash),
 			Admin:    true,
 			Settings: models.UserSettings{
-				WebhooksEnabled: true,
-				WebhooksMax:     100,
+				WebhooksEnabled:       true,
+				WebhooksMax:           100,
+				MaxRemoteDownloads:    models.DefaultMaxRemoteDownloads,
+				RemoteDownloadEnabled: boolPtr(true),
 			},
 		}
 		if res := DB.Create(&user); res.Error != nil {
@@ -63,4 +65,8 @@ func mustRun(err error) {
 	if err != nil {
 		log.Fatalln("Failed to migrate: ", err)
 	}
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

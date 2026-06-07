@@ -99,6 +99,7 @@ func Setup() {
 	config.ENV.EnablePluginPgsServer = getEnvDb_bool(&setting.EnablePluginPgsServer, boolPtr(false))
 
 	config.ENV.DownloadEnabled = getEnvDb_bool(&setting.DownloadEnabled, boolPtr(true))
+	config.ENV.RemoteDownloadEnabled = getEnvDb_bool(&setting.RemoteDownloadEnabled, boolPtr(true))
 	config.ENV.ContinueWatchingPopupEnabled = getEnvDb_bool(&setting.ContinueWatchingPopupEnabled, boolPtr(true))
 	config.ENV.PlayerV2Enabled = getEnvDb_bool(&setting.PlayerV2Enabled, boolPtr(true))
 

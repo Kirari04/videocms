@@ -42,7 +42,7 @@ type Config struct {
 	AppName string
 	BaseUrl string
 
-	ProjectExampleVideo  string
+	ProjectExampleVideo string
 
 	JwtSecretKey       string
 	JwtUploadSecretKey string
@@ -127,16 +127,17 @@ type Config struct {
 
 	ContinueWatchingPopupEnabled *bool
 
-	DownloadEnabled *bool
-	PlayerV2Enabled *bool
+	DownloadEnabled       *bool
+	RemoteDownloadEnabled *bool
+	PlayerV2Enabled       *bool
 
 	MaxParallelDownloads  int64
 	RemoteDownloadTimeout int64
 }
 
 type PublicConfig struct {
-	AppName string
-	BaseUrl string
+	AppName         string
+	BaseUrl         string
 	EncodingEnabled bool
 	UploadEnabled   bool
 
@@ -156,8 +157,9 @@ type PublicConfig struct {
 
 	ContinueWatchingPopupEnabled bool
 
-	DownloadEnabled bool
-	PlayerV2Enabled bool
+	DownloadEnabled       bool
+	RemoteDownloadEnabled bool
+	PlayerV2Enabled       bool
 }
 
 func (c Config) PublicConfig() PublicConfig {
@@ -183,8 +185,9 @@ func (c Config) PublicConfig() PublicConfig {
 
 		ContinueWatchingPopupEnabled: *c.ContinueWatchingPopupEnabled,
 
-		DownloadEnabled: *c.DownloadEnabled,
-		PlayerV2Enabled: *c.PlayerV2Enabled,
+		DownloadEnabled:       *c.DownloadEnabled,
+		RemoteDownloadEnabled: *c.RemoteDownloadEnabled,
+		PlayerV2Enabled:       *c.PlayerV2Enabled,
 	}
 }
 

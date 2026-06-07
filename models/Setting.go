@@ -7,8 +7,8 @@ type SettingValidation struct {
 
 type Setting struct {
 	Model
-	AppName              string `validate:"required,min=1,max=120" gorm:"size:120;"`
-	BaseUrl              string `validate:"required,min=1,max=120" gorm:"size:120;"`
+	AppName string `validate:"required,min=1,max=120" gorm:"size:120;"`
+	BaseUrl string `validate:"required,min=1,max=120" gorm:"size:120;"`
 
 	ProjectExampleVideo string `validate:"required,min=1,max=512" gorm:"size:512;"`
 
@@ -88,6 +88,7 @@ type Setting struct {
 	EnablePluginPgsServer string `validate:"required,boolean"`
 
 	DownloadEnabled              string `validate:"required,boolean"`
+	RemoteDownloadEnabled        string `validate:"required,boolean"`
 	ContinueWatchingPopupEnabled string `validate:"required,boolean"`
 	PlayerV2Enabled              string `validate:"required,boolean"`
 

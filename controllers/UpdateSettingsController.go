@@ -1,10 +1,12 @@
 package controllers
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/configdb"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
+	"ch/kirari04/videocms/services"
 	"log"
 	"net/http"
 
@@ -19,9 +21,12 @@ func UpdateSettings(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	if res := inits.DB.First(&models.Setting{}, validation.ID); res.Error != nil {
+	var previousSetting models.Setting
+	if res := inits.DB.First(&previousSetting, validation.ID); res.Error != nil {
 		return c.String(http.StatusBadRequest, "Setting not found by id")
 	}
+	remoteDownloadsWereEnabled := previousSetting.RemoteDownloadEnabled != "false"
+	remoteDownloadsNowDisabled := validation.RemoteDownloadEnabled == "false"
 
 	var setting models.Setting
 	setting.ID = validation.ID
@@ -94,6 +99,7 @@ func UpdateSettings(c echo.Context) error {
 	setting.PluginPgsServer = validation.PluginPgsServer
 	setting.EnablePluginPgsServer = validation.EnablePluginPgsServer
 	setting.DownloadEnabled = validation.DownloadEnabled
+	setting.RemoteDownloadEnabled = validation.RemoteDownloadEnabled
 	setting.ContinueWatchingPopupEnabled = validation.ContinueWatchingPopupEnabled
 	setting.PlayerV2Enabled = validation.PlayerV2Enabled
 	setting.MaxParallelDownloads = validation.MaxParallelDownloads
@@ -102,6 +108,11 @@ func UpdateSettings(c echo.Context) error {
 	if res := inits.DB.Save(&setting); res.Error != nil {
 		log.Fatalln("Failed to save settings", res.Error)
 		return c.NoContent(http.StatusInternalServerError)
+	}
+	if remoteDownloadsWereEnabled && remoteDownloadsNowDisabled {
+		disabled := false
+		config.ENV.RemoteDownloadEnabled = &disabled
+		services.CancelAllRemoteDownloads("Remote downloads disabled by administrator")
 	}
 	// reload config in background
 	go func() {
