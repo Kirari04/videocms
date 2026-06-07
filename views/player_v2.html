@@ -166,7 +166,7 @@
     <div class="player-container">
         <media-player
             title="{{ .Title }}"
-            src="{{.Folder}}/{{.UUID}}/stream/multi/master.m3u8?jwt={{.JWT}}"
+            src="{{.Folder}}/{{.UUID}}/stream/multi/master.m3u8"
             poster="{{ .Thumbnail }}"
             view-type="video"
             crossorigin
@@ -195,7 +195,6 @@
 
     <script>
         // --- Go Variables ---
-        const JWT = "{{.JWT}}";
         const UUID = "{{.UUID}}";
         const FOLDER = "{{.Folder}}";
         const THUMB = "{{ .Thumbnail }}";
@@ -217,7 +216,7 @@
         }
 
         // --- Setup Source ---
-        let streamUrl = `${FOLDER}/${UUID}/stream/multi/master.m3u8?jwt=${JWT}`;
+        let streamUrl = `${FOLDER}/${UUID}/stream/multi/master.m3u8`;
 
         const player = document.querySelector('media-player');
         player.src = streamUrl;

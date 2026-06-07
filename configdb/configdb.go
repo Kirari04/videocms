@@ -25,6 +25,7 @@ func Setup() {
 
 	config.ENV.JwtSecretKey = getEnvDb(&setting.JwtSecretKey, randomstring.CookieFriendlyString(64))
 	config.ENV.JwtUploadSecretKey = getEnvDb(&setting.JwtUploadSecretKey, randomstring.CookieFriendlyString(64))
+	config.ENV.JwtMediaSecretKey = getEnvDb(&setting.JwtMediaSecretKey, randomstring.CookieFriendlyString(64))
 
 	config.ENV.ReloadHtml = getEnvDb_bool(&setting.ReloadHtml, boolPtr(false))
 	config.ENV.EncodingEnabled = getEnvDb_bool(&setting.EncodingEnabled, boolPtr(true))

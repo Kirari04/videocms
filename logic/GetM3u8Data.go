@@ -10,16 +10,14 @@ import (
 
 type GetM3u8DataRequest struct {
 	UUID      string `validate:"required,uuid_rfc4122"`
-	AUDIOUUID string `validate:"required,uuid_rfc4122"`
-	JWT       string `validate:"required,jwt"`
+	AUDIOUUID string `validate:"omitempty,uuid_rfc4122"`
 }
 
 type GetM3u8DataRequestMuted struct {
 	UUID string `validate:"required,uuid_rfc4122"`
-	JWT  string `validate:"required,jwt"`
 }
 
-func GetM3u8Data(UUID string, AUDIOUUID string, JWT string) (status int, m3u8Str *string, userID uint, fileID uint, audioID uint, err error) {
+func GetM3u8Data(UUID string, AUDIOUUID string) (status int, m3u8Str *string, userID uint, fileID uint, audioID uint, err error) {
 	//translate link id to file id
 	var dbLink models.Link
 	if dbRes := inits.DB.
@@ -47,11 +45,11 @@ func GetM3u8Data(UUID string, AUDIOUUID string, JWT string) (status int, m3u8Str
 			}
 		}
 	}
-	m3u8Response := helpers.GenM3u8Stream(&dbLink, &dbLink.File.Qualitys, dbAudioPtr, JWT)
+	m3u8Response := helpers.GenM3u8Stream(&dbLink, &dbLink.File.Qualitys, dbAudioPtr)
 	return http.StatusOK, &m3u8Response, dbLink.UserID, dbLink.FileID, audioID, nil
 }
 
-func GetM3u8DataMulti(UUID string, JWT string) (status int, m3u8Str *string, userID uint, fileID uint, err error) {
+func GetM3u8DataMulti(UUID string) (status int, m3u8Str *string, userID uint, fileID uint, err error) {
 	//translate link id to file id
 	var dbLink models.Link
 	if dbRes := inits.DB.
@@ -66,6 +64,6 @@ func GetM3u8DataMulti(UUID string, JWT string) (status int, m3u8Str *string, use
 		return http.StatusNotFound, nil, 0, 0, errors.New("link doesn't exist")
 	}
 
-	m3u8Response := helpers.GenM3u8StreamMulti(&dbLink, &dbLink.File.Qualitys, &dbLink.File.Audios, JWT)
+	m3u8Response := helpers.GenM3u8StreamMulti(&dbLink, &dbLink.File.Qualitys, &dbLink.File.Audios)
 	return http.StatusOK, &m3u8Response, dbLink.UserID, dbLink.FileID, nil
 }

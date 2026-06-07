@@ -429,7 +429,6 @@
         if (Audios == null) Audios = [];
         let Webhooks = JSON.parse(decodeURI("{{.Webhooks}}"));
         if (Webhooks == null) Webhooks = [];
-        const JWT = "{{.JWT}}";
         const UUID = "{{.UUID}}";
 
         const TITLE = "{{.Title}}";
@@ -447,7 +446,7 @@
         Subtitles = Subtitles.filter((e) =>
             iOS() || !HLSENABLED ? e.type !== "ass" : e.type == "ass"
         );
-        let active_src = `${FOLDER}/${UUID}/stream/muted/master.m3u8?jwt=${JWT}`;
+        let active_src = `${FOLDER}/${UUID}/stream/muted/master.m3u8`;
         let active_video_el = null;
         let active_hls = null;
         let active_subtitle_index = -1;
@@ -494,7 +493,7 @@
                         name: "Disabled",
                         active: false,
                         click: () => {
-                            active_src = `${FOLDER}/${UUID}/stream/muted/master.m3u8?jwt=${JWT}`;
+                            active_src = `${FOLDER}/${UUID}/stream/muted/master.m3u8`;
                             let oldPosition = active_video_el.currentTime;
                             loadResource();
                             active_video_el.currentTime = oldPosition;
@@ -508,7 +507,7 @@
                         name: `${Audio.name} - ${Audio.lang}`,
                         active: false,
                         click: () => {
-                            active_src = `${FOLDER}/${UUID}/${Audio.uuid}/stream/master.m3u8?jwt=${JWT}`;
+                            active_src = `${FOLDER}/${UUID}/${Audio.uuid}/stream/master.m3u8`;
                             let oldPosition = active_video_el.currentTime;
                             loadResource();
                             active_video_el.currentTime = oldPosition;
@@ -620,19 +619,19 @@
                         Audios[lastUsedIndex].lang,
                         Audios[lastUsedIndex].name
                     );
-                    active_src = `${FOLDER}/${UUID}/${Audios[lastUsedIndex].uuid}/stream/master.m3u8?jwt=${JWT}`;
+                    active_src = `${FOLDER}/${UUID}/${Audios[lastUsedIndex].uuid}/stream/master.m3u8`;
                     settingsListSetActive(2, lastUsedIndex + 1);
                     updateSettingsValue(2, Audios[lastUsedIndex].name);
                 } else {
                     if (Audios.length > 0) {
-                        active_src = `${FOLDER}/${UUID}/${Audios[0].uuid}/stream/master.m3u8?jwt=${JWT}`;
+                        active_src = `${FOLDER}/${UUID}/${Audios[0].uuid}/stream/master.m3u8`;
                         settingsListSetActive(2, 1);
                         updateSettingsValue(2, Audios[0].name);
                     }
                 }
             } else {
                 if (Audios.length > 0) {
-                    active_src = `${FOLDER}/${UUID}/${Audios[0].uuid}/stream/master.m3u8?jwt=${JWT}`;
+                    active_src = `${FOLDER}/${UUID}/${Audios[0].uuid}/stream/master.m3u8`;
                     settingsListSetActive(2, 1);
                     updateSettingsValue(2, Audios[0].name);
                 }

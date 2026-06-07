@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 )
@@ -52,7 +54,6 @@ func PlayerController(c echo.Context) error {
 		}
 	}
 
-	var tkn string
 	var streamIsReady bool
 	var jsonQualitys []map[string]string
 	var jsonSubtitles []map[string]string
@@ -60,25 +61,23 @@ func PlayerController(c echo.Context) error {
 	var jsonWebhooks []map[string]any
 	var streamUrl, streamUrlWidth, streamUrlHeight, firstAudio string
 
-	// generate jwt token that allows the user to access the stream
-	var err error
-	tkn, _, err = auth.GenerateJWTStream(dbLink.UUID)
+	mediaToken, mediaExpiration, err := auth.GenerateMediaToken(buildMediaClaims(&dbLink))
 	if err != nil {
-		log.Printf("Failed to generate jwt stream token: %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+		return c.String(http.StatusInternalServerError, "Failed to generate media token")
 	}
+	c.SetCookie(mediaCookie(c, dbLink.UUID, mediaToken, mediaExpiration))
 
 	// List qualitys non hls & check if has some file is ready
 	for _, qualiItem := range dbLink.File.Qualitys {
 		if qualiItem.Ready {
 			streamIsReady = true
 			jsonQualitys = append(jsonQualitys, map[string]string{
-				"url":    fmt.Sprintf("%s/%s/%s/download/video.mkv?jwt=%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name, tkn),
+				"url":    fmt.Sprintf("%s/%s/%s/download/video.mkv", config.ENV.FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name),
 				"label":  qualiItem.Name,
 				"height": strconv.Itoa(int(qualiItem.Height)),
 				"width":  strconv.Itoa(int(qualiItem.Width)),
 			})
-			streamUrl = fmt.Sprintf("%s/%s/%s/%s/1/stream/video.mp4", config.ENV.FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name, tkn)
+			streamUrl = fmt.Sprintf("%s/%s/%s/1/stream/video.mp4", config.ENV.FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name)
 			streamUrlHeight = strconv.Itoa(int(qualiItem.Height))
 			streamUrlWidth = strconv.Itoa(int(qualiItem.Width))
 		}
@@ -137,17 +136,6 @@ func PlayerController(c echo.Context) error {
 	rawAudios, _ := json.Marshal(jsonAudios)
 	rawWebhooks, _ := json.Marshal(jsonWebhooks)
 
-	// "{{.UUID}}={{.JWT}}; path=/; domain=" + window.location.hostname + ";SameSite=None; Secure; HttpOnly"
-	// c.SetCookie(&http.Cookie{
-	// 	Name:     requestValidation.UUID,
-	// 	Value:    tkn,
-	// 	Path:     "/",
-	// 	Secure:   true,
-	// 	SameSite: "None",
-	// 	Domain:   config.ENV.CookieDomain,
-	// 	HTTPOnly: true,
-	// })
-
 	var downloadsEnabled bool
 	if config.ENV.DownloadEnabled != nil {
 		downloadsEnabled = *config.ENV.DownloadEnabled
@@ -180,10 +168,75 @@ func PlayerController(c echo.Context) error {
 		"StreamIsReady":                streamIsReady,
 		"UUID":                         requestValidation.UUID,
 		"Folder":                       config.ENV.FolderVideoQualitysPub,
-		"JWT":                          tkn,
 		"AppName":                      config.ENV.AppName,
 		"BaseUrl":                      config.ENV.BaseUrl,
 		"DownloadEnabled":              downloadsEnabled,
 		"ContinueWatchingPopupEnabled": continueWatchingPopupEnabled,
 	})
+}
+
+func buildMediaClaims(dbLink *models.Link) auth.MediaClaims {
+	qualityIDs := map[string]uint{}
+	audioIDs := map[string]uint{}
+	subtitleUUIDs := []string{}
+
+	for _, quality := range dbLink.File.Qualitys {
+		if quality.Ready {
+			qualityIDs[quality.Name] = quality.ID
+		}
+	}
+	for _, audio := range dbLink.File.Audios {
+		if audio.Ready {
+			audioIDs[audio.UUID] = audio.ID
+		}
+	}
+	for _, subtitle := range dbLink.File.Subtitles {
+		if subtitle.Ready {
+			subtitleUUIDs = append(subtitleUUIDs, subtitle.UUID)
+		}
+	}
+
+	return auth.MediaClaims{
+		LinkUUID:      dbLink.UUID,
+		FileUUID:      dbLink.File.UUID,
+		UserID:        dbLink.UserID,
+		FileID:        dbLink.FileID,
+		QualityIDs:    qualityIDs,
+		AudioIDs:      audioIDs,
+		SubtitleUUIDs: subtitleUUIDs,
+	}
+}
+
+func mediaCookie(c echo.Context, linkUUID string, token string, expiration time.Time) *http.Cookie {
+	secure := requestIsHTTPS(c)
+	sameSite := http.SameSiteLaxMode
+	if secure {
+		sameSite = http.SameSiteNoneMode
+	}
+
+	return &http.Cookie{
+		Name:     auth.MediaCookieName,
+		Value:    token,
+		Path:     mediaCookiePath(linkUUID),
+		Expires:  expiration,
+		MaxAge:   int(auth.MediaTokenDuration.Seconds()),
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: sameSite,
+	}
+}
+
+func mediaCookiePath(linkUUID string) string {
+	return strings.TrimRight(config.ENV.FolderVideoQualitysPub, "/") + "/" + linkUUID
+}
+
+func requestIsHTTPS(c echo.Context) bool {
+	if strings.HasPrefix(strings.ToLower(config.ENV.BaseUrl), "https://") {
+		return true
+	}
+	req := c.Request()
+	if req.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(req.Header.Get("X-Forwarded-Proto"), "https")
 }
