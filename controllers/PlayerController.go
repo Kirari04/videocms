@@ -387,6 +387,9 @@ func clampProgress(progress float64) float64 {
 	if math.IsNaN(progress) || math.IsInf(progress, 0) || progress < 0 {
 		return 0
 	}
+	if progress <= 1 {
+		progress *= 100
+	}
 	if progress > 100 {
 		return 100
 	}

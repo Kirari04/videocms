@@ -28,7 +28,7 @@ func TestBuildPlayerStatusQueuedQuality(t *testing.T) {
 func TestBuildPlayerStatusEncodingQuality(t *testing.T) {
 	status := BuildPlayerStatus(playerStatusLink(
 		[]models.Quality{
-			{Name: "720p", Type: "hls", Encoding: true, Progress: 42},
+			{Name: "720p", Type: "hls", Encoding: true, Progress: 0.42},
 		},
 		nil,
 		nil,
@@ -51,7 +51,7 @@ func TestBuildPlayerStatusEncodingAudioBeforeQuality(t *testing.T) {
 			{Name: "720p", Type: "hls"},
 		},
 		[]models.Audio{
-			{Name: "English", Encoding: true, Progress: 71},
+			{Name: "English", Encoding: true, Progress: 0.71},
 		},
 		nil,
 	))
