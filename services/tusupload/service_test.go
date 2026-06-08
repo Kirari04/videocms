@@ -417,6 +417,95 @@ func TestPreUploadCreateFinalConcatenationUsesZeroQuotaAndRecordsParts(t *testin
 	}
 }
 
+func TestTusHTTPFinalConcatenationRecordsParts(t *testing.T) {
+	env := setupTusTest(t)
+	srv, err := GetServer()
+	if err != nil {
+		t.Fatalf("get server: %v", err)
+	}
+
+	clientUploadUUID := uuid.NewString()
+	payloads := [][]byte{[]byte("hello"), []byte("world!!")}
+	partialLocations := make([]string, 0, len(payloads))
+
+	for _, payload := range payloads {
+		create := httptest.NewRequest(http.MethodPost, "/api/uploads", nil)
+		setTusAuthHeaders(create, env.token)
+		create.Header.Set("Upload-Length", strconv.Itoa(len(payload)))
+		create.Header.Set("Upload-Concat", "partial")
+		create.Header.Set("Upload-Metadata", tusMetadata(map[string]string{
+			"filename":           "movie.mp4",
+			"client_upload_uuid": clientUploadUUID,
+		}))
+		createRec := httptest.NewRecorder()
+		srv.ServeHTTP(createRec, create)
+		if createRec.Code != http.StatusCreated {
+			t.Fatalf("expected partial create 201, got %d: %s", createRec.Code, createRec.Body.String())
+		}
+
+		location := createRec.Header().Get("Location")
+		if location == "" {
+			t.Fatal("expected partial Location header")
+		}
+		partialLocations = append(partialLocations, location)
+
+		patch := httptest.NewRequest(http.MethodPatch, location, bytes.NewReader(payload))
+		setTusAuthHeaders(patch, env.token)
+		patch.Header.Set("Content-Type", "application/offset+octet-stream")
+		patch.Header.Set("Upload-Offset", "0")
+		patch.ContentLength = int64(len(payload))
+		patchRec := httptest.NewRecorder()
+		srv.ServeHTTP(patchRec, patch)
+		if patchRec.Code != http.StatusNoContent {
+			t.Fatalf("expected partial PATCH 204, got %d: %s", patchRec.Code, patchRec.Body.String())
+		}
+	}
+
+	finalCreate := httptest.NewRequest(http.MethodPost, "/api/uploads", nil)
+	setTusAuthHeaders(finalCreate, env.token)
+	finalCreate.Header.Set("Upload-Concat", "final;"+strings.Join(partialLocations, " "))
+	finalCreate.Header.Set("Upload-Metadata", tusMetadata(map[string]string{
+		"filename":           "movie.mp4",
+		"client_upload_uuid": clientUploadUUID,
+	}))
+	finalRec := httptest.NewRecorder()
+	srv.ServeHTTP(finalRec, finalCreate)
+	if finalRec.Code != http.StatusCreated {
+		t.Fatalf("expected final create 201, got %d: %s", finalRec.Code, finalRec.Body.String())
+	}
+
+	finalTusID := path.Base(finalRec.Header().Get("Location"))
+	var final models.UploadSession
+	waitFor(t, func() bool {
+		return env.db.Where("tus_id = ?", finalTusID).First(&final).Error == nil
+	})
+	if final.Kind != models.UploadKindFinal {
+		t.Fatalf("expected final kind, got %q", final.Kind)
+	}
+	if final.PartCount != len(payloads) {
+		t.Fatalf("expected part count %d, got %d", len(payloads), final.PartCount)
+	}
+	if final.UserID != env.user.ID {
+		t.Fatalf("expected user id %d, got %d", env.user.ID, final.UserID)
+	}
+
+	var parts []models.UploadPart
+	if err := env.db.Where("upload_session_id = ?", final.ID).Order("`index`").Find(&parts).Error; err != nil {
+		t.Fatalf("load upload parts: %v", err)
+	}
+	if len(parts) != len(payloads) {
+		t.Fatalf("expected %d upload parts, got %d", len(payloads), len(parts))
+	}
+	for index, part := range parts {
+		if part.Index != index {
+			t.Fatalf("expected part index %d, got %d", index, part.Index)
+		}
+		if part.TusID != path.Base(partialLocations[index]) {
+			t.Fatalf("expected part tus id %q, got %q", path.Base(partialLocations[index]), part.TusID)
+		}
+	}
+}
+
 func TestPreUploadCreateRejectsPartialGroupOverMaxFileSize(t *testing.T) {
 	env := setupTusTest(t)
 	config.ENV.MaxUploadFilesize = 10

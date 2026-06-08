@@ -18,10 +18,6 @@
             <input id="file" type="file" name="file" />
         </div>
         <br />
-        <label>
-            Parallel uploads
-            <input id="parallelUploads" type="number" value="4" min="1" max="12" />
-        </label>
         <div>
             <input id="origin" type="url" value="//localhost:3000" />
         </div>
@@ -96,6 +92,14 @@
                 }).then((response) => response.json());
             };
 
+            const chooseInitialParallelUploads = (file) => {
+                const connection = navigator.connection || {};
+                if (connection.saveData || ["slow-2g", "2g", "3g"].includes(connection.effectiveType)) {
+                    return 1;
+                }
+                return file.size > 100 * 1024 * 1024 ? 2 : 1;
+            };
+
             const upload = async () => {
                 log("Script started");
                 const file = fileinput.files[0];
@@ -115,7 +119,7 @@
                 }
 
                 const clientUploadUUID = crypto.randomUUID();
-                const parallelUploads = Number(document.getElementById("parallelUploads").value || 1);
+                const parallelUploads = chooseInitialParallelUploads(file);
                 const metadata = {
                     filename: file.name,
                     client_upload_uuid: clientUploadUUID,
