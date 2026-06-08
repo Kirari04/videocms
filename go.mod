@@ -10,6 +10,7 @@ require (
 	github.com/labstack/echo/v4 v4.15.2
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/thatisuday/commando v1.0.4
+	github.com/tus/tusd/v2 v2.9.2
 	github.com/xyproto/randomstring v1.2.0
 	golang.org/x/net v0.55.0
 	golang.org/x/term v0.43.0
@@ -20,29 +21,41 @@ require (
 )
 
 require (
+	dario.cat/mergo v1.0.2 // indirect
+	github.com/air-verse/air v1.65.3 // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect
-	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/bep/godartsass/v2 v2.5.0 // indirect
+	github.com/bep/golibsass v1.2.0 // indirect
+	github.com/fatih/color v1.18.0 // indirect
+	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
+	github.com/gobwas/glob v0.2.3 // indirect
+	github.com/gohugoio/hugo v0.149.1 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/icholy/digest v1.1.0 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/pelletier/go-toml v1.9.5 // indirect
+	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.0 // indirect
 	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/shoenig/go-m1cpu v0.2.1 // indirect
+	github.com/spf13/afero v1.14.0 // indirect
+	github.com/spf13/cast v1.9.2 // indirect
+	github.com/tdewolff/parse/v2 v2.8.3 // indirect
 	github.com/thatisuday/clapper v1.0.10 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/tus/lockfile v1.2.0 // indirect
-	github.com/tus/tusd/v2 v2.9.2 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8 // indirect
+	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )
 
 require (
@@ -64,3 +77,5 @@ require (
 )
 
 replace github.com/quic-go/quic-go => github.com/quic-go/quic-go v0.58.0
+
+tool github.com/air-verse/air

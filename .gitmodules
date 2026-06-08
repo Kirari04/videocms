@@ -1,0 +1,6 @@
+[submodule "videocms-docs"]
+	path = videocms-docs
+	url = https://github.com/Kirari04/videocms-docs.git
+[submodule "videocms-frontend"]
+	path = videocms-frontend
+	url = https://github.com/Kirari04/videocms-frontend.git
