@@ -5,6 +5,7 @@ import (
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
+	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"encoding/base64"
 	"encoding/json"
@@ -168,15 +169,26 @@ func PlayerController(c echo.Context) error {
 		playerTemplate = "player.html"
 	}
 
+	aspectWidth := dbLink.File.Width
+	if aspectWidth <= 0 {
+		aspectWidth = 16
+	}
+	aspectHeight := dbLink.File.Height
+	if aspectHeight <= 0 {
+		aspectHeight = 9
+	}
+
 	return c.Render(http.StatusOK, playerTemplate, echo.Map{
 		"Title":                        fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
 		"Description":                  fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),
-		"Thumbnail":                    fmt.Sprintf("%s/%s/image/thumb/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, dbLink.File.Thumbnail),
+		"Thumbnail":                    logic.ResolvedThumbnailURL(*dbLink),
 		"StreamUrl":                    template.HTML(streamUrl),
 		"StreamUrlWidth":               streamUrlWidth,
 		"StreamUrlHeight":              streamUrlHeight,
 		"Width":                        dbLink.File.Width,
 		"Height":                       dbLink.File.Height,
+		"AspectWidth":                  aspectWidth,
+		"AspectHeight":                 aspectHeight,
 		"Qualitys":                     string(rawQuality),
 		"Subtitles":                    string(rawSubtitles),
 		"Audios":                       string(rawAudios),

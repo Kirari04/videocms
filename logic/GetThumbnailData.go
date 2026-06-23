@@ -7,16 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 )
 
 func GetThumbnailData(fileName string, UUID string) (status int, filePath *string, userID uint, fileID uint, err error) {
-	reFILE := regexp.MustCompile(`^[1-4]x[1-4]\.(webp)$`)
-
-	if !reFILE.MatchString(fileName) {
-		return http.StatusBadRequest, nil, 0, 0, errors.New("bad file format")
-	}
-
 	//translate link id to file id
 	var dbLink models.Link
 	if dbRes := inits.DB.
@@ -26,6 +19,10 @@ func GetThumbnailData(fileName string, UUID string) (status int, filePath *strin
 			UUID: UUID,
 		}).
 		First(&dbLink); dbRes.Error != nil {
+		return http.StatusNotFound, nil, 0, 0, errors.New("thumbnail doesn't exist")
+	}
+
+	if !thumbnailFileAllowedForLink(fileName, dbLink) {
 		return http.StatusNotFound, nil, 0, 0, errors.New("thumbnail doesn't exist")
 	}
 

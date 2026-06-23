@@ -324,6 +324,25 @@ This documentation outlines the available API endpoints for the VideoCMS applica
     }
     ```
 
+### Upload Custom Video Poster
+*   **Method:** `PUT`
+*   **Path:** `/file/thumbnail`
+*   **Description:** Uploads a custom poster for one link. Other links pointing to the same underlying video keep their own poster or the generated fallback thumbnail.
+*   **Auth Required:** Yes
+*   **Request Body (Multipart/Form-Data):**
+    *   `LinkID` (number, required)
+    *   `thumbnail` (JPEG, PNG, or WebP image, required)
+*   **Response:** HTTP 200 OK
+
+### Reset Custom Video Poster
+*   **Method:** `DELETE`
+*   **Path:** `/file/thumbnail`
+*   **Description:** Clears the custom poster for one link and falls back to the generated video thumbnail.
+*   **Auth Required:** Yes
+*   **Request Body (JSON/Form) or Query Parameters:**
+    *   `LinkID` (number, required)
+*   **Response:** HTTP 200 OK
+
 ### Delete File
 *   **Method:** `DELETE`
 *   **Path:** `/file`

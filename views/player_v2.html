@@ -74,13 +74,35 @@
             position: relative;
         }
 
-        media-player {
+        media-player,
+        media-player[data-media-player] {
             width: 100%;
             height: 100%;
+            max-width: 100vw;
+            max-height: 100vh;
             border: none;
             background-color: transparent;
-            /* Ensure the player doesn't force an aspect ratio that overflows the container */
             aspect-ratio: auto;
+        }
+
+        media-provider,
+        [data-media-provider] {
+            width: 100%;
+            height: 100%;
+            aspect-ratio: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        media-provider video,
+        [data-media-provider] video,
+        media-poster,
+        .vds-poster {
+            width: 100%;
+            height: 100%;
+            aspect-ratio: auto;
+            object-fit: contain;
         }
 
         /* Continue Watching Popup */
@@ -305,6 +327,7 @@
             playsinline
         >
             <media-provider>
+                <media-poster class="vds-poster" src="{{ .Thumbnail }}" alt="{{ .Title }}"></media-poster>
                 <!-- Tracks will be injected here -->
             </media-provider>
             

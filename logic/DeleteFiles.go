@@ -23,19 +23,22 @@ func DeleteFiles(fileValidation *models.LinksDeleteValidation, userID uint, isAd
 	//check if requested files exists
 	linkIdDeleteMap := make(map[uint]bool, len(fileValidation.LinkIDs))
 	linkIdDeleteList := []uint{}
+	linksToDelete := []models.Link{}
 	for _, LinkValidation := range fileValidation.LinkIDs {
-		query := inits.DB.Model(&models.Link{})
+		var link models.Link
+		query := inits.DB.Model(&models.Link{}).Preload("File")
 		if !isAdmin {
 			query = query.Where("user_id = ?", userID)
 		}
 
-		if res := query.First(&models.Link{}, LinkValidation.LinkID); res.Error != nil {
+		if res := query.First(&link, LinkValidation.LinkID); res.Error != nil {
 			return http.StatusBadRequest, fmt.Errorf("linkID (%d) doesn't exist", LinkValidation.LinkID)
 		}
 		if linkIdDeleteMap[LinkValidation.LinkID] {
 			return http.StatusBadRequest, fmt.Errorf("the files have to be distinct. File %d is dublicate", LinkValidation.LinkID)
 		}
 		linkIdDeleteList = append(linkIdDeleteList, LinkValidation.LinkID)
+		linksToDelete = append(linksToDelete, link)
 		linkIdDeleteMap[LinkValidation.LinkID] = true
 	}
 
@@ -43,6 +46,9 @@ func DeleteFiles(fileValidation *models.LinksDeleteValidation, userID uint, isAd
 	if res := inits.DB.Delete(&models.Link{}, linkIdDeleteList); res.Error != nil {
 		log.Printf("Failed to delete links: %v", res.Error)
 		return http.StatusInternalServerError, echo.ErrInternalServerError
+	}
+	for _, link := range linksToDelete {
+		RemoveLinkThumbnailFile(link)
 	}
 
 	return http.StatusOK, nil

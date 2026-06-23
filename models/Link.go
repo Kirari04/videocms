@@ -4,6 +4,7 @@ type Link struct {
 	Model
 	UUID           string
 	Name           string  `gorm:"size:128;"`
+	Thumbnail      string  `gorm:"size:128;" json:"-"`
 	File           File    `json:"-"`
 	FileID         uint    `json:"-"`
 	User           User    `json:"-"`
@@ -25,6 +26,10 @@ type LinkDeleteValidation struct {
 type LinkUpdateValidation struct {
 	LinkID uint   `validate:"required,number" form:"LinkID"`
 	Name   string `validate:"required,min=1,max=120" form:"Name"`
+}
+
+type LinkThumbnailValidation struct {
+	LinkID uint `validate:"required,number" form:"LinkID" json:"LinkID" query:"LinkID"`
 }
 
 type LinksDeleteValidation struct {

@@ -481,6 +481,11 @@ func (s *Server) consumeEvents(handler *tusd.Handler) {
 }
 
 func updateSessionFromEvent(event tusd.HookEvent, trackBytes bool) {
+	db := inits.DB
+	if db == nil {
+		return
+	}
+
 	info := event.Upload
 	updates := map[string]interface{}{
 		"offset":       info.Offset,
@@ -492,28 +497,33 @@ func updateSessionFromEvent(event tusd.HookEvent, trackBytes bool) {
 	}
 
 	var session models.UploadSession
-	if err := inits.DB.Where("tus_id = ?", info.ID).First(&session).Error; err != nil {
+	if err := db.Where("tus_id = ?", info.ID).First(&session).Error; err != nil {
 		return
 	}
 	if trackBytes && session.Kind != models.UploadKindFinal && info.Offset > session.Offset {
 		helpers.TrackUpload(session.UserID, 0, session.ID, uint64(info.Offset-session.Offset))
 	}
-	inits.DB.Model(&session).Updates(updates)
+	db.Model(&session).Updates(updates)
 }
 
 func completeSessionFromEvent(event tusd.HookEvent) {
+	db := inits.DB
+	if db == nil {
+		return
+	}
+
 	info := event.Upload
 	now := time.Now()
 
 	var session models.UploadSession
-	if err := inits.DB.Where("tus_id = ?", info.ID).First(&session).Error; err != nil {
+	if err := db.Where("tus_id = ?", info.ID).First(&session).Error; err != nil {
 		return
 	}
 	if session.Kind != models.UploadKindFinal && info.Offset > session.Offset {
 		helpers.TrackUpload(session.UserID, 0, session.ID, uint64(info.Offset-session.Offset))
 	}
 
-	inits.DB.Model(&session).Updates(map[string]interface{}{
+	db.Model(&session).Updates(map[string]interface{}{
 		"status":       models.UploadStatusUploaded,
 		"offset":       info.Offset,
 		"storage_path": info.Storage[filestore.StorageKeyPath],
@@ -523,16 +533,21 @@ func completeSessionFromEvent(event tusd.HookEvent) {
 }
 
 func terminateSession(tusID string) {
-	now := time.Now()
-	var session models.UploadSession
-	if err := inits.DB.Where("tus_id = ?", tusID).First(&session).Error; err != nil {
+	db := inits.DB
+	if db == nil {
 		return
 	}
-	inits.DB.Model(&session).Updates(map[string]interface{}{
+
+	now := time.Now()
+	var session models.UploadSession
+	if err := db.Where("tus_id = ?", tusID).First(&session).Error; err != nil {
+		return
+	}
+	db.Model(&session).Updates(map[string]interface{}{
 		"status":     models.UploadStatusCanceled,
 		"expires_at": &now,
 	})
-	inits.DB.Delete(&session)
+	db.Delete(&session)
 }
 
 func isExpired(session *models.UploadSession) bool {

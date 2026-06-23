@@ -46,6 +46,8 @@ func Api() {
 	protectedApi.POST("/file/clone", controllers.CloneFile)
 	protectedApi.GET("/file", controllers.GetFile)
 	protectedApi.PUT("/file", controllers.UpdateFile)
+	protectedApi.PUT("/file/thumbnail", controllers.UpdateFileThumbnail)
+	protectedApi.DELETE("/file/thumbnail", controllers.DeleteFileThumbnail)
 	protectedApi.DELETE("/file", controllers.DeleteFileController)
 	protectedApi.GET("/files/search", controllers.SearchFiles)
 	protectedApi.GET("/files", controllers.ListFiles)
