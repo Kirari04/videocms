@@ -31,6 +31,24 @@ func TestPlayerTemplatesRenderEncodingState(t *testing.T) {
 	}
 }
 
+func TestPlayerV2TemplateUsesViewportConstrainedAspectRatio(t *testing.T) {
+	content := string(readTemplateFile(t, "views/player_v2.html"))
+	for _, expected := range []string{
+		"media-player[data-media-player]",
+		"[data-media-provider]",
+		"[data-media-provider] video",
+		"<media-poster class=\"vds-poster\" src=\"{{ .Thumbnail }}\" alt=\"{{ .Title }}\"></media-poster>",
+		"width: 100%",
+		"height: 100%",
+		"aspect-ratio: auto",
+		"object-fit: contain",
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("player_v2.html missing viewport sizing marker %q", expected)
+		}
+	}
+}
+
 func readTemplateFile(t *testing.T, path string) []byte {
 	t.Helper()
 

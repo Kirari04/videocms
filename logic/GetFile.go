@@ -1,10 +1,8 @@
 package logic
 
 import (
-	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -39,19 +37,20 @@ type GetFileRespTag struct {
 	Name string
 }
 type GetFileResp struct {
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	ID             uint
-	UUID           string
-	Name           string
-	Thumbnail      string
-	ParentFolderID uint
-	Size           int64
-	Duration       float64
-	Qualitys       []GetFileRespQuali
-	Subtitles      []GetFileRespSub
-	Audios         []GetFileRespAudio
-	Tags           []GetFileRespTag
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	ID              uint
+	UUID            string
+	Name            string
+	Thumbnail       string
+	CustomThumbnail bool
+	ParentFolderID  uint
+	Size            int64
+	Duration        float64
+	Qualitys        []GetFileRespQuali
+	Subtitles       []GetFileRespSub
+	Audios          []GetFileRespAudio
+	Tags            []GetFileRespTag
 }
 
 func GetFile(LinkID uint, userID uint, isAdmin bool) (status int, fileData *GetFileResp, err error) {
@@ -123,19 +122,20 @@ func GetFile(LinkID uint, userID uint, isAdmin bool) (status int, fileData *GetF
 	}
 
 	response := GetFileResp{
-		CreatedAt:      *link.CreatedAt,
-		UpdatedAt:      *link.UpdatedAt,
-		ID:             link.ID,
-		UUID:           link.UUID,
-		Name:           link.Name,
-		Thumbnail:      fmt.Sprintf("%s/%s/image/thumb/%s", config.ENV.FolderVideoQualitysPub, link.UUID, link.File.Thumbnail),
-		ParentFolderID: link.ParentFolderID,
-		Size:           link.File.Size,
-		Duration:       link.File.Duration,
-		Qualitys:       Qualitys,
-		Subtitles:      Subtitles,
-		Audios:         Audios,
-		Tags:           Tags,
+		CreatedAt:       *link.CreatedAt,
+		UpdatedAt:       *link.UpdatedAt,
+		ID:              link.ID,
+		UUID:            link.UUID,
+		Name:            link.Name,
+		Thumbnail:       ResolvedThumbnailURL(link),
+		CustomThumbnail: link.Thumbnail != "",
+		ParentFolderID:  link.ParentFolderID,
+		Size:            link.File.Size,
+		Duration:        link.File.Duration,
+		Qualitys:        Qualitys,
+		Subtitles:       Subtitles,
+		Audios:          Audios,
+		Tags:            Tags,
 	}
 
 	return http.StatusOK, &response, nil
