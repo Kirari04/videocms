@@ -2,13 +2,12 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 
 	"github.com/labstack/echo/v4"
 )
 
-func SearchFiles(c echo.Context) error {
+func (h *Handlers) SearchFiles(c echo.Context) error {
 	// parse & validate request
 	var searchValidation models.LinkSearchValidation
 	if status, err := helpers.Validate(c, &searchValidation); err != nil {
@@ -23,7 +22,7 @@ func SearchFiles(c echo.Context) error {
 		userID = searchValidation.UserID
 	}
 
-	status, response, err := logic.SearchFiles(userID, searchValidation.Query)
+	status, response, err := h.Logic.SearchFiles(userID, searchValidation.Query)
 	if err != nil {
 		return c.String(status, err.Error())
 	}

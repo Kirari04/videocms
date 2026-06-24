@@ -6,7 +6,6 @@ import (
 	"strconv"
 )
 
-var ENV Config
 var EXTENSIONS []string = []string{
 	"mp4",  // MPEG-4 Part 14, most common web format
 	"mkv",  // Matroska Multimedia Container, high quality/multi-stream
@@ -191,15 +190,56 @@ func (c Config) PublicConfig() PublicConfig {
 	}
 }
 
+func (c Config) Clone() Config {
+	c.ReloadHtml = cloneBool(c.ReloadHtml)
+	c.EncodingEnabled = cloneBool(c.EncodingEnabled)
+	c.UploadEnabled = cloneBool(c.UploadEnabled)
+	c.RatelimitEnabled = cloneBool(c.RatelimitEnabled)
+	c.CloudflareEnabled = cloneBool(c.CloudflareEnabled)
+	c.BunnyCDNEnabled = cloneBool(c.BunnyCDNEnabled)
+	c.FastlyEnabled = cloneBool(c.FastlyEnabled)
+	c.KeyCDNEnabled = cloneBool(c.KeyCDNEnabled)
+	c.TrustLocalTraffic = cloneBool(c.TrustLocalTraffic)
+	c.CorsAllowCredentials = cloneBool(c.CorsAllowCredentials)
+	c.CaptchaEnabled = cloneBool(c.CaptchaEnabled)
+	c.CaptchaLoginEnabled = cloneBool(c.CaptchaLoginEnabled)
+	c.CaptchaPlayerEnabled = cloneBool(c.CaptchaPlayerEnabled)
+	c.EncodeHls240p = cloneBool(c.EncodeHls240p)
+	c.EncodeHls360p = cloneBool(c.EncodeHls360p)
+	c.EncodeHls480p = cloneBool(c.EncodeHls480p)
+	c.EncodeHls720p = cloneBool(c.EncodeHls720p)
+	c.EncodeHls1080p = cloneBool(c.EncodeHls1080p)
+	c.EncodeHls1440p = cloneBool(c.EncodeHls1440p)
+	c.EncodeHls2160p = cloneBool(c.EncodeHls2160p)
+	c.EnablePluginPgsServer = cloneBool(c.EnablePluginPgsServer)
+	c.ContinueWatchingPopupEnabled = cloneBool(c.ContinueWatchingPopupEnabled)
+	c.DownloadEnabled = cloneBool(c.DownloadEnabled)
+	c.RemoteDownloadEnabled = cloneBool(c.RemoteDownloadEnabled)
+	c.PlayerV2Enabled = cloneBool(c.PlayerV2Enabled)
+	return c
+}
+
+func cloneBool(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
 type ConfigMap map[string]string
 
-func Setup() {
-	ENV.Host = getEnv("Host", ":3000")
+func LoadEnv() Config {
+	env := Config{}
 
-	ENV.FolderVideoQualitysPriv = getEnv("FolderVideoQualitysPriv", "./videos/qualitys")
-	ENV.FolderVideoQualitysPub = getEnv("FolderVideoQualitysPub", "/videos/qualitys")
-	ENV.FolderVideoUploadsPriv = getEnv("FolderVideoUploadsPriv", "./videos/uploads")
-	ENV.StatsDriveName = getEnv("StatsDriveName", "nvme0n1")
+	env.Host = getEnv("Host", ":3000")
+
+	env.FolderVideoQualitysPriv = getEnv("FolderVideoQualitysPriv", "./videos/qualitys")
+	env.FolderVideoQualitysPub = getEnv("FolderVideoQualitysPub", "/videos/qualitys")
+	env.FolderVideoUploadsPriv = getEnv("FolderVideoUploadsPriv", "./videos/uploads")
+	env.StatsDriveName = getEnv("StatsDriveName", "nvme0n1")
+
+	return env
 }
 
 // getters
@@ -223,7 +263,7 @@ func getEnv_bool(key string, defaultValue *bool) *bool {
 		case "0":
 			return boolPtr(false)
 		default:
-			log.Panicf("Failed to get bool from value: %v", value)
+			log.Printf("Failed to parse bool from value %q; using default", value)
 		}
 	}
 
@@ -234,7 +274,8 @@ func getEnv_int64(key string, defaultValue int64) int64 {
 	if value := os.Getenv(key); value != "" {
 		res, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
-			log.Panicf("Failed to parse int from value %v", value)
+			log.Printf("Failed to parse int from value %q; using default", value)
+			return defaultValue
 		}
 		return res
 	}
@@ -245,7 +286,8 @@ func getEnv_int(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		res, err := strconv.Atoi(value)
 		if err != nil {
-			log.Panicf("Failed to parse int from value %v", value)
+			log.Printf("Failed to parse int from value %q; using default", value)
+			return defaultValue
 		}
 		return res
 	}

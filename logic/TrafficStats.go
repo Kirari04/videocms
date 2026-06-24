@@ -1,7 +1,6 @@
 package logic
 
 import (
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"math"
 	"time"
@@ -21,7 +20,7 @@ type aggregatedTrafficResult struct {
 	Bytes float64 `gorm:"column:bytes"`
 }
 
-func GetTrafficStats(from time.Time, to time.Time, points int, userID uint, fileID uint, qualityID uint) (TrafficStatsData, error) {
+func (s *Service) GetTrafficStats(from time.Time, to time.Time, points int, userID uint, fileID uint, qualityID uint) (TrafficStatsData, error) {
 	result := TrafficStatsData{
 		Traffic: make([]TrafficStatPoint, 0),
 	}
@@ -40,7 +39,7 @@ func GetTrafficStats(from time.Time, to time.Time, points int, userID uint, file
 	var aggregations []aggregatedTrafficResult
 
 	// Use strftime('%s') for comparison to handle timezone offsets correctly in SQLite
-	query := inits.DB.Model(&models.TrafficLog{}).
+	query := s.Deps.DB.Model(&models.TrafficLog{}).
 		Select(`
 			(CAST(strftime('%s', created_at) AS INTEGER) / ? ) * ? as ts,
 			CAST(SUM(bytes) AS INTEGER) as bytes
@@ -89,7 +88,7 @@ func GetTrafficStats(from time.Time, to time.Time, points int, userID uint, file
 	return result, nil
 }
 
-func GetUploadStats(from time.Time, to time.Time, points int, userID uint) (TrafficStatsData, error) {
+func (s *Service) GetUploadStats(from time.Time, to time.Time, points int, userID uint) (TrafficStatsData, error) {
 	result := TrafficStatsData{
 		Traffic: make([]TrafficStatPoint, 0),
 	}
@@ -108,7 +107,7 @@ func GetUploadStats(from time.Time, to time.Time, points int, userID uint) (Traf
 	var aggregations []aggregatedTrafficResult
 
 	// Use strftime('%s') for comparison to handle timezone offsets correctly in SQLite
-	query := inits.DB.Model(&models.UploadLog{}).
+	query := s.Deps.DB.Model(&models.UploadLog{}).
 		Select(`
 			(CAST(strftime('%s', created_at) AS INTEGER) / ? ) * ? as ts,
 			CAST(SUM(bytes) AS INTEGER) as bytes
@@ -156,7 +155,7 @@ type aggregatedEncodingResult struct {
 	Seconds float64 `gorm:"column:seconds"`
 }
 
-func GetEncodingStats(from time.Time, to time.Time, points int, userID uint) (TrafficStatsData, error) {
+func (s *Service) GetEncodingStats(from time.Time, to time.Time, points int, userID uint) (TrafficStatsData, error) {
 	result := TrafficStatsData{
 		Traffic: make([]TrafficStatPoint, 0),
 	}
@@ -174,7 +173,7 @@ func GetEncodingStats(from time.Time, to time.Time, points int, userID uint) (Tr
 
 	var aggregations []aggregatedEncodingResult
 
-	query := inits.DB.Model(&models.EncodingLog{}).
+	query := s.Deps.DB.Model(&models.EncodingLog{}).
 		Select(`
 			(CAST(strftime('%s', created_at) AS INTEGER) / ? ) * ? as ts,
 			SUM(seconds) as seconds
@@ -219,10 +218,10 @@ type TopTrafficResult struct {
 	Value uint64 `gorm:"column:value" json:"value"`
 }
 
-func GetTopTraffic(from time.Time, to time.Time, userID uint, limit int, mode string) ([]TopTrafficResult, error) {
+func (s *Service) GetTopTraffic(from time.Time, to time.Time, userID uint, limit int, mode string) ([]TopTrafficResult, error) {
 	var results []TopTrafficResult
 
-	query := inits.DB.Model(&models.TrafficLog{}).
+	query := s.Deps.DB.Model(&models.TrafficLog{}).
 		Where("CAST(strftime('%s', created_at) AS INTEGER) >= ? AND CAST(strftime('%s', created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
 
 	switch mode {
@@ -245,7 +244,7 @@ func GetTopTraffic(from time.Time, to time.Time, userID uint, limit int, mode st
 
 		for i := range results {
 			var link models.Link
-			if err := inits.DB.Where("file_id = ?", results[i].ID).First(&link).Error; err == nil {
+			if err := s.Deps.DB.Where("file_id = ?", results[i].ID).First(&link).Error; err == nil {
 				results[i].Name = link.Name
 			} else {
 				results[i].Name = "Unknown File"
@@ -268,7 +267,7 @@ func GetTopTraffic(from time.Time, to time.Time, userID uint, limit int, mode st
 
 		for i := range results {
 			var user models.User
-			if err := inits.DB.First(&user, results[i].ID).Error; err == nil {
+			if err := s.Deps.DB.First(&user, results[i].ID).Error; err == nil {
 				results[i].Name = user.Username
 			} else {
 				results[i].Name = "Deleted User"
@@ -279,10 +278,10 @@ func GetTopTraffic(from time.Time, to time.Time, userID uint, limit int, mode st
 	return results, nil
 }
 
-func GetTopUpload(from time.Time, to time.Time, userID uint, limit int, mode string) ([]TopTrafficResult, error) {
+func (s *Service) GetTopUpload(from time.Time, to time.Time, userID uint, limit int, mode string) ([]TopTrafficResult, error) {
 	var results []TopTrafficResult
 
-	query := inits.DB.Model(&models.UploadLog{}).
+	query := s.Deps.DB.Model(&models.UploadLog{}).
 		Where("CAST(strftime('%s', created_at) AS INTEGER) >= ? AND CAST(strftime('%s', created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
 
 	switch mode {
@@ -302,7 +301,7 @@ func GetTopUpload(from time.Time, to time.Time, userID uint, limit int, mode str
 
 		for i := range results {
 			var link models.Link
-			if err := inits.DB.Where("file_id = ?", results[i].ID).First(&link).Error; err == nil {
+			if err := s.Deps.DB.Where("file_id = ?", results[i].ID).First(&link).Error; err == nil {
 				results[i].Name = link.Name
 			} else {
 				results[i].Name = "Unknown File"
@@ -326,7 +325,7 @@ func GetTopUpload(from time.Time, to time.Time, userID uint, limit int, mode str
 
 		for i := range results {
 			var user models.User
-			if err := inits.DB.First(&user, results[i].ID).Error; err == nil {
+			if err := s.Deps.DB.First(&user, results[i].ID).Error; err == nil {
 				results[i].Name = user.Username
 			} else {
 				results[i].Name = "Deleted User"
@@ -337,10 +336,10 @@ func GetTopUpload(from time.Time, to time.Time, userID uint, limit int, mode str
 	return results, nil
 }
 
-func GetTopEncoding(from time.Time, to time.Time, userID uint, limit int, mode string) ([]TopTrafficResult, error) {
+func (s *Service) GetTopEncoding(from time.Time, to time.Time, userID uint, limit int, mode string) ([]TopTrafficResult, error) {
 	var results []TopTrafficResult
 
-	query := inits.DB.Model(&models.EncodingLog{}).
+	query := s.Deps.DB.Model(&models.EncodingLog{}).
 		Where("CAST(strftime('%s', created_at) AS INTEGER) >= ? AND CAST(strftime('%s', created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
 
 	switch mode {
@@ -358,7 +357,7 @@ func GetTopEncoding(from time.Time, to time.Time, userID uint, limit int, mode s
 		}
 		for i := range results {
 			var link models.Link
-			if err := inits.DB.Where("file_id = ?", results[i].ID).First(&link).Error; err == nil {
+			if err := s.Deps.DB.Where("file_id = ?", results[i].ID).First(&link).Error; err == nil {
 				results[i].Name = link.Name
 			} else {
 				results[i].Name = "Unknown File"
@@ -378,7 +377,7 @@ func GetTopEncoding(from time.Time, to time.Time, userID uint, limit int, mode s
 		}
 		for i := range results {
 			var user models.User
-			if err := inits.DB.First(&user, results[i].ID).Error; err == nil {
+			if err := s.Deps.DB.First(&user, results[i].ID).Error; err == nil {
 				results[i].Name = user.Username
 			} else {
 				results[i].Name = "Deleted User"
@@ -389,7 +388,7 @@ func GetTopEncoding(from time.Time, to time.Time, userID uint, limit int, mode s
 	return results, nil
 }
 
-func GetTopStorage(userID uint, limit int, mode string) ([]TopTrafficResult, error) {
+func (s *Service) GetTopStorage(userID uint, limit int, mode string) ([]TopTrafficResult, error) {
 	var results []TopTrafficResult
 
 	switch mode {
@@ -397,7 +396,7 @@ func GetTopStorage(userID uint, limit int, mode string) ([]TopTrafficResult, err
 		// Storage per file is the sum of file size + all its qualities + all its audios
 		// This is a complex query to do in one shot with GORM efficiently,
 		// so we'll approximate by ranking the File table's size or do a join.
-		query := inits.DB.Model(&models.File{})
+		query := s.Deps.DB.Model(&models.File{})
 		if userID != 0 {
 			query = query.Where("user_id = ?", userID)
 		}
@@ -413,7 +412,7 @@ func GetTopStorage(userID uint, limit int, mode string) ([]TopTrafficResult, err
 
 		for i := range results {
 			var link models.Link
-			if err := inits.DB.Where("file_id = ?", results[i].ID).First(&link).Error; err == nil {
+			if err := s.Deps.DB.Where("file_id = ?", results[i].ID).First(&link).Error; err == nil {
 				results[i].Name = link.Name
 			} else {
 				results[i].Name = "Orphaned File"
@@ -422,7 +421,7 @@ func GetTopStorage(userID uint, limit int, mode string) ([]TopTrafficResult, err
 
 	case "users":
 		// Sum of all file sizes per user
-		query := inits.DB.Model(&models.File{})
+		query := s.Deps.DB.Model(&models.File{})
 		if userID != 0 {
 			query = query.Where("user_id = ?", userID)
 		}
@@ -438,7 +437,7 @@ func GetTopStorage(userID uint, limit int, mode string) ([]TopTrafficResult, err
 
 		for i := range results {
 			var user models.User
-			if err := inits.DB.First(&user, results[i].ID).Error; err == nil {
+			if err := s.Deps.DB.First(&user, results[i].ID).Error; err == nil {
 				results[i].Name = user.Username
 			} else {
 				results[i].Name = "Deleted User"

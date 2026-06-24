@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
 	"net/http"
@@ -10,7 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func UpdateFile(c echo.Context) error {
+func (h *Handlers) UpdateFile(c echo.Context) error {
 	// parse & validate request
 	var linkValidation models.LinkUpdateValidation
 	if status, err := helpers.Validate(c, &linkValidation); err != nil {
@@ -19,7 +18,7 @@ func UpdateFile(c echo.Context) error {
 
 	var dbLink models.Link
 	//check if requested file /link id exists
-	if res := inits.DB.First(&dbLink, linkValidation.LinkID); res.Error != nil {
+	if res := h.Deps.DB.First(&dbLink, linkValidation.LinkID); res.Error != nil {
 		return c.String(http.StatusBadRequest, "File doesn't exist")
 	}
 
@@ -32,7 +31,7 @@ func UpdateFile(c echo.Context) error {
 
 	//update link data
 	dbLink.Name = linkValidation.Name
-	if res := inits.DB.Save(&dbLink); res.Error != nil {
+	if res := h.Deps.DB.Save(&dbLink); res.Error != nil {
 		log.Printf("Failed to update link: %v", res.Error)
 		return c.NoContent(http.StatusInternalServerError)
 	}

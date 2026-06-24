@@ -1,7 +1,6 @@
 package logic
 
 import (
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"net/http"
 	"time"
@@ -53,11 +52,11 @@ type GetFileResp struct {
 	Tags            []GetFileRespTag
 }
 
-func GetFile(LinkID uint, userID uint, isAdmin bool) (status int, fileData *GetFileResp, err error) {
+func (s *Service) GetFile(LinkID uint, userID uint, isAdmin bool) (status int, fileData *GetFileResp, err error) {
 
 	// query all files
 	var link models.Link
-	query := inits.DB.
+	query := s.Deps.DB.
 		Model(&models.Link{}).
 		Preload("User").
 		Preload("Tags").
@@ -127,7 +126,7 @@ func GetFile(LinkID uint, userID uint, isAdmin bool) (status int, fileData *GetF
 		ID:              link.ID,
 		UUID:            link.UUID,
 		Name:            link.Name,
-		Thumbnail:       ResolvedThumbnailURL(link),
+		Thumbnail:       s.ResolvedThumbnailURL(link),
 		CustomThumbnail: link.Thumbnail != "",
 		ParentFolderID:  link.ParentFolderID,
 		Size:            link.File.Size,

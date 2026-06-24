@@ -2,13 +2,12 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 
 	"github.com/labstack/echo/v4"
 )
 
-func ListFiles(c echo.Context) error {
+func (h *Handlers) ListFiles(c echo.Context) error {
 	// parse & validate request
 	var fileValidation models.LinkListValidation
 	if status, err := helpers.Validate(c, &fileValidation); err != nil {
@@ -23,7 +22,7 @@ func ListFiles(c echo.Context) error {
 		userID = fileValidation.UserID
 	}
 
-	status, response, err := logic.ListFiles(fileValidation.ParentFolderID, userID)
+	status, response, err := h.Logic.ListFiles(fileValidation.ParentFolderID, userID)
 	if err != nil {
 		return c.String(status, err.Error())
 	}

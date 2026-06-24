@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bufio"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"fmt"
 	"os"
@@ -10,7 +9,11 @@ import (
 )
 
 func DeleteUser() {
-	Init()
+	deps, err := InitRuntime()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("Enter Username: ")
@@ -22,7 +25,7 @@ func DeleteUser() {
 
 	username = strings.TrimSpace(username)
 
-	if res := inits.DB.
+	if res := deps.DB.
 		Where(&models.User{
 			Username: username,
 		}).

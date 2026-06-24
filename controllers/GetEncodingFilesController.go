@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"net/http"
 
@@ -15,7 +14,7 @@ type GetEncodingFilesRes struct {
 	Progress float64
 }
 
-func GetEncodingFiles(c echo.Context) error {
+func (h *Handlers) GetEncodingFiles(c echo.Context) error {
 	userId, ok := c.Get("UserID").(uint)
 	if !ok {
 		c.Logger().Error("Failed to catch user")
@@ -24,7 +23,7 @@ func GetEncodingFiles(c echo.Context) error {
 	var res []GetEncodingFilesRes
 
 	var resQuality []GetEncodingFilesRes
-	if err := inits.DB.
+	if err := h.Deps.DB.
 		Model(&models.Link{}).
 		Select(
 			"links.id as id",
@@ -42,7 +41,7 @@ func GetEncodingFiles(c echo.Context) error {
 	}
 
 	var resAudio []GetEncodingFilesRes
-	if err := inits.DB.
+	if err := h.Deps.DB.
 		Model(&models.Link{}).
 		Select(
 			"links.id as id",
@@ -60,7 +59,7 @@ func GetEncodingFiles(c echo.Context) error {
 	}
 
 	var resSubtitle []GetEncodingFilesRes
-	if err := inits.DB.
+	if err := h.Deps.DB.
 		Model(&models.Link{}).
 		Select(
 			"links.id as id",

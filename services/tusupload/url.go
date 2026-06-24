@@ -5,11 +5,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	"ch/kirari04/videocms/config"
 )
 
-func canonicalTusOrigin(r *http.Request) *url.URL {
+func canonicalTusOriginWithBaseURL(r *http.Request, rawBaseURL string) *url.URL {
 	scheme := "http"
 	host := ""
 	if r != nil {
@@ -25,7 +23,7 @@ func canonicalTusOrigin(r *http.Request) *url.URL {
 		}
 	}
 
-	baseURL := publicBaseURL()
+	baseURL := publicBaseURL(rawBaseURL)
 	if baseURL != nil {
 		if host == "" || isInternalHost(hostnameOnly(host)) || sameHostname(host, baseURL.Host) {
 			scheme = baseURL.Scheme
@@ -43,7 +41,7 @@ func canonicalTusOrigin(r *http.Request) *url.URL {
 	}
 }
 
-func rewriteTusUploadURL(r *http.Request, raw string) string {
+func rewriteTusUploadURLWithBaseURL(r *http.Request, raw string, rawBaseURL string) string {
 	if raw == "" {
 		return raw
 	}
@@ -56,7 +54,7 @@ func rewriteTusUploadURL(r *http.Request, raw string) string {
 		return raw
 	}
 
-	origin := canonicalTusOrigin(r)
+	origin := canonicalTusOriginWithBaseURL(r, rawBaseURL)
 	if origin == nil {
 		return raw
 	}
@@ -66,7 +64,7 @@ func rewriteTusUploadURL(r *http.Request, raw string) string {
 	return parsed.String()
 }
 
-func rewriteTusUploadConcatHeader(r *http.Request, raw string) string {
+func rewriteTusUploadConcatHeaderWithBaseURL(r *http.Request, raw string, rawBaseURL string) string {
 	if raw == "" {
 		return raw
 	}
@@ -79,7 +77,7 @@ func rewriteTusUploadConcatHeader(r *http.Request, raw string) string {
 	changed := false
 	for i, part := range parts {
 		if prefix, ok := tusConcatPrefix(part); ok {
-			rewrite := prefix + rewriteTusUploadURL(r, strings.TrimPrefix(part, prefix))
+			rewrite := prefix + rewriteTusUploadURLWithBaseURL(r, strings.TrimPrefix(part, prefix), rawBaseURL)
 			if rewrite != part {
 				parts[i] = rewrite
 				changed = true
@@ -87,7 +85,7 @@ func rewriteTusUploadConcatHeader(r *http.Request, raw string) string {
 			continue
 		}
 
-		rewrite := rewriteTusUploadURL(r, part)
+		rewrite := rewriteTusUploadURLWithBaseURL(r, part, rawBaseURL)
 		if rewrite != part {
 			parts[i] = rewrite
 			changed = true
@@ -108,8 +106,8 @@ func tusConcatPrefix(part string) (string, bool) {
 	return "", false
 }
 
-func publicBaseURL() *url.URL {
-	raw := strings.TrimSpace(config.ENV.BaseUrl)
+func publicBaseURL(raw string) *url.URL {
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
 	}

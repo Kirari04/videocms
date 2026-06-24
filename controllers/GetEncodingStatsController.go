@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"net/http"
 	"time"
@@ -40,7 +39,7 @@ func parseEncodingStatsRequest(c echo.Context) (from time.Time, to time.Time, po
 	return from, to, points, validatus, nil
 }
 
-func GetEncodingStats(c echo.Context) error {
+func (h *Handlers) GetEncodingStats(c echo.Context) error {
 	from, to, points, _, err := parseEncodingStatsRequest(c)
 	if err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
@@ -48,7 +47,7 @@ func GetEncodingStats(c echo.Context) error {
 
 	userID := c.Get("UserID").(uint)
 
-	stats, err := logic.GetEncodingStats(from, to, points, userID)
+	stats, err := h.Logic.GetEncodingStats(from, to, points, userID)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
@@ -56,13 +55,13 @@ func GetEncodingStats(c echo.Context) error {
 	return c.JSON(http.StatusOK, stats)
 }
 
-func GetAdminEncodingStats(c echo.Context) error {
+func (h *Handlers) GetAdminEncodingStats(c echo.Context) error {
 	from, to, points, validatus, err := parseEncodingStatsRequest(c)
 	if err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
 	}
 
-	stats, err := logic.GetEncodingStats(from, to, points, validatus.UserID)
+	stats, err := h.Logic.GetEncodingStats(from, to, points, validatus.UserID)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
@@ -70,7 +69,7 @@ func GetAdminEncodingStats(c echo.Context) error {
 	return c.JSON(http.StatusOK, stats)
 }
 
-func GetTopEncodingStats(c echo.Context) error {
+func (h *Handlers) GetTopEncodingStats(c echo.Context) error {
 	from, to, _, _, err := parseEncodingStatsRequest(c)
 	if err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
@@ -78,14 +77,14 @@ func GetTopEncodingStats(c echo.Context) error {
 
 	userID := c.Get("UserID").(uint)
 	limit := 10
-	results, err := logic.GetTopEncoding(from, to, userID, limit, "files")
+	results, err := h.Logic.GetTopEncoding(from, to, userID, limit, "files")
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	return c.JSON(http.StatusOK, results)
 }
 
-func GetAdminTopEncodingStats(c echo.Context) error {
+func (h *Handlers) GetAdminTopEncodingStats(c echo.Context) error {
 	from, to, _, validatus, err := parseEncodingStatsRequest(c)
 	if err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
@@ -97,7 +96,7 @@ func GetAdminTopEncodingStats(c echo.Context) error {
 	}
 
 	limit := 10
-	results, err := logic.GetTopEncoding(from, to, validatus.UserID, limit, mode)
+	results, err := h.Logic.GetTopEncoding(from, to, validatus.UserID, limit, mode)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}

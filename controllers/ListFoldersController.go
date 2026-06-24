@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
 	"net/http"
@@ -10,7 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func ListFolders(c echo.Context) error {
+func (h *Handlers) ListFolders(c echo.Context) error {
 	// parse & validate request
 	var folderValidation models.FolderListValidation
 	if status, err := helpers.Validate(c, &folderValidation); err != nil {
@@ -19,7 +18,7 @@ func ListFolders(c echo.Context) error {
 
 	//check if requested folder exists
 	if folderValidation.ParentFolderID > 0 {
-		res := inits.DB.First(&models.Folder{}, folderValidation.ParentFolderID)
+		res := h.Deps.DB.First(&models.Folder{}, folderValidation.ParentFolderID)
 		if res.Error != nil {
 			return c.String(http.StatusBadRequest, "Parent folder doesn't exist")
 		}
@@ -35,7 +34,7 @@ func ListFolders(c echo.Context) error {
 
 	// query all folders
 	var folders []models.Folder
-	res := inits.DB.
+	res := h.Deps.DB.
 		Model(&models.Folder{}).
 		Preload("User").
 		Where(&models.Folder{

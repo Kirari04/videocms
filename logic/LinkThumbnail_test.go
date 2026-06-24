@@ -1,8 +1,8 @@
 package logic
 
 import (
+	"ch/kirari04/videocms/app"
 	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
 	"net/http"
@@ -16,8 +16,7 @@ import (
 )
 
 func TestResolvedThumbnailURLPrefersLinkThumbnail(t *testing.T) {
-	restore := setThumbnailPublicRoot("/videos/qualitys")
-	defer restore()
+	s := thumbnailService(nil, "/tmp", "/videos/qualitys")
 
 	link := models.Link{
 		UUID:      "550e8400-e29b-41d4-a716-446655440000",
@@ -27,16 +26,15 @@ func TestResolvedThumbnailURLPrefersLinkThumbnail(t *testing.T) {
 		},
 	}
 
-	got := ResolvedThumbnailURL(link)
+	got := s.ResolvedThumbnailURL(link)
 	want := "/videos/qualitys/550e8400-e29b-41d4-a716-446655440000/image/thumb/link-550e8400-e29b-41d4-a716-446655440000.webp"
 	if got != want {
-		t.Fatalf("ResolvedThumbnailURL() = %q, want %q", got, want)
+		t.Fatalf("s.ResolvedThumbnailURL() = %q, want %q", got, want)
 	}
 }
 
 func TestResolvedThumbnailURLFallsBackToFileThumbnail(t *testing.T) {
-	restore := setThumbnailPublicRoot("/videos/qualitys")
-	defer restore()
+	s := thumbnailService(nil, "/tmp", "/videos/qualitys")
 
 	link := models.Link{
 		UUID: "550e8400-e29b-41d4-a716-446655440000",
@@ -45,21 +43,21 @@ func TestResolvedThumbnailURLFallsBackToFileThumbnail(t *testing.T) {
 		},
 	}
 
-	got := ResolvedThumbnailURL(link)
+	got := s.ResolvedThumbnailURL(link)
 	want := "/videos/qualitys/550e8400-e29b-41d4-a716-446655440000/image/thumb/4x4.webp"
 	if got != want {
-		t.Fatalf("ResolvedThumbnailURL() = %q, want %q", got, want)
+		t.Fatalf("s.ResolvedThumbnailURL() = %q, want %q", got, want)
 	}
 }
 
 func TestGetThumbnailDataServesGeneratedFallback(t *testing.T) {
-	root := setupThumbnailTestDB(t)
-	link := createThumbnailTestLink(t, "550e8400-e29b-41d4-a716-446655440000", "", 1)
+	s, root := setupThumbnailTestDB(t)
+	link := createThumbnailTestLink(t, s, "550e8400-e29b-41d4-a716-446655440000", "", 1)
 	writeThumbnailTestFile(t, root, link.File.UUID, "4x4.webp")
 
-	status, filePath, userID, fileID, err := GetThumbnailData("4x4.webp", link.UUID)
+	status, filePath, userID, fileID, err := s.GetThumbnailData("4x4.webp", link.UUID)
 	if err != nil {
-		t.Fatalf("GetThumbnailData() error = %v", err)
+		t.Fatalf("s.GetThumbnailData() error = %v", err)
 	}
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", status, http.StatusOK)
@@ -73,14 +71,14 @@ func TestGetThumbnailDataServesGeneratedFallback(t *testing.T) {
 }
 
 func TestGetThumbnailDataServesCurrentLinkCustomPoster(t *testing.T) {
-	root := setupThumbnailTestDB(t)
-	customName := LinkThumbnailFilename("550e8400-e29b-41d4-a716-446655440000")
-	link := createThumbnailTestLink(t, "550e8400-e29b-41d4-a716-446655440000", customName, 1)
+	s, root := setupThumbnailTestDB(t)
+	customName := s.LinkThumbnailFilename("550e8400-e29b-41d4-a716-446655440000")
+	link := createThumbnailTestLink(t, s, "550e8400-e29b-41d4-a716-446655440000", customName, 1)
 	writeThumbnailTestFile(t, root, link.File.UUID, customName)
 
-	status, filePath, _, _, err := GetThumbnailData(customName, link.UUID)
+	status, filePath, _, _, err := s.GetThumbnailData(customName, link.UUID)
 	if err != nil {
-		t.Fatalf("GetThumbnailData() error = %v", err)
+		t.Fatalf("s.GetThumbnailData() error = %v", err)
 	}
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", status, http.StatusOK)
@@ -91,14 +89,14 @@ func TestGetThumbnailDataServesCurrentLinkCustomPoster(t *testing.T) {
 }
 
 func TestGetThumbnailDataRejectsAnotherLinksCustomPoster(t *testing.T) {
-	root := setupThumbnailTestDB(t)
-	link := createThumbnailTestLink(t, "550e8400-e29b-41d4-a716-446655440000", "", 1)
-	otherName := LinkThumbnailFilename("550e8400-e29b-41d4-a716-446655440001")
+	s, root := setupThumbnailTestDB(t)
+	link := createThumbnailTestLink(t, s, "550e8400-e29b-41d4-a716-446655440000", "", 1)
+	otherName := s.LinkThumbnailFilename("550e8400-e29b-41d4-a716-446655440001")
 	writeThumbnailTestFile(t, root, link.File.UUID, otherName)
 
-	status, _, _, _, err := GetThumbnailData(otherName, link.UUID)
+	status, _, _, _, err := s.GetThumbnailData(otherName, link.UUID)
 	if err == nil {
-		t.Fatal("GetThumbnailData() error = nil, want error")
+		t.Fatal("s.GetThumbnailData() error = nil, want error")
 	}
 	if status != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", status, http.StatusNotFound)
@@ -106,21 +104,21 @@ func TestGetThumbnailDataRejectsAnotherLinksCustomPoster(t *testing.T) {
 }
 
 func TestResetLinkThumbnailClearsThumbnailAndRemovesFile(t *testing.T) {
-	root := setupThumbnailTestDB(t)
-	customName := LinkThumbnailFilename("550e8400-e29b-41d4-a716-446655440000")
-	link := createThumbnailTestLink(t, "550e8400-e29b-41d4-a716-446655440000", customName, 1)
+	s, root := setupThumbnailTestDB(t)
+	customName := s.LinkThumbnailFilename("550e8400-e29b-41d4-a716-446655440000")
+	link := createThumbnailTestLink(t, s, "550e8400-e29b-41d4-a716-446655440000", customName, 1)
 	customPath := writeThumbnailTestFile(t, root, link.File.UUID, customName)
 
-	status, err := ResetLinkThumbnail(link.ID, link.UserID, false)
+	status, err := s.ResetLinkThumbnail(link.ID, link.UserID, false)
 	if err != nil {
-		t.Fatalf("ResetLinkThumbnail() error = %v", err)
+		t.Fatalf("s.ResetLinkThumbnail() error = %v", err)
 	}
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", status, http.StatusOK)
 	}
 
 	var updated models.Link
-	if err := inits.DB.First(&updated, link.ID).Error; err != nil {
+	if err := s.Deps.DB.First(&updated, link.ID).Error; err != nil {
 		t.Fatalf("failed to reload link: %v", err)
 	}
 	if updated.Thumbnail != "" {
@@ -132,33 +130,28 @@ func TestResetLinkThumbnailClearsThumbnailAndRemovesFile(t *testing.T) {
 }
 
 func TestLinkThumbnailUpdateAndResetRejectUnauthorizedUser(t *testing.T) {
-	setupThumbnailTestDB(t)
-	link := createThumbnailTestLink(t, "550e8400-e29b-41d4-a716-446655440000", LinkThumbnailFilename("550e8400-e29b-41d4-a716-446655440000"), 2)
+	s, _ := setupThumbnailTestDB(t)
+	link := createThumbnailTestLink(t, s, "550e8400-e29b-41d4-a716-446655440000", s.LinkThumbnailFilename("550e8400-e29b-41d4-a716-446655440000"), 2)
 
-	status, err := UpdateLinkThumbnail(link.ID, 1, false, strings.NewReader("not-used"), 8, "image/png")
+	status, err := s.UpdateLinkThumbnail(link.ID, 1, false, strings.NewReader("not-used"), 8, "image/png")
 	if err == nil {
-		t.Fatal("UpdateLinkThumbnail() error = nil, want error")
+		t.Fatal("s.UpdateLinkThumbnail() error = nil, want error")
 	}
 	if status != http.StatusForbidden {
 		t.Fatalf("update status = %d, want %d", status, http.StatusForbidden)
 	}
 
-	status, err = ResetLinkThumbnail(link.ID, 1, false)
+	status, err = s.ResetLinkThumbnail(link.ID, 1, false)
 	if err == nil {
-		t.Fatal("ResetLinkThumbnail() error = nil, want error")
+		t.Fatal("s.ResetLinkThumbnail() error = nil, want error")
 	}
 	if status != http.StatusForbidden {
 		t.Fatalf("reset status = %d, want %d", status, http.StatusForbidden)
 	}
 }
 
-func setupThumbnailTestDB(t *testing.T) string {
+func setupThumbnailTestDB(t *testing.T) (*Service, string) {
 	t.Helper()
-
-	previousDB := inits.DB
-	previousPriv := config.ENV.FolderVideoQualitysPriv
-	previousPub := config.ENV.FolderVideoQualitysPub
-	previousMaxPostSize := config.ENV.MaxPostSize
 
 	root := t.TempDir()
 	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{})
@@ -169,22 +162,10 @@ func setupThumbnailTestDB(t *testing.T) string {
 		t.Fatalf("failed to migrate test database: %v", err)
 	}
 
-	inits.DB = db
-	config.ENV.FolderVideoQualitysPriv = root
-	config.ENV.FolderVideoQualitysPub = "/videos/qualitys"
-	config.ENV.MaxPostSize = 100 * 1024 * 1024
-
-	t.Cleanup(func() {
-		inits.DB = previousDB
-		config.ENV.FolderVideoQualitysPriv = previousPriv
-		config.ENV.FolderVideoQualitysPub = previousPub
-		config.ENV.MaxPostSize = previousMaxPostSize
-	})
-
-	return root
+	return thumbnailService(db, root, "/videos/qualitys"), root
 }
 
-func createThumbnailTestLink(t *testing.T, linkUUID string, linkThumbnail string, userID uint) models.Link {
+func createThumbnailTestLink(t *testing.T, s *Service, linkUUID string, linkThumbnail string, userID uint) models.Link {
 	t.Helper()
 
 	dbFile := models.File{
@@ -192,7 +173,7 @@ func createThumbnailTestLink(t *testing.T, linkUUID string, linkThumbnail string
 		Thumbnail: "4x4.webp",
 		UserID:    userID,
 	}
-	if err := inits.DB.Create(&dbFile).Error; err != nil {
+	if err := s.Deps.DB.Create(&dbFile).Error; err != nil {
 		t.Fatalf("failed to create file: %v", err)
 	}
 
@@ -203,7 +184,7 @@ func createThumbnailTestLink(t *testing.T, linkUUID string, linkThumbnail string
 		FileID:    dbFile.ID,
 		File:      dbFile,
 	}
-	if err := inits.DB.Create(&dbLink).Error; err != nil {
+	if err := s.Deps.DB.Create(&dbLink).Error; err != nil {
 		t.Fatalf("failed to create link: %v", err)
 	}
 	dbLink.File = dbFile
@@ -223,10 +204,16 @@ func writeThumbnailTestFile(t *testing.T, root string, fileUUID string, fileName
 	return path
 }
 
-func setThumbnailPublicRoot(root string) func() {
-	previous := config.ENV.FolderVideoQualitysPub
-	config.ENV.FolderVideoQualitysPub = root
-	return func() {
-		config.ENV.FolderVideoQualitysPub = previous
-	}
+func thumbnailService(db *gorm.DB, privateRoot string, publicRoot string) *Service {
+	return NewService(&app.Deps{
+		DB: db,
+		Snapshots: app.NewSnapshotStore(app.Snapshot{
+			Config: config.Config{
+				FolderVideoQualitysPriv: privateRoot,
+				FolderVideoQualitysPub:  publicRoot,
+				MaxPostSize:             100 * 1024 * 1024,
+			},
+		}),
+		RequestGate: app.NewRequestGate(),
+	})
 }

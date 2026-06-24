@@ -9,7 +9,7 @@ import (
 
 const MediaClaimsContextKey = "media_claims"
 
-func MediaAuth() echo.MiddlewareFunc {
+func (f *Factory) MediaAuth() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			cookie, err := c.Cookie(auth.MediaCookieName)
@@ -17,7 +17,7 @@ func MediaAuth() echo.MiddlewareFunc {
 				return c.String(http.StatusUnauthorized, "Missing media token")
 			}
 
-			token, claims, err := auth.VerifyMediaToken(cookie.Value)
+			token, claims, err := f.authService().VerifyMediaToken(cookie.Value)
 			if err != nil || token == nil || claims == nil || !token.Valid {
 				return c.String(http.StatusUnauthorized, "Invalid media token")
 			}

@@ -1,15 +1,13 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/auth"
-	"ch/kirari04/videocms/inits"
 	"net/http"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 )
 
-func AuthCheck(c echo.Context) error {
+func (h *Handlers) AuthCheck(c echo.Context) error {
 	bearer := c.Request().Header.Get("Authorization")
 	if bearer == "" {
 		return c.NoContent(http.StatusForbidden)
@@ -18,7 +16,7 @@ func AuthCheck(c echo.Context) error {
 	tokenString := bearerHeader[len(bearerHeader)-1]
 
 	if strings.HasPrefix(tokenString, "ak_") {
-		apiKey, err := auth.VerifyApiKey(inits.DB, tokenString)
+		apiKey, err := h.Auth.VerifyApiKey(tokenString)
 		if err != nil {
 			return c.NoContent(http.StatusForbidden)
 		}
@@ -30,7 +28,7 @@ func AuthCheck(c echo.Context) error {
 		})
 	}
 
-	token, claims, err := auth.VerifyJWT(tokenString)
+	token, claims, err := h.Auth.VerifyJWT(tokenString)
 	if err != nil {
 		return c.NoContent(http.StatusForbidden)
 	}

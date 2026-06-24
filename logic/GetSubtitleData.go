@@ -1,8 +1,6 @@
 package logic
 
 import (
-	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
@@ -10,7 +8,7 @@ import (
 	"regexp"
 )
 
-func GetSubtitleData(fileName string, UUID string, SUBUUID string) (status int, filePath *string, userID uint, fileID uint, err error) {
+func (s *Service) GetSubtitleData(fileName string, UUID string, SUBUUID string) (status int, filePath *string, userID uint, fileID uint, err error) {
 	reFILE := regexp.MustCompile(`^out\.(ass)$`)
 
 	if !reFILE.MatchString(fileName) {
@@ -20,7 +18,7 @@ func GetSubtitleData(fileName string, UUID string, SUBUUID string) (status int, 
 	//translate link id to file id
 	var dbLink models.Link
 
-	if dbRes := inits.DB.
+	if dbRes := s.Deps.DB.
 		Model(&models.Link{}).
 		Preload("File").
 		Preload("File.Subtitles").
@@ -43,7 +41,7 @@ func GetSubtitleData(fileName string, UUID string, SUBUUID string) (status int, 
 		return http.StatusNotFound, nil, 0, 0, errors.New("subtitle doesn't exist")
 	}
 
-	fileRes := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, SUBUUID, fileName)
+	fileRes := fmt.Sprintf("%s/%s/%s/%s", s.Config().FolderVideoQualitysPriv, dbLink.File.UUID, SUBUUID, fileName)
 
 	return http.StatusOK, &fileRes, dbLink.UserID, dbLink.FileID, nil
 }

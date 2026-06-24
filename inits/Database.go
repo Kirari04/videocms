@@ -8,16 +8,18 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-var DB *gorm.DB
-
-func Database() {
-	newDb, err := gorm.Open(sqlite.Open("./database/database.sqlite"), &gorm.Config{
+func OpenDatabase(path string) (*gorm.DB, error) {
+	newDb, err := gorm.Open(sqlite.Open(path), &gorm.Config{
 		Logger:                                   logger.Default.LogMode(logger.Silent),
 		DisableForeignKeyConstraintWhenMigrating: true,
 		IgnoreRelationshipsWhenMigrating:         true,
 	})
 	if err != nil {
-		log.Panicf("Failed to connect database: %s", err.Error())
+		return nil, err
+	}
+
+	if sqlDB, err := newDb.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(1)
 	}
 
 	// Performance optimizations
@@ -34,5 +36,5 @@ func Database() {
 	// Increase cache size (approx 20MB, negative value is in KB)
 	newDb.Exec("PRAGMA cache_size=-20000;")
 
-	DB = newDb
+	return newDb, nil
 }

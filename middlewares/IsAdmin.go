@@ -6,7 +6,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func IsAdmin() echo.MiddlewareFunc {
+func (f *Factory) IsAdmin() echo.MiddlewareFunc {
 	return echo.MiddlewareFunc(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			isApiKey, _ := c.Get("IsApiKey").(bool)

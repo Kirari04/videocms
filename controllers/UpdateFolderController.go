@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
 	"net/http"
@@ -17,7 +16,7 @@ and shortly after calls the delete method for the root folder too, it would try 
 whole folder tree and delete all folders & files again. To prevent that there is an map variable
 that should prevent the user from calling this method multiple times concurrently.
 */
-func UpdateFolder(c echo.Context) error {
+func (h *Handlers) UpdateFolder(c echo.Context) error {
 	// parse & validate request
 	var folderValidation models.FolderUpdateValidation
 	if status, err := helpers.Validate(c, &folderValidation); err != nil {
@@ -26,7 +25,7 @@ func UpdateFolder(c echo.Context) error {
 
 	var dbFolder models.Folder
 	//check if requested folder id exists
-	if res := inits.DB.First(&dbFolder, folderValidation.FolderID); res.Error != nil {
+	if res := h.Deps.DB.First(&dbFolder, folderValidation.FolderID); res.Error != nil {
 		return c.String(http.StatusBadRequest, "Folder doesn't exist")
 	}
 
@@ -39,7 +38,7 @@ func UpdateFolder(c echo.Context) error {
 
 	//update folder data
 	dbFolder.Name = folderValidation.Name
-	if res := inits.DB.Save(&dbFolder); res.Error != nil {
+	if res := h.Deps.DB.Save(&dbFolder); res.Error != nil {
 		log.Printf("Failed to update folder: %v", res.Error)
 		return c.NoContent(http.StatusInternalServerError)
 	}

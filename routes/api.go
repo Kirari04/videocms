@@ -1,9 +1,7 @@
 package routes
 
 import (
-	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/controllers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/middlewares"
 	"fmt"
 	"time"
@@ -13,123 +11,124 @@ import (
 	"golang.org/x/time/rate"
 )
 
-func Api() {
-	auth := inits.Api.Group("/auth")
+func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory *middlewares.Factory) {
+	cfg := handlers.Config()
+	auth := apiGroup.Group("/auth")
 	auth.POST("/login",
-		controllers.AuthLogin,
-		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateAuth), config.ENV.RatelimitBurstAuth, time.Minute*5)))
+		handlers.AuthLogin,
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateAuth), cfg.RatelimitBurstAuth, time.Minute*5)))
 	auth.GET("/check",
-		controllers.AuthCheck,
-		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateAuth), config.ENV.RatelimitBurstAuth, time.Minute*5)))
+		handlers.AuthCheck,
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateAuth), cfg.RatelimitBurstAuth, time.Minute*5)))
 	auth.GET("/refresh",
-		controllers.AuthRefresh,
-		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateAuth), config.ENV.RatelimitBurstAuth, time.Minute*5)))
+		handlers.AuthRefresh,
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateAuth), cfg.RatelimitBurstAuth, time.Minute*5)))
 
 	// Routes that dont require authentication
-	inits.Api.GET("/config", controllers.GetConfig)
-	inits.Api.GET("/file/example", controllers.GetFileExample)
-	inits.Api.GET("/p/pages", controllers.ListPublicWebPage)
-	inits.Api.GET("/p/page", controllers.GetPublicWebPage)
+	apiGroup.GET("/config", handlers.GetConfig)
+	apiGroup.GET("/file/example", handlers.GetFileExample)
+	apiGroup.GET("/p/pages", handlers.ListPublicWebPage)
+	apiGroup.GET("/p/page", handlers.GetPublicWebPage)
 
 	// Routes that require to be authenticated
-	protectedApi := inits.Api.Group("",
-		middlewares.Auth(inits.DB),
-		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateApi), config.ENV.RatelimitBurstApi, time.Minute*5)))
-	protectedApi.POST("/folder", controllers.CreateFolder)
-	protectedApi.PUT("/folder", controllers.UpdateFolder)
-	protectedApi.DELETE("/folder", controllers.DeleteFolder)
-	protectedApi.PUT("/move", controllers.MoveItems)
-	protectedApi.GET("/folders", controllers.ListFolders)
-	protectedApi.DELETE("/folders", controllers.DeleteFolders)
+	protectedApi := apiGroup.Group("",
+		middlewareFactory.AuthMiddleware(),
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateApi), cfg.RatelimitBurstApi, time.Minute*5)))
+	protectedApi.POST("/folder", handlers.CreateFolder)
+	protectedApi.PUT("/folder", handlers.UpdateFolder)
+	protectedApi.DELETE("/folder", handlers.DeleteFolder)
+	protectedApi.PUT("/move", handlers.MoveItems)
+	protectedApi.GET("/folders", handlers.ListFolders)
+	protectedApi.DELETE("/folders", handlers.DeleteFolders)
 
-	protectedApi.POST("/file", controllers.CreateFile)
-	protectedApi.POST("/file/clone", controllers.CloneFile)
-	protectedApi.GET("/file", controllers.GetFile)
-	protectedApi.PUT("/file", controllers.UpdateFile)
-	protectedApi.PUT("/file/thumbnail", controllers.UpdateFileThumbnail)
-	protectedApi.DELETE("/file/thumbnail", controllers.DeleteFileThumbnail)
-	protectedApi.DELETE("/file", controllers.DeleteFileController)
-	protectedApi.GET("/files/search", controllers.SearchFiles)
-	protectedApi.GET("/files", controllers.ListFiles)
-	protectedApi.DELETE("/files", controllers.DeleteFilesController)
-	protectedApi.POST("/file/tag", controllers.CreateTagController)
-	protectedApi.DELETE("/file/tag", controllers.DeleteTagController)
-	protectedApi.POST("/file/upload", controllers.SimpleUploadController,
-		middleware.BodyLimit(fmt.Sprintf("%dk", config.ENV.MaxUploadFilesize/1024+1024)))
+	protectedApi.POST("/file", handlers.CreateFile)
+	protectedApi.POST("/file/clone", handlers.CloneFile)
+	protectedApi.GET("/file", handlers.GetFile)
+	protectedApi.PUT("/file", handlers.UpdateFile)
+	protectedApi.PUT("/file/thumbnail", handlers.UpdateFileThumbnail)
+	protectedApi.DELETE("/file/thumbnail", handlers.DeleteFileThumbnail)
+	protectedApi.DELETE("/file", handlers.DeleteFileController)
+	protectedApi.GET("/files/search", handlers.SearchFiles)
+	protectedApi.GET("/files", handlers.ListFiles)
+	protectedApi.DELETE("/files", handlers.DeleteFilesController)
+	protectedApi.POST("/file/tag", handlers.CreateTagController)
+	protectedApi.DELETE("/file/tag", handlers.DeleteTagController)
+	protectedApi.POST("/file/upload", handlers.SimpleUploadController,
+		middleware.BodyLimit(fmt.Sprintf("%dk", cfg.MaxUploadFilesize/1024+1024)))
 
-	protectedApi.GET("/account", controllers.GetAccount)
-	protectedApi.GET("/account/settings", controllers.GetUserSettingsController)
-	protectedApi.PUT("/account/settings", controllers.UpdateUserSettingsController)
-	protectedApi.GET("/account/traffic", controllers.GetTrafficStats)
-	protectedApi.GET("/account/traffic/top", controllers.GetTopTrafficStats)
-	protectedApi.GET("/account/upload", controllers.GetUploadStats)
-	protectedApi.GET("/account/upload/top", controllers.GetTopUploadStats)
-	protectedApi.GET("/account/encoding", controllers.GetEncodingStats)
-	protectedApi.GET("/account/encoding/top", controllers.GetTopEncodingStats)
-	protectedApi.GET("/account/storage/top", controllers.GetTopStorageStats)
+	protectedApi.GET("/account", handlers.GetAccount)
+	protectedApi.GET("/account/settings", handlers.GetUserSettingsController)
+	protectedApi.PUT("/account/settings", handlers.UpdateUserSettingsController)
+	protectedApi.GET("/account/traffic", handlers.GetTrafficStats)
+	protectedApi.GET("/account/traffic/top", handlers.GetTopTrafficStats)
+	protectedApi.GET("/account/upload", handlers.GetUploadStats)
+	protectedApi.GET("/account/upload/top", handlers.GetTopUploadStats)
+	protectedApi.GET("/account/encoding", handlers.GetEncodingStats)
+	protectedApi.GET("/account/encoding/top", handlers.GetTopEncodingStats)
+	protectedApi.GET("/account/storage/top", handlers.GetTopStorageStats)
 
-	protectedApi.GET("/apikeys", controllers.ListApiKeys)
-	protectedApi.POST("/apikey", controllers.CreateApiKey)
-	protectedApi.DELETE("/apikey/:id", controllers.DeleteApiKey)
-	protectedApi.GET("/apikey/:id/audit", controllers.GetApiKeyAudit)
+	protectedApi.GET("/apikeys", handlers.ListApiKeys)
+	protectedApi.POST("/apikey", handlers.CreateApiKey)
+	protectedApi.DELETE("/apikey/:id", handlers.DeleteApiKey)
+	protectedApi.GET("/apikey/:id/audit", handlers.GetApiKeyAudit)
 
-	protectedApi.GET("/pages", controllers.ListWebPage, middlewares.IsAdmin())
-	protectedApi.POST("/page", controllers.CreateWebPage, middlewares.IsAdmin())
-	protectedApi.PUT("/page", controllers.UpdateWebPage, middlewares.IsAdmin())
-	protectedApi.DELETE("/page", controllers.DeleteWebPage, middlewares.IsAdmin())
+	protectedApi.GET("/pages", handlers.ListWebPage, middlewareFactory.IsAdmin())
+	protectedApi.POST("/page", handlers.CreateWebPage, middlewareFactory.IsAdmin())
+	protectedApi.PUT("/page", handlers.UpdateWebPage, middlewareFactory.IsAdmin())
+	protectedApi.DELETE("/page", handlers.DeleteWebPage, middlewareFactory.IsAdmin())
 
-	protectedApi.GET("/stats", controllers.GetSystemStats, middlewares.IsAdmin())
-	protectedApi.GET("/stats/traffic", controllers.GetAdminTrafficStats, middlewares.IsAdmin())
-	protectedApi.GET("/stats/traffic/top", controllers.GetAdminTopTrafficStats, middlewares.IsAdmin())
-	protectedApi.GET("/stats/upload", controllers.GetAdminUploadStats, middlewares.IsAdmin())
-	protectedApi.GET("/stats/upload/top", controllers.GetAdminTopUploadStats, middlewares.IsAdmin())
-	protectedApi.GET("/stats/encoding", controllers.GetAdminEncodingStats, middlewares.IsAdmin())
-	protectedApi.GET("/stats/encoding/top", controllers.GetAdminTopEncodingStats, middlewares.IsAdmin())
-	protectedApi.GET("/stats/storage/top", controllers.GetAdminTopStorageStats, middlewares.IsAdmin())
-	protectedApi.GET("/settings", controllers.GetSettings, middlewares.IsAdmin())
-	protectedApi.PUT("/settings", controllers.UpdateSettings, middlewares.IsAdmin())
+	protectedApi.GET("/stats", handlers.GetSystemStats, middlewareFactory.IsAdmin())
+	protectedApi.GET("/stats/traffic", handlers.GetAdminTrafficStats, middlewareFactory.IsAdmin())
+	protectedApi.GET("/stats/traffic/top", handlers.GetAdminTopTrafficStats, middlewareFactory.IsAdmin())
+	protectedApi.GET("/stats/upload", handlers.GetAdminUploadStats, middlewareFactory.IsAdmin())
+	protectedApi.GET("/stats/upload/top", handlers.GetAdminTopUploadStats, middlewareFactory.IsAdmin())
+	protectedApi.GET("/stats/encoding", handlers.GetAdminEncodingStats, middlewareFactory.IsAdmin())
+	protectedApi.GET("/stats/encoding/top", handlers.GetAdminTopEncodingStats, middlewareFactory.IsAdmin())
+	protectedApi.GET("/stats/storage/top", handlers.GetAdminTopStorageStats, middlewareFactory.IsAdmin())
+	protectedApi.GET("/settings", handlers.GetSettings, middlewareFactory.IsAdmin())
+	protectedApi.PUT("/settings", handlers.UpdateSettings, middlewareFactory.IsAdmin())
 
-	protectedApi.GET("/users", controllers.GetUsers, middlewares.IsAdmin())
-	protectedApi.POST("/users", controllers.CreateUser, middlewares.IsAdmin())
-	protectedApi.GET("/users/:id", controllers.GetUser, middlewares.IsAdmin())
-	protectedApi.PUT("/users/:id", controllers.UpdateUser, middlewares.IsAdmin())
-	protectedApi.DELETE("/users/:id", controllers.DeleteUser, middlewares.IsAdmin())
-	protectedApi.POST("/users/:id/password", controllers.ResetUserPassword, middlewares.IsAdmin())
+	protectedApi.GET("/users", handlers.GetUsers, middlewareFactory.IsAdmin())
+	protectedApi.POST("/users", handlers.CreateUser, middlewareFactory.IsAdmin())
+	protectedApi.GET("/users/:id", handlers.GetUser, middlewareFactory.IsAdmin())
+	protectedApi.PUT("/users/:id", handlers.UpdateUser, middlewareFactory.IsAdmin())
+	protectedApi.DELETE("/users/:id", handlers.DeleteUser, middlewareFactory.IsAdmin())
+	protectedApi.POST("/users/:id/password", handlers.ResetUserPassword, middlewareFactory.IsAdmin())
 
-	protectedApi.GET("/admin/encodings", controllers.GetAdminEncodingFiles, middlewares.IsAdmin())
+	protectedApi.GET("/admin/encodings", handlers.GetAdminEncodingFiles, middlewareFactory.IsAdmin())
 
-	protectedApi.GET("/versioncheck", controllers.GetVersionCheck, middlewares.IsAdmin())
+	protectedApi.GET("/versioncheck", handlers.GetVersionCheck, middlewareFactory.IsAdmin())
 
-	protectedApi.POST("/webhook", controllers.CreateWebhook)
-	protectedApi.PUT("/webhook", controllers.UpdateWebhook)
-	protectedApi.DELETE("/webhook", controllers.DeleteWebhook)
-	protectedApi.GET("/webhooks", controllers.ListWebhooks)
+	protectedApi.POST("/webhook", handlers.CreateWebhook)
+	protectedApi.PUT("/webhook", handlers.UpdateWebhook)
+	protectedApi.DELETE("/webhook", handlers.DeleteWebhook)
+	protectedApi.GET("/webhooks", handlers.ListWebhooks)
 
-	protectedApi.GET("/encodings", controllers.GetEncodingFiles)
+	protectedApi.GET("/encodings", handlers.GetEncodingFiles)
 
-	protectedApi.GET("/uploads/sessions", controllers.GetUploadSessions)
-	protectedApi.POST("/uploads/:upload_id/finalize", controllers.FinalizeTusUpload)
+	protectedApi.GET("/uploads/sessions", handlers.GetUploadSessions)
+	protectedApi.POST("/uploads/:upload_id/finalize", handlers.FinalizeTusUpload)
 
 	// Remote Download
-	protectedApi.POST("/remote/download", controllers.CreateRemoteDownload)
-	protectedApi.GET("/remote/downloads", controllers.ListRemoteDownloads)
-	protectedApi.DELETE("/remote/downloads", controllers.ClearRemoteDownloads)
-	protectedApi.POST("/remote/download/:id/cancel", controllers.CancelRemoteDownload)
-	protectedApi.POST("/remote/download/:id/retry", controllers.RetryRemoteDownload)
-	protectedApi.DELETE("/remote/download/:id", controllers.DeleteRemoteDownload)
-	protectedApi.GET("/account/remote-download", controllers.GetRemoteDownloadStats)
-	protectedApi.GET("/account/remote-download/duration", controllers.GetRemoteDownloadDurationStats)
-	protectedApi.GET("/account/remote-download/top", controllers.GetTopRemoteDownloadStats)
+	protectedApi.POST("/remote/download", handlers.CreateRemoteDownload)
+	protectedApi.GET("/remote/downloads", handlers.ListRemoteDownloads)
+	protectedApi.DELETE("/remote/downloads", handlers.ClearRemoteDownloads)
+	protectedApi.POST("/remote/download/:id/cancel", handlers.CancelRemoteDownload)
+	protectedApi.POST("/remote/download/:id/retry", handlers.RetryRemoteDownload)
+	protectedApi.DELETE("/remote/download/:id", handlers.DeleteRemoteDownload)
+	protectedApi.GET("/account/remote-download", handlers.GetRemoteDownloadStats)
+	protectedApi.GET("/account/remote-download/duration", handlers.GetRemoteDownloadDurationStats)
+	protectedApi.GET("/account/remote-download/top", handlers.GetTopRemoteDownloadStats)
 
 	// Admin Stats
-	protectedApi.GET("/stats/remote-download", controllers.GetAdminRemoteDownloadStats, middlewares.IsAdmin())
-	protectedApi.GET("/stats/remote-download/duration", controllers.GetAdminRemoteDownloadDurationStats, middlewares.IsAdmin())
-	protectedApi.GET("/stats/remote-download/top", controllers.GetAdminTopRemoteDownloadStats, middlewares.IsAdmin())
+	protectedApi.GET("/stats/remote-download", handlers.GetAdminRemoteDownloadStats, middlewareFactory.IsAdmin())
+	protectedApi.GET("/stats/remote-download/duration", handlers.GetAdminRemoteDownloadDurationStats, middlewareFactory.IsAdmin())
+	protectedApi.GET("/stats/remote-download/top", handlers.GetAdminTopRemoteDownloadStats, middlewareFactory.IsAdmin())
 
 	uploadMiddlewares := []echo.MiddlewareFunc{
-		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateUpload), config.ENV.RatelimitBurstUpload, time.Minute*5)),
-		middleware.BodyLimit(fmt.Sprintf("%dk", config.ENV.MaxUploadChunkSize/1024+1024)),
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateUpload), cfg.RatelimitBurstUpload, time.Minute*5)),
+		middleware.BodyLimit(fmt.Sprintf("%dk", cfg.MaxUploadChunkSize/1024+1024)),
 	}
-	inits.Api.Any("/uploads", controllers.TusUpload, uploadMiddlewares...)
-	inits.Api.Any("/uploads/*", controllers.TusUpload, uploadMiddlewares...)
+	apiGroup.Any("/uploads", handlers.TusUpload, uploadMiddlewares...)
+	apiGroup.Any("/uploads/*", handlers.TusUpload, uploadMiddlewares...)
 }

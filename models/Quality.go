@@ -61,5 +61,3 @@ type AvailableQuality struct {
 	OutputFile string
 	Enabled    bool
 }
-
-var AvailableQualitys []AvailableQuality

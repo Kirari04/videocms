@@ -1,7 +1,6 @@
 package logic
 
 import (
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
 	"net/http"
@@ -9,10 +8,10 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func SearchFiles(userId uint, query string) (status int, response *[]models.Link, err error) {
+func (s *Service) SearchFiles(userId uint, query string) (status int, response *[]models.Link, err error) {
 	// query all files matching the search query
 	var links []models.Link
-	res := inits.DB.
+	res := s.Deps.DB.
 		Model(&models.Link{}).
 		Preload("User").
 		Preload("File").

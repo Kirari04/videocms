@@ -1,17 +1,15 @@
 package middlewares
 
 import (
-	"ch/kirari04/videocms/auth"
 	"ch/kirari04/videocms/models"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 )
 
-func Auth(db *gorm.DB) echo.MiddlewareFunc {
+func (f *Factory) AuthMiddleware() echo.MiddlewareFunc {
 	return echo.MiddlewareFunc(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			bearer := c.Request().Header.Get("Authorization")
@@ -22,7 +20,7 @@ func Auth(db *gorm.DB) echo.MiddlewareFunc {
 			tokenString := bearerHeader[len(bearerHeader)-1]
 
 			if strings.HasPrefix(tokenString, "ak_") {
-				apiKey, err := auth.VerifyApiKey(db, tokenString)
+				apiKey, err := f.authService().VerifyApiKey(tokenString)
 				if err != nil {
 					return c.String(http.StatusForbidden, "Invalid or Expired API Key")
 				}
@@ -30,8 +28,8 @@ func Auth(db *gorm.DB) echo.MiddlewareFunc {
 				// Update LastUsedAt and Log Audit (Async for performance)
 				go func(akID, uID uint, method, path, ip string) {
 					now := time.Now()
-					db.Model(&models.ApiKey{}).Where("id = ?", akID).Update("last_used_at", &now)
-					db.Create(&models.ApiKeyAuditLog{
+					f.Deps.DB.Model(&models.ApiKey{}).Where("id = ?", akID).Update("last_used_at", &now)
+					f.Deps.DB.Create(&models.ApiKeyAuditLog{
 						ApiKeyID: akID,
 						UserID:   uID,
 						Method:   method,
@@ -48,7 +46,7 @@ func Auth(db *gorm.DB) echo.MiddlewareFunc {
 				return next(c)
 			}
 
-			token, claims, err := auth.VerifyJWT(tokenString)
+			token, claims, err := f.authService().VerifyJWT(tokenString)
 			if err != nil {
 				return c.String(http.StatusForbidden, "Invalid JWT Token")
 			}

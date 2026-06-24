@@ -1,14 +1,13 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/config"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
 )
 
-func ViewExampleUpload(c echo.Context) error {
+func (h *Handlers) ViewExampleUpload(c echo.Context) error {
 	return c.Render(http.StatusOK, "examples/upload.html", echo.Map{
-		"AppName": config.ENV.AppName,
+		"AppName": h.Config().AppName,
 	})
 }

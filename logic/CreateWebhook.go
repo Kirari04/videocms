@@ -1,7 +1,6 @@
 package logic
 
 import (
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
 	"net/http"
@@ -9,8 +8,8 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func CreateWebhook(webhookValidation *models.WebhookCreateValidation, userID uint) (status int, response string, err error) {
-	if res := inits.DB.Create(&models.Webhook{
+func (s *Service) CreateWebhook(webhookValidation *models.WebhookCreateValidation, userID uint) (status int, response string, err error) {
+	if res := s.Deps.DB.Create(&models.Webhook{
 		Name:     webhookValidation.Name,
 		Url:      webhookValidation.Url,
 		Rpm:      webhookValidation.Rpm,

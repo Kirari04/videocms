@@ -1,9 +1,6 @@
 package logic
 
 import (
-	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
@@ -17,19 +14,19 @@ and shortly after calls the delete method for the root folder too, it would try 
 whole folder tree and delete all folders & files again. To prevent that there is an map variable
 that should prevent the user from calling this method multiple times concurrently.
 */
-func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint, isAdmin bool) (status int, err error) {
+func (s *Service) DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint, isAdmin bool) (status int, err error) {
 
-	if helpers.UserRequestAsyncObj.Blocked(userID) {
+	if s.Deps.RequestGate.Blocked(userID) {
 		return http.StatusTooManyRequests, errors.New("wait until the previous delete request finished")
 	}
-	helpers.UserRequestAsyncObj.Start(userID)
-	defer helpers.UserRequestAsyncObj.End(userID)
+	s.Deps.RequestGate.Start(userID)
+	defer s.Deps.RequestGate.End(userID)
 
 	if len(folderValidation.FolderIDs) == 0 {
 		return http.StatusBadRequest, errors.New("array FolderIDs is empty")
 	}
 
-	if int64(len(folderValidation.FolderIDs)) > config.ENV.MaxItemsMultiDelete {
+	if int64(len(folderValidation.FolderIDs)) > s.Config().MaxItemsMultiDelete {
 		return http.StatusBadRequest, errors.New("max requested items exceeded")
 	}
 
@@ -38,7 +35,7 @@ func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint
 	reqFolderIdDeleteList := []uint{}
 	var parentFolderID uint = 0
 	for i, FolderValidation := range folderValidation.FolderIDs {
-		query := inits.DB.Model(&models.Folder{})
+		query := s.Deps.DB.Model(&models.Folder{})
 		if !isAdmin {
 			query = query.Where("user_id = ?", userID)
 		}
@@ -78,43 +75,43 @@ func DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint
 	files := []models.LinkDeleteValidation{}
 
 	for _, reqFolderId := range reqFolderIdDeleteList {
-		listFolders(reqFolderId, &folders, &files)
+		s.listFolders(reqFolderId, &folders, &files)
 		folders = append(folders, reqFolderId)
-		listFiles(reqFolderId, &files)
+		s.listFiles(reqFolderId, &files)
 	}
 
 	if len(files) > 0 {
-		if status, err := DeleteFiles(&models.LinksDeleteValidation{
+		if status, err := s.DeleteFiles(&models.LinksDeleteValidation{
 			LinkIDs: files,
 		}, userID, isAdmin); err != nil {
 			return status, fmt.Errorf("failed to delete all files from folders: %v", err)
 		}
 	}
 
-	if res := inits.DB.Delete(&models.Folder{}, folders); res.Error != nil {
+	if res := s.Deps.DB.Delete(&models.Folder{}, folders); res.Error != nil {
 		return status, fmt.Errorf("failed to delete all folders: %v", err)
 	}
 
 	return http.StatusOK, nil
 }
 
-func listFolders(folderId uint, folders *[]uint, files *[]models.LinkDeleteValidation) {
+func (s *Service) listFolders(folderId uint, folders *[]uint, files *[]models.LinkDeleteValidation) {
 	var folderList []models.Folder
-	inits.DB.Select("id").
+	s.Deps.DB.Select("id").
 		Where(&models.Folder{
 			ParentFolderID: folderId,
 		}).
 		Find(&folderList)
 	for _, id := range folderList {
-		listFolders(id.ID, folders, files)
+		s.listFolders(id.ID, folders, files)
 		*folders = append(*folders, id.ID)
-		listFiles(id.ID, files)
+		s.listFiles(id.ID, files)
 	}
 }
 
-func listFiles(folderId uint, files *[]models.LinkDeleteValidation) {
+func (s *Service) listFiles(folderId uint, files *[]models.LinkDeleteValidation) {
 	var fileList []models.Link
-	inits.DB.Select("id").
+	s.Deps.DB.Select("id").
 		Where(&models.Link{
 			ParentFolderID: folderId,
 		}).

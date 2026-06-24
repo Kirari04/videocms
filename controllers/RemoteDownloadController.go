@@ -1,12 +1,8 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
-	"ch/kirari04/videocms/services"
 	"errors"
 	"fmt"
 	"net/http"
@@ -21,10 +17,10 @@ import (
 	"gorm.io/gorm"
 )
 
-func CreateRemoteDownload(c echo.Context) error {
+func (h *Handlers) CreateRemoteDownload(c echo.Context) error {
 	userId := c.Get("UserID").(uint)
 
-	if !globalRemoteDownloadsEnabled() {
+	if !h.globalRemoteDownloadsEnabled() {
 		return c.String(http.StatusServiceUnavailable, "Remote downloads are disabled")
 	}
 
@@ -35,7 +31,7 @@ func CreateRemoteDownload(c echo.Context) error {
 	}
 
 	// Check user limits
-	user, err := helpers.GetUser(userId)
+	user, err := h.Logic.GetModelUser(userId)
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Failed to fetch user")
 	}
@@ -47,7 +43,7 @@ func CreateRemoteDownload(c echo.Context) error {
 	}
 	if req.ParentFolderID > 0 {
 		var folder models.Folder
-		if res := inits.DB.Where("id = ? AND user_id = ?", req.ParentFolderID, userId).First(&folder); res.Error != nil {
+		if res := h.Deps.DB.Where("id = ? AND user_id = ?", req.ParentFolderID, userId).First(&folder); res.Error != nil {
 			return c.String(http.StatusBadRequest, "Parent folder not found")
 		}
 	}
@@ -55,7 +51,7 @@ func CreateRemoteDownload(c echo.Context) error {
 	maxDownloads := user.Settings.EffectiveMaxRemoteDownloads()
 
 	var currentCount int64
-	inits.DB.Model(&models.RemoteDownload{}).
+	h.Deps.DB.Model(&models.RemoteDownload{}).
 		Where("user_id = ? AND status IN ?", userId, models.ActiveRemoteDownloadStatuses()).
 		Count(&currentCount)
 
@@ -65,7 +61,7 @@ func CreateRemoteDownload(c echo.Context) error {
 
 	// Create records
 	var created []models.RemoteDownload
-	if err := inits.DB.Transaction(func(tx *gorm.DB) error {
+	if err := h.Deps.DB.Transaction(func(tx *gorm.DB) error {
 		for _, rawURL := range req.Urls {
 			download := models.RemoteDownload{
 				UserID:         userId,
@@ -87,7 +83,7 @@ func CreateRemoteDownload(c echo.Context) error {
 	return c.JSON(http.StatusCreated, created)
 }
 
-func ListRemoteDownloads(c echo.Context) error {
+func (h *Handlers) ListRemoteDownloads(c echo.Context) error {
 	userId := c.Get("UserID").(uint)
 
 	var downloads []models.RemoteDownload
@@ -103,7 +99,7 @@ func ListRemoteDownloads(c echo.Context) error {
 		offset = 0
 	}
 
-	query := inits.DB.Where("user_id = ?", userId)
+	query := h.Deps.DB.Where("user_id = ?", userId)
 	status := c.QueryParam("status")
 	if status != "" {
 		if !isKnownRemoteDownloadStatus(status) {
@@ -119,34 +115,34 @@ func ListRemoteDownloads(c echo.Context) error {
 	return c.JSON(http.StatusOK, downloads)
 }
 
-func CancelRemoteDownload(c echo.Context) error {
+func (h *Handlers) CancelRemoteDownload(c echo.Context) error {
 	downloadID, err := parseRemoteDownloadID(c)
 	if err != nil {
 		return c.String(http.StatusBadRequest, "Invalid download ID")
 	}
 
-	status, err := services.CancelRemoteDownload(c.Get("UserID").(uint), downloadID)
+	status, err := h.Workers.CancelRemoteDownload(c.Get("UserID").(uint), downloadID)
 	if err != nil {
 		return c.String(status, err.Error())
 	}
 	return c.String(http.StatusOK, "ok")
 }
 
-func RetryRemoteDownload(c echo.Context) error {
+func (h *Handlers) RetryRemoteDownload(c echo.Context) error {
 	userID := c.Get("UserID").(uint)
 	downloadID, err := parseRemoteDownloadID(c)
 	if err != nil {
 		return c.String(http.StatusBadRequest, "Invalid download ID")
 	}
 
-	download, status, err := retryRemoteDownload(userID, downloadID)
+	download, status, err := h.retryRemoteDownload(userID, downloadID)
 	if err != nil {
 		return c.String(status, err.Error())
 	}
 	return c.JSON(status, download)
 }
 
-func DeleteRemoteDownload(c echo.Context) error {
+func (h *Handlers) DeleteRemoteDownload(c echo.Context) error {
 	userID := c.Get("UserID").(uint)
 	downloadID, err := parseRemoteDownloadID(c)
 	if err != nil {
@@ -154,19 +150,19 @@ func DeleteRemoteDownload(c echo.Context) error {
 	}
 
 	var download models.RemoteDownload
-	if res := inits.DB.Where("id = ? AND user_id = ?", downloadID, userID).First(&download); res.Error != nil {
+	if res := h.Deps.DB.Where("id = ? AND user_id = ?", downloadID, userID).First(&download); res.Error != nil {
 		return c.String(http.StatusNotFound, "download not found")
 	}
 	if !models.IsRemoteDownloadTerminal(download.Status) {
 		return c.String(http.StatusConflict, "active downloads cannot be deleted")
 	}
-	if res := inits.DB.Delete(&download); res.Error != nil {
+	if res := h.Deps.DB.Delete(&download); res.Error != nil {
 		return c.String(http.StatusInternalServerError, "failed to delete download")
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func ClearRemoteDownloads(c echo.Context) error {
+func (h *Handlers) ClearRemoteDownloads(c echo.Context) error {
 	userID := c.Get("UserID").(uint)
 	var req models.RemoteDownloadClearRequest
 	if status, err := helpers.Validate(c, &req); err != nil {
@@ -184,7 +180,7 @@ func ClearRemoteDownloads(c echo.Context) error {
 		seen[status] = true
 	}
 
-	res := inits.DB.Where("user_id = ? AND status IN ?", userID, req.Statuses).Delete(&models.RemoteDownload{})
+	res := h.Deps.DB.Where("user_id = ? AND status IN ?", userID, req.Statuses).Delete(&models.RemoteDownload{})
 	if res.Error != nil {
 		return c.String(http.StatusInternalServerError, "failed to clear downloads")
 	}
@@ -196,12 +192,12 @@ func parseRemoteDownloadID(c echo.Context) (uint, error) {
 	return uint(id), err
 }
 
-func retryRemoteDownload(userID uint, downloadID uint) (*models.RemoteDownload, int, error) {
-	if !globalRemoteDownloadsEnabled() {
+func (h *Handlers) retryRemoteDownload(userID uint, downloadID uint) (*models.RemoteDownload, int, error) {
+	if !h.globalRemoteDownloadsEnabled() {
 		return nil, http.StatusServiceUnavailable, errors.New("remote downloads are disabled")
 	}
 
-	user, err := helpers.GetUser(userID)
+	user, err := h.Logic.GetModelUser(userID)
 	if err != nil {
 		return nil, http.StatusInternalServerError, errors.New("failed to fetch user")
 	}
@@ -210,7 +206,7 @@ func retryRemoteDownload(userID uint, downloadID uint) (*models.RemoteDownload, 
 	}
 
 	var download models.RemoteDownload
-	if res := inits.DB.Where("id = ? AND user_id = ?", downloadID, userID).First(&download); res.Error != nil {
+	if res := h.Deps.DB.Where("id = ? AND user_id = ?", downloadID, userID).First(&download); res.Error != nil {
 		return nil, http.StatusNotFound, errors.New("download not found")
 	}
 	if download.Status != models.RemoteDownloadStatusFailed && download.Status != models.RemoteDownloadStatusCanceled {
@@ -218,7 +214,7 @@ func retryRemoteDownload(userID uint, downloadID uint) (*models.RemoteDownload, 
 	}
 
 	var currentCount int64
-	inits.DB.Model(&models.RemoteDownload{}).
+	h.Deps.DB.Model(&models.RemoteDownload{}).
 		Where("user_id = ? AND status IN ?", userID, models.ActiveRemoteDownloadStatuses()).
 		Count(&currentCount)
 	if currentCount+1 > int64(user.Settings.EffectiveMaxRemoteDownloads()) {
@@ -229,14 +225,14 @@ func retryRemoteDownload(userID uint, downloadID uint) (*models.RemoteDownload, 
 	}
 	if download.ParentFolderID > 0 {
 		var folder models.Folder
-		if res := inits.DB.Where("id = ? AND user_id = ?", download.ParentFolderID, userID).First(&folder); res.Error != nil {
+		if res := h.Deps.DB.Where("id = ? AND user_id = ?", download.ParentFolderID, userID).First(&folder); res.Error != nil {
 			return nil, http.StatusBadRequest, errors.New("parent folder not found")
 		}
 	}
 
 	removeRemoteDownloadTemp(download.TempPath, download.Name)
 
-	if res := inits.DB.Model(&download).Updates(map[string]interface{}{
+	if res := h.Deps.DB.Model(&download).Updates(map[string]interface{}{
 		"status":              models.RemoteDownloadStatusPending,
 		"progress":            0,
 		"error":               "",
@@ -255,7 +251,7 @@ func retryRemoteDownload(userID uint, downloadID uint) (*models.RemoteDownload, 
 		return nil, http.StatusInternalServerError, errors.New("failed to retry download")
 	}
 
-	if res := inits.DB.First(&download, download.ID); res.Error != nil {
+	if res := h.Deps.DB.First(&download, download.ID); res.Error != nil {
 		return nil, http.StatusInternalServerError, errors.New("failed to load retried download")
 	}
 	return &download, http.StatusOK, nil
@@ -271,8 +267,8 @@ func removeRemoteDownloadTemp(tempPath string, fileName string) {
 	}
 }
 
-func globalRemoteDownloadsEnabled() bool {
-	return config.ENV.RemoteDownloadEnabled == nil || *config.ENV.RemoteDownloadEnabled
+func (h *Handlers) globalRemoteDownloadsEnabled() bool {
+	return h.Config().RemoteDownloadEnabled == nil || *h.Config().RemoteDownloadEnabled
 }
 
 func validateRemoteDownloadURLs(urls []string) error {
@@ -306,7 +302,7 @@ func isKnownRemoteDownloadStatus(status string) bool {
 	}
 }
 
-func GetRemoteDownloadStats(c echo.Context) error {
+func (h *Handlers) GetRemoteDownloadStats(c echo.Context) error {
 	var validation models.RemoteDownloadStatsGetValidation
 	if status, err := helpers.Validate(c, &validation); err != nil {
 		return c.String(status, err.Error())
@@ -337,7 +333,7 @@ func GetRemoteDownloadStats(c echo.Context) error {
 		validation.Points = 20
 	}
 
-	stats, err := logic.GetRemoteDownloadStats(from, to, validation.Points, c.Get("UserID").(uint))
+	stats, err := h.Logic.GetRemoteDownloadStats(from, to, validation.Points, c.Get("UserID").(uint))
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -345,7 +341,7 @@ func GetRemoteDownloadStats(c echo.Context) error {
 	return c.JSON(http.StatusOK, stats)
 }
 
-func GetRemoteDownloadDurationStats(c echo.Context) error {
+func (h *Handlers) GetRemoteDownloadDurationStats(c echo.Context) error {
 	var validation models.RemoteDownloadStatsGetValidation
 	if status, err := helpers.Validate(c, &validation); err != nil {
 		return c.String(status, err.Error())
@@ -376,7 +372,7 @@ func GetRemoteDownloadDurationStats(c echo.Context) error {
 		validation.Points = 20
 	}
 
-	stats, err := logic.GetRemoteDownloadDurationStats(from, to, validation.Points, c.Get("UserID").(uint))
+	stats, err := h.Logic.GetRemoteDownloadDurationStats(from, to, validation.Points, c.Get("UserID").(uint))
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -384,7 +380,7 @@ func GetRemoteDownloadDurationStats(c echo.Context) error {
 	return c.JSON(http.StatusOK, stats)
 }
 
-func GetTopRemoteDownloadStats(c echo.Context) error {
+func (h *Handlers) GetTopRemoteDownloadStats(c echo.Context) error {
 	var validation models.RemoteDownloadStatsGetValidation
 	if status, err := helpers.Validate(c, &validation); err != nil {
 		return c.String(status, err.Error())
@@ -416,7 +412,7 @@ func GetTopRemoteDownloadStats(c echo.Context) error {
 		mode = "domains"
 	}
 
-	stats, err := logic.GetTopRemoteDownloadTraffic(from, to, c.Get("UserID").(uint), 10, mode)
+	stats, err := h.Logic.GetTopRemoteDownloadTraffic(from, to, c.Get("UserID").(uint), 10, mode)
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -424,7 +420,7 @@ func GetTopRemoteDownloadStats(c echo.Context) error {
 	return c.JSON(http.StatusOK, stats)
 }
 
-func GetAdminRemoteDownloadStats(c echo.Context) error {
+func (h *Handlers) GetAdminRemoteDownloadStats(c echo.Context) error {
 	var validation models.RemoteDownloadStatsGetValidation
 	if status, err := helpers.Validate(c, &validation); err != nil {
 		return c.String(status, err.Error())
@@ -455,7 +451,7 @@ func GetAdminRemoteDownloadStats(c echo.Context) error {
 		validation.Points = 20
 	}
 
-	stats, err := logic.GetRemoteDownloadStats(from, to, validation.Points, validation.UserID)
+	stats, err := h.Logic.GetRemoteDownloadStats(from, to, validation.Points, validation.UserID)
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -463,7 +459,7 @@ func GetAdminRemoteDownloadStats(c echo.Context) error {
 	return c.JSON(http.StatusOK, stats)
 }
 
-func GetAdminRemoteDownloadDurationStats(c echo.Context) error {
+func (h *Handlers) GetAdminRemoteDownloadDurationStats(c echo.Context) error {
 	var validation models.RemoteDownloadStatsGetValidation
 	if status, err := helpers.Validate(c, &validation); err != nil {
 		return c.String(status, err.Error())
@@ -494,7 +490,7 @@ func GetAdminRemoteDownloadDurationStats(c echo.Context) error {
 		validation.Points = 20
 	}
 
-	stats, err := logic.GetRemoteDownloadDurationStats(from, to, validation.Points, validation.UserID)
+	stats, err := h.Logic.GetRemoteDownloadDurationStats(from, to, validation.Points, validation.UserID)
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -502,7 +498,7 @@ func GetAdminRemoteDownloadDurationStats(c echo.Context) error {
 	return c.JSON(http.StatusOK, stats)
 }
 
-func GetAdminTopRemoteDownloadStats(c echo.Context) error {
+func (h *Handlers) GetAdminTopRemoteDownloadStats(c echo.Context) error {
 	var validation models.RemoteDownloadStatsGetValidation
 	if status, err := helpers.Validate(c, &validation); err != nil {
 		return c.String(status, err.Error())
@@ -534,7 +530,7 @@ func GetAdminTopRemoteDownloadStats(c echo.Context) error {
 		mode = "domains"
 	}
 
-	stats, err := logic.GetTopRemoteDownloadTraffic(from, to, validation.UserID, 10, mode)
+	stats, err := h.Logic.GetTopRemoteDownloadTraffic(from, to, validation.UserID, 10, mode)
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}

@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"fmt"
 	"log"
@@ -11,7 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func CreateWebPage(c echo.Context) error {
+func (h *Handlers) CreateWebPage(c echo.Context) error {
 	// parse & validate request
 	var validatus models.WebPageCreateValidation
 	if status, err := helpers.Validate(c, &validatus); err != nil {
@@ -19,7 +18,7 @@ func CreateWebPage(c echo.Context) error {
 	}
 
 	var existing int64
-	if res := inits.DB.Model(&models.WebPage{}).Where(&models.WebPage{
+	if res := h.Deps.DB.Model(&models.WebPage{}).Where(&models.WebPage{
 		Path: validatus.Path,
 	}).Count(&existing); res.Error != nil {
 		c.Logger().Error("Failed to count webpage path", res.Error)
@@ -39,7 +38,7 @@ func CreateWebPage(c echo.Context) error {
 		Html:         validatus.Html,
 		ListInFooter: *validatus.ListInFooter,
 	}
-	if res := inits.DB.Create(&webPage); res.Error != nil {
+	if res := h.Deps.DB.Create(&webPage); res.Error != nil {
 		log.Println("Failed to create webpage", res.Error)
 		return c.NoContent(http.StatusInternalServerError)
 	}

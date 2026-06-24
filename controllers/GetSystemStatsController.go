@@ -2,14 +2,13 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"github.com/labstack/echo/v4"
 	"net/http"
 	"time"
 )
 
-func GetSystemStats(c echo.Context) error {
+func (h *Handlers) GetSystemStats(c echo.Context) error {
 	var validatus models.SystemResourceGetValidation
 	if status, err := helpers.Validate(c, &validatus); err != nil {
 		return c.String(status, err.Error())
@@ -78,7 +77,7 @@ func GetSystemStats(c echo.Context) error {
 	}
 
 	// 5. Fetch Data
-	stats, err := logic.GetSystemStats(from, to, points)
+	stats, err := h.Logic.GetSystemStats(from, to, points)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}

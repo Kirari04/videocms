@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
 	"net/http"
@@ -10,14 +9,14 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func DeleteWebPage(c echo.Context) error {
+func (h *Handlers) DeleteWebPage(c echo.Context) error {
 	// parse & validate request
 	var validatus models.WebPageDeleteValidation
 	if status, err := helpers.Validate(c, &validatus); err != nil {
 		return c.String(status, err.Error())
 	}
 
-	res := inits.DB.Delete(&models.WebPage{}, validatus.WebPageID)
+	res := h.Deps.DB.Delete(&models.WebPage{}, validatus.WebPageID)
 	if res.Error != nil {
 		log.Println("Failed to delete webpage", res.Error)
 		return c.NoContent(http.StatusInternalServerError)

@@ -2,10 +2,7 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/auth"
-	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"encoding/base64"
 	"encoding/json"
@@ -50,7 +47,7 @@ type PlayerStatusResponse struct {
 	Tasks              []PlayerStatusTask `json:"tasks"`
 }
 
-func PlayerController(c echo.Context) error {
+func (h *Handlers) PlayerController(c echo.Context) error {
 	// parse & validate request
 	type Request struct {
 		UUID string `validate:"required,uuid_rfc4122" param:"UUID"`
@@ -63,12 +60,12 @@ func PlayerController(c echo.Context) error {
 		})
 	}
 
-	dbLink, err := loadPlayerLink(requestValidation.UUID)
+	dbLink, err := h.loadPlayerLink(requestValidation.UUID)
 	if err != nil {
 		return c.Render(http.StatusNotFound, "404.html", echo.Map{})
 	}
 
-	if !playerCaptchaAllowed(c) {
+	if !h.playerCaptchaAllowed(c) {
 		return c.Redirect(http.StatusSeeOther, "/captcha/challenge?uuid="+dbLink.UUID)
 	}
 
@@ -79,22 +76,22 @@ func PlayerController(c echo.Context) error {
 	var jsonWebhooks []map[string]any
 	var streamUrl, streamUrlWidth, streamUrlHeight, firstAudio string
 
-	mediaToken, mediaExpiration, err := auth.GenerateMediaToken(buildMediaClaims(dbLink))
+	mediaToken, mediaExpiration, err := h.Auth.GenerateMediaToken(buildMediaClaims(dbLink))
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Failed to generate media token")
 	}
-	c.SetCookie(mediaCookie(c, dbLink.UUID, mediaToken, mediaExpiration))
+	c.SetCookie(h.mediaCookie(c, dbLink.UUID, mediaToken, mediaExpiration))
 
 	// List ready HLS qualitys and check if a playable stream exists.
 	for _, qualiItem := range dbLink.File.Qualitys {
 		if qualiItem.Type == "hls" && qualiItem.Ready {
 			jsonQualitys = append(jsonQualitys, map[string]string{
-				"url":    fmt.Sprintf("%s/%s/%s/download/video.mkv", config.ENV.FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name),
+				"url":    fmt.Sprintf("%s/%s/%s/download/video.mkv", h.Config().FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name),
 				"label":  qualiItem.Name,
 				"height": strconv.Itoa(int(qualiItem.Height)),
 				"width":  strconv.Itoa(int(qualiItem.Width)),
 			})
-			streamUrl = fmt.Sprintf("%s/%s/%s/1/stream/video.mp4", config.ENV.FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name)
+			streamUrl = fmt.Sprintf("%s/%s/%s/1/stream/video.mp4", h.Config().FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name)
 			streamUrlHeight = strconv.Itoa(int(qualiItem.Height))
 			streamUrlWidth = strconv.Itoa(int(qualiItem.Width))
 		}
@@ -103,7 +100,7 @@ func PlayerController(c echo.Context) error {
 	// List subtitles
 	for _, subItem := range dbLink.File.Subtitles {
 		if subItem.Ready {
-			subPath := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, subItem.UUID, subItem.OutputFile)
+			subPath := fmt.Sprintf("%s/%s/%s/%s", h.Config().FolderVideoQualitysPriv, dbLink.File.UUID, subItem.UUID, subItem.OutputFile)
 			if subContent, err := os.ReadFile(subPath); err == nil {
 				jsonSubtitles = append(jsonSubtitles, map[string]string{
 					"data": base64.StdEncoding.EncodeToString(subContent),
@@ -131,7 +128,7 @@ func PlayerController(c echo.Context) error {
 
 	// List webhooks
 	var webhooks []models.Webhook
-	if res := inits.DB.
+	if res := h.Deps.DB.
 		Where(&models.Webhook{
 			UserID: dbLink.UserID,
 		}).
@@ -155,17 +152,17 @@ func PlayerController(c echo.Context) error {
 	rawPlayerStatus, _ := json.Marshal(playerStatus)
 
 	var downloadsEnabled bool
-	if config.ENV.DownloadEnabled != nil {
-		downloadsEnabled = *config.ENV.DownloadEnabled
+	if h.Config().DownloadEnabled != nil {
+		downloadsEnabled = *h.Config().DownloadEnabled
 	}
 
 	var continueWatchingPopupEnabled bool
-	if config.ENV.ContinueWatchingPopupEnabled != nil {
-		continueWatchingPopupEnabled = *config.ENV.ContinueWatchingPopupEnabled
+	if h.Config().ContinueWatchingPopupEnabled != nil {
+		continueWatchingPopupEnabled = *h.Config().ContinueWatchingPopupEnabled
 	}
 
 	playerTemplate := "player_v2.html"
-	if config.ENV.PlayerV2Enabled != nil && !*config.ENV.PlayerV2Enabled {
+	if h.Config().PlayerV2Enabled != nil && !*h.Config().PlayerV2Enabled {
 		playerTemplate = "player.html"
 	}
 
@@ -179,9 +176,9 @@ func PlayerController(c echo.Context) error {
 	}
 
 	return c.Render(http.StatusOK, playerTemplate, echo.Map{
-		"Title":                        fmt.Sprintf("%s - %s", config.ENV.AppName, dbLink.Name),
-		"Description":                  fmt.Sprintf("Watch %s on %s", dbLink.Name, config.ENV.AppName),
-		"Thumbnail":                    logic.ResolvedThumbnailURL(*dbLink),
+		"Title":                        fmt.Sprintf("%s - %s", h.Config().AppName, dbLink.Name),
+		"Description":                  fmt.Sprintf("Watch %s on %s", dbLink.Name, h.Config().AppName),
+		"Thumbnail":                    h.Logic.ResolvedThumbnailURL(*dbLink),
 		"StreamUrl":                    template.HTML(streamUrl),
 		"StreamUrlWidth":               streamUrlWidth,
 		"StreamUrlHeight":              streamUrlHeight,
@@ -197,15 +194,15 @@ func PlayerController(c echo.Context) error {
 		"StreamIsReady":                playerStatus.Ready,
 		"PlayerStatus":                 string(rawPlayerStatus),
 		"UUID":                         requestValidation.UUID,
-		"Folder":                       config.ENV.FolderVideoQualitysPub,
-		"AppName":                      config.ENV.AppName,
-		"BaseUrl":                      config.ENV.BaseUrl,
+		"Folder":                       h.Config().FolderVideoQualitysPub,
+		"AppName":                      h.Config().AppName,
+		"BaseUrl":                      h.Config().BaseUrl,
 		"DownloadEnabled":              downloadsEnabled,
 		"ContinueWatchingPopupEnabled": continueWatchingPopupEnabled,
 	})
 }
 
-func PlayerStatusController(c echo.Context) error {
+func (h *Handlers) PlayerStatusController(c echo.Context) error {
 	type Request struct {
 		UUID string `validate:"required,uuid_rfc4122" param:"UUID"`
 	}
@@ -220,7 +217,7 @@ func PlayerStatusController(c echo.Context) error {
 		})
 	}
 
-	dbLink, err := loadPlayerLink(requestValidation.UUID)
+	dbLink, err := h.loadPlayerLink(requestValidation.UUID)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, PlayerStatusResponse{
 			UUID:    requestValidation.UUID,
@@ -231,7 +228,7 @@ func PlayerStatusController(c echo.Context) error {
 		})
 	}
 
-	if !playerCaptchaAllowed(c) {
+	if !h.playerCaptchaAllowed(c) {
 		return c.JSON(http.StatusForbidden, PlayerStatusResponse{
 			UUID:    dbLink.UUID,
 			Ready:   false,
@@ -244,9 +241,9 @@ func PlayerStatusController(c echo.Context) error {
 	return c.JSON(http.StatusOK, BuildPlayerStatus(dbLink))
 }
 
-func loadPlayerLink(uuid string) (*models.Link, error) {
+func (h *Handlers) loadPlayerLink(uuid string) (*models.Link, error) {
 	var dbLink models.Link
-	if res := inits.DB.
+	if res := h.Deps.DB.
 		Preload("File").
 		Preload("File.Qualitys").
 		Preload("File.Subtitles").
@@ -261,8 +258,8 @@ func loadPlayerLink(uuid string) (*models.Link, error) {
 	return &dbLink, nil
 }
 
-func playerCaptchaAllowed(c echo.Context) bool {
-	if config.ENV.CaptchaPlayerEnabled == nil || !*config.ENV.CaptchaPlayerEnabled {
+func (h *Handlers) playerCaptchaAllowed(c echo.Context) bool {
+	if h.Config().CaptchaPlayerEnabled == nil || !*h.Config().CaptchaPlayerEnabled {
 		return true
 	}
 
@@ -270,7 +267,7 @@ func playerCaptchaAllowed(c echo.Context) bool {
 	if err != nil {
 		return false
 	}
-	return auth.VerifyCaptchaJWT(cookie.Value, c.RealIP())
+	return h.Auth.VerifyCaptchaJWT(cookie.Value, c.RealIP())
 }
 
 func BuildPlayerStatus(dbLink *models.Link) PlayerStatusResponse {
@@ -447,8 +444,8 @@ func buildMediaClaims(dbLink *models.Link) auth.MediaClaims {
 	}
 }
 
-func mediaCookie(c echo.Context, linkUUID string, token string, expiration time.Time) *http.Cookie {
-	secure := requestIsHTTPS(c)
+func (h *Handlers) mediaCookie(c echo.Context, linkUUID string, token string, expiration time.Time) *http.Cookie {
+	secure := h.requestIsHTTPS(c)
 	sameSite := http.SameSiteLaxMode
 	if secure {
 		sameSite = http.SameSiteNoneMode
@@ -457,7 +454,7 @@ func mediaCookie(c echo.Context, linkUUID string, token string, expiration time.
 	return &http.Cookie{
 		Name:     auth.MediaCookieName,
 		Value:    token,
-		Path:     mediaCookiePath(linkUUID),
+		Path:     h.mediaCookiePath(linkUUID),
 		Expires:  expiration,
 		MaxAge:   int(auth.MediaTokenDuration.Seconds()),
 		HttpOnly: true,
@@ -466,12 +463,12 @@ func mediaCookie(c echo.Context, linkUUID string, token string, expiration time.
 	}
 }
 
-func mediaCookiePath(linkUUID string) string {
-	return strings.TrimRight(config.ENV.FolderVideoQualitysPub, "/") + "/" + linkUUID
+func (h *Handlers) mediaCookiePath(linkUUID string) string {
+	return strings.TrimRight(h.Config().FolderVideoQualitysPub, "/") + "/" + linkUUID
 }
 
-func requestIsHTTPS(c echo.Context) bool {
-	if strings.HasPrefix(strings.ToLower(config.ENV.BaseUrl), "https://") {
+func (h *Handlers) requestIsHTTPS(c echo.Context) bool {
+	if strings.HasPrefix(strings.ToLower(h.Config().BaseUrl), "https://") {
 		return true
 	}
 	req := c.Request()

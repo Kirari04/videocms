@@ -1,8 +1,6 @@
 package logic
 
 import (
-	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
@@ -10,7 +8,7 @@ import (
 	"regexp"
 )
 
-func GetAudioData(requestValidation *models.AudioGetValidation) (status int, filePath *string, userID uint, fileID uint, audioID uint, err error) {
+func (s *Service) GetAudioData(requestValidation *models.AudioGetValidation) (status int, filePath *string, userID uint, fileID uint, audioID uint, err error) {
 	reFILE := regexp.MustCompile(`^audio[0-9]{0,4}\.(m3u8|ts|wav|mp3|ogg)$`)
 
 	if !reFILE.MatchString(requestValidation.FILE) {
@@ -20,7 +18,7 @@ func GetAudioData(requestValidation *models.AudioGetValidation) (status int, fil
 	//translate link id to file id
 	var dbLink models.Link
 
-	if dbRes := inits.DB.
+	if dbRes := s.Deps.DB.
 		Model(&models.Link{}).
 		Preload("File").
 		Preload("File.Audios").
@@ -44,6 +42,6 @@ func GetAudioData(requestValidation *models.AudioGetValidation) (status int, fil
 		return http.StatusNotFound, nil, 0, 0, 0, errors.New("audio doesn't exist")
 	}
 
-	resPath := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, requestValidation.AUDIOUUID, requestValidation.FILE)
+	resPath := fmt.Sprintf("%s/%s/%s/%s", s.Config().FolderVideoQualitysPriv, dbLink.File.UUID, requestValidation.AUDIOUUID, requestValidation.FILE)
 	return http.StatusOK, &resPath, dbLink.UserID, dbLink.FileID, audioID, nil
 }

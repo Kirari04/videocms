@@ -1,9 +1,6 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/auth"
-	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/helpers"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -16,55 +13,55 @@ type CaptchaViewData struct {
 	Error       string
 }
 
-func GetCaptchaChallenge(c echo.Context) error {
+func (h *Handlers) GetCaptchaChallenge(c echo.Context) error {
 	uuid := c.QueryParam("uuid")
 	if uuid == "" {
 		return c.Redirect(http.StatusSeeOther, "/")
 	}
 
 	data := CaptchaViewData{
-		CaptchaType: config.ENV.CaptchaType,
+		CaptchaType: h.Config().CaptchaType,
 		UUID:        uuid,
 	}
 
-	switch config.ENV.CaptchaType {
+	switch h.Config().CaptchaType {
 	case "recaptcha":
-		data.CaptchaKey = config.ENV.Captcha_Recaptcha_PublicKey
+		data.CaptchaKey = h.Config().Captcha_Recaptcha_PublicKey
 	case "hcaptcha":
-		data.CaptchaKey = config.ENV.Captcha_Hcaptcha_PublicKey
+		data.CaptchaKey = h.Config().Captcha_Hcaptcha_PublicKey
 	case "turnstile":
-		data.CaptchaKey = config.ENV.Captcha_Turnstile_PublicKey
+		data.CaptchaKey = h.Config().Captcha_Turnstile_PublicKey
 	}
 
 	return c.Render(http.StatusOK, "captcha.html", data)
 }
 
-func VerifyCaptchaChallenge(c echo.Context) error {
+func (h *Handlers) VerifyCaptchaChallenge(c echo.Context) error {
 	uuid := c.FormValue("uuid")
 	if uuid == "" {
 		return c.Redirect(http.StatusSeeOther, "/")
 	}
 
-	valid, err := helpers.CaptchaValid(c)
+	valid, err := h.Auth.CaptchaValid(c)
 	if err != nil || !valid {
 		data := CaptchaViewData{
-			CaptchaType: config.ENV.CaptchaType,
+			CaptchaType: h.Config().CaptchaType,
 			UUID:        uuid,
 			Error:       "Captcha verification failed. Please try again.",
 		}
-		switch config.ENV.CaptchaType {
+		switch h.Config().CaptchaType {
 		case "recaptcha":
-			data.CaptchaKey = config.ENV.Captcha_Recaptcha_PublicKey
+			data.CaptchaKey = h.Config().Captcha_Recaptcha_PublicKey
 		case "hcaptcha":
-			data.CaptchaKey = config.ENV.Captcha_Hcaptcha_PublicKey
+			data.CaptchaKey = h.Config().Captcha_Hcaptcha_PublicKey
 		case "turnstile":
-			data.CaptchaKey = config.ENV.Captcha_Turnstile_PublicKey
+			data.CaptchaKey = h.Config().Captcha_Turnstile_PublicKey
 		}
 		return c.Render(http.StatusBadRequest, "captcha.html", data)
 	}
 
 	// Generate JWT
-	token, expiration, err := auth.GenerateCaptchaJWT(c.RealIP())
+	token, expiration, err := h.Auth.GenerateCaptchaJWT(c.RealIP())
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Failed to generate token")
 	}

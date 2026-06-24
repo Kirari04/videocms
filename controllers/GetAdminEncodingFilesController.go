@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"net/http"
 
@@ -17,12 +16,12 @@ type GetAdminEncodingFilesRes struct {
 	Username string  `json:"username"`
 }
 
-func GetAdminEncodingFiles(c echo.Context) error {
+func (h *Handlers) GetAdminEncodingFiles(c echo.Context) error {
 	var res []GetAdminEncodingFilesRes
 
 	// Qualities
 	var resQuality []GetAdminEncodingFilesRes
-	if err := inits.DB.
+	if err := h.Deps.DB.
 		Model(&models.Link{}).
 		Select(
 			"links.id as id",
@@ -43,7 +42,7 @@ func GetAdminEncodingFiles(c echo.Context) error {
 
 	// Audios
 	var resAudio []GetAdminEncodingFilesRes
-	if err := inits.DB.
+	if err := h.Deps.DB.
 		Model(&models.Link{}).
 		Select(
 			"links.id as id",
@@ -64,7 +63,7 @@ func GetAdminEncodingFiles(c echo.Context) error {
 
 	// Subtitles
 	var resSubtitle []GetAdminEncodingFilesRes
-	if err := inits.DB.
+	if err := h.Deps.DB.
 		Model(&models.Link{}).
 		Select(
 			"links.id as id",

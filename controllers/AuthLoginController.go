@@ -1,10 +1,7 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/auth"
-	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"fmt"
 	"log"
@@ -13,15 +10,15 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func AuthLogin(c echo.Context) error {
+func (h *Handlers) AuthLogin(c echo.Context) error {
 	var userValidation models.UserLoginValidation
 	if status, err := helpers.Validate(c, &userValidation); err != nil {
 		return c.String(status, err.Error())
 	}
 
 	// validate captcha
-	if *config.ENV.CaptchaLoginEnabled {
-		success, err := helpers.CaptchaValid(c)
+	if *h.Config().CaptchaLoginEnabled {
+		success, err := h.Auth.CaptchaValid(c)
 		if err != nil {
 			return c.String(http.StatusBadRequest, fmt.Sprint("Captcha error: ", err.Error()))
 		}
@@ -31,7 +28,7 @@ func AuthLogin(c echo.Context) error {
 	}
 
 	var user models.User
-	res := inits.DB.Model(&models.User{}).Where(&models.User{
+	res := h.Deps.DB.Model(&models.User{}).Where(&models.User{
 		Username: userValidation.Username,
 	}).First(&user)
 	if res.Error != nil {
@@ -42,7 +39,7 @@ func AuthLogin(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Wrong password")
 	}
 
-	tokenString, expirationTime, err := auth.GenerateJWT(user)
+	tokenString, expirationTime, err := h.Auth.GenerateJWT(user)
 	if err != nil {
 		log.Printf("Failed to generate jwt for user %s: %v\n", user.Username, err)
 		return c.NoContent(http.StatusInternalServerError)

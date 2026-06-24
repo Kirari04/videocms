@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"net/http"
 	"strconv"
@@ -10,7 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func CreateApiKey(c echo.Context) error {
+func (h *Handlers) CreateApiKey(c echo.Context) error {
 	isApiKey, _ := c.Get("IsApiKey").(bool)
 	if isApiKey {
 		return c.String(http.StatusForbidden, "API Key Not Permitted to Manage API Keys")
@@ -26,7 +25,7 @@ func CreateApiKey(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	status, apiKey, err := logic.GenerateApiKey(userID, req.Name, req.ExpiresAt)
+	status, apiKey, err := h.Logic.GenerateApiKey(userID, req.Name, req.ExpiresAt)
 	if err != nil {
 		return c.String(status, err.Error())
 	}
@@ -34,7 +33,7 @@ func CreateApiKey(c echo.Context) error {
 	return c.JSON(status, apiKey)
 }
 
-func ListApiKeys(c echo.Context) error {
+func (h *Handlers) ListApiKeys(c echo.Context) error {
 	isApiKey, _ := c.Get("IsApiKey").(bool)
 	if isApiKey {
 		return c.String(http.StatusForbidden, "API Key Not Permitted to Manage API Keys")
@@ -45,7 +44,7 @@ func ListApiKeys(c echo.Context) error {
 		return c.String(http.StatusInternalServerError, "Failed to catch UserID")
 	}
 
-	status, apiKeys, err := logic.ListApiKeys(userID)
+	status, apiKeys, err := h.Logic.ListApiKeys(userID)
 	if err != nil {
 		return c.String(status, err.Error())
 	}
@@ -53,7 +52,7 @@ func ListApiKeys(c echo.Context) error {
 	return c.JSON(status, apiKeys)
 }
 
-func DeleteApiKey(c echo.Context) error {
+func (h *Handlers) DeleteApiKey(c echo.Context) error {
 	isApiKey, _ := c.Get("IsApiKey").(bool)
 	if isApiKey {
 		return c.String(http.StatusForbidden, "API Key Not Permitted to Manage API Keys")
@@ -70,7 +69,7 @@ func DeleteApiKey(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid API Key ID")
 	}
 
-	status, err := logic.DeleteApiKey(userID, uint(keyID))
+	status, err := h.Logic.DeleteApiKey(userID, uint(keyID))
 	if err != nil {
 		return c.String(status, err.Error())
 	}
@@ -78,7 +77,7 @@ func DeleteApiKey(c echo.Context) error {
 	return c.NoContent(status)
 }
 
-func GetApiKeyAudit(c echo.Context) error {
+func (h *Handlers) GetApiKeyAudit(c echo.Context) error {
 	isApiKey, _ := c.Get("IsApiKey").(bool)
 	if isApiKey {
 		return c.String(http.StatusForbidden, "API Key Not Permitted to Manage API Keys")
@@ -95,7 +94,7 @@ func GetApiKeyAudit(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid API Key ID")
 	}
 
-	status, logs, err := logic.GetApiKeyAudit(userID, uint(keyID))
+	status, logs, err := h.Logic.GetApiKeyAudit(userID, uint(keyID))
 	if err != nil {
 		return c.String(status, err.Error())
 	}

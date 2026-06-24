@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/middlewares"
 	"ch/kirari04/videocms/models"
@@ -13,7 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func GetAudioData(c echo.Context) error {
+func (h *Handlers) GetAudioData(c echo.Context) error {
 	var requestValidation models.AudioGetValidation
 	if status, err := helpers.Validate(c, &requestValidation); err != nil {
 		return c.String(status, err.Error())
@@ -33,10 +32,10 @@ func GetAudioData(c echo.Context) error {
 		return c.String(http.StatusNotFound, "Audio doesn't exist")
 	}
 
-	filePath := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, claims.FileUUID, requestValidation.AUDIOUUID, requestValidation.FILE)
+	filePath := fmt.Sprintf("%s/%s/%s/%s", h.Config().FolderVideoQualitysPriv, claims.FileUUID, requestValidation.AUDIOUUID, requestValidation.FILE)
 	fileInfo, err := os.Stat(filePath)
 	if err == nil {
-		helpers.TrackTraffic(claims.UserID, claims.FileID, 0, audioID, uint64(fileInfo.Size()))
+		h.Logic.TrackTraffic(claims.UserID, claims.FileID, 0, audioID, uint64(fileInfo.Size()))
 	}
 
 	if err := c.File(filePath); err != nil {

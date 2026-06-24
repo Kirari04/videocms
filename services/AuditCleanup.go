@@ -1,26 +1,31 @@
 package services
 
 import (
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
+	"context"
 	"log"
 	"time"
 )
 
-func AuditCleanup() {
+func (w *WorkerGroup) AuditCleanup(ctx context.Context) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	for {
-		runAuditCleanup()
-		time.Sleep(time.Hour)
+		w.runAuditCleanup()
+		if !sleepContext(ctx, time.Hour) {
+			return
+		}
 	}
 }
 
 /*
 This function deletes audit logs older than 30 days
 */
-func runAuditCleanup() {
+func (w *WorkerGroup) runAuditCleanup() {
 	expiryDate := time.Now().AddDate(0, 0, -30)
-	
-	result := inits.DB.Unscoped().Where("created_at < ?", expiryDate).Delete(&models.ApiKeyAuditLog{})
+
+	result := w.deps.DB.Unscoped().Where("created_at < ?", expiryDate).Delete(&models.ApiKeyAuditLog{})
 	if result.Error != nil {
 		log.Printf("Failed to cleanup old audit logs: %v", result.Error)
 		return

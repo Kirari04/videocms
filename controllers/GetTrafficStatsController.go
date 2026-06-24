@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"net/http"
 	"time"
@@ -68,7 +67,7 @@ func parseTrafficStatsRequest(c echo.Context) (from time.Time, to time.Time, poi
 	return from, to, points, validatus, nil
 }
 
-func GetTrafficStats(c echo.Context) error {
+func (h *Handlers) GetTrafficStats(c echo.Context) error {
 
 	from, to, points, validatus, err := parseTrafficStatsRequest(c)
 
@@ -80,7 +79,7 @@ func GetTrafficStats(c echo.Context) error {
 
 	userID := c.Get("UserID").(uint)
 
-	stats, err := logic.GetTrafficStats(from, to, points, userID, validatus.FileID, validatus.QualityID)
+	stats, err := h.Logic.GetTrafficStats(from, to, points, userID, validatus.FileID, validatus.QualityID)
 
 	if err != nil {
 
@@ -91,13 +90,13 @@ func GetTrafficStats(c echo.Context) error {
 	return c.JSON(http.StatusOK, stats)
 }
 
-func GetAdminTrafficStats(c echo.Context) error {
+func (h *Handlers) GetAdminTrafficStats(c echo.Context) error {
 	from, to, points, validatus, err := parseTrafficStatsRequest(c)
 	if err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
 	}
 
-	stats, err := logic.GetTrafficStats(from, to, points, validatus.UserID, validatus.FileID, validatus.QualityID)
+	stats, err := h.Logic.GetTrafficStats(from, to, points, validatus.UserID, validatus.FileID, validatus.QualityID)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
@@ -105,7 +104,7 @@ func GetAdminTrafficStats(c echo.Context) error {
 	return c.JSON(http.StatusOK, stats)
 }
 
-func GetTopTrafficStats(c echo.Context) error {
+func (h *Handlers) GetTopTrafficStats(c echo.Context) error {
 	from, to, _, _, err := parseTrafficStatsRequest(c)
 	if err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
@@ -114,7 +113,7 @@ func GetTopTrafficStats(c echo.Context) error {
 	userID := c.Get("UserID").(uint)
 
 	limit := 10
-	results, err := logic.GetTopTraffic(from, to, userID, limit, "files")
+	results, err := h.Logic.GetTopTraffic(from, to, userID, limit, "files")
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
@@ -122,7 +121,7 @@ func GetTopTrafficStats(c echo.Context) error {
 	return c.JSON(http.StatusOK, results)
 }
 
-func GetAdminTopTrafficStats(c echo.Context) error {
+func (h *Handlers) GetAdminTopTrafficStats(c echo.Context) error {
 	from, to, _, validatus, err := parseTrafficStatsRequest(c)
 	if err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
@@ -134,7 +133,7 @@ func GetAdminTopTrafficStats(c echo.Context) error {
 	}
 
 	limit := 10
-	results, err := logic.GetTopTraffic(from, to, validatus.UserID, limit, mode)
+	results, err := h.Logic.GetTopTraffic(from, to, validatus.UserID, limit, mode)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}

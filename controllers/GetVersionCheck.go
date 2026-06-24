@@ -9,7 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func GetVersionCheck(c echo.Context) error {
+func (h *Handlers) GetVersionCheck(c echo.Context) error {
 
 	client := req.C()
 	res, err := client.R().

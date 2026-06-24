@@ -1,16 +1,22 @@
 package controllers
 
 import (
+	"ch/kirari04/videocms/app"
 	"ch/kirari04/videocms/auth"
 	"ch/kirari04/videocms/config"
+	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/middlewares"
+	"ch/kirari04/videocms/models"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 const testLinkUUID = "550e8400-e29b-41d4-a716-446655440000"
@@ -18,9 +24,8 @@ const testAudioUUID = "550e8400-e29b-41d4-a716-446655440001"
 const testSubtitleUUID = "550e8400-e29b-41d4-a716-446655440002"
 
 func TestGetVideoDataUsesMediaClaims(t *testing.T) {
-	restore := setPrivateMediaRoot(t.TempDir())
-	defer restore()
-	mustWriteEmptyFile(t, filepath.Join(config.ENV.FolderVideoQualitysPriv, "file-uuid", "720p", "out0.ts"))
+	h := mediaTestHandlers(t, t.TempDir(), true)
+	mustWriteEmptyFile(t, filepath.Join(h.Config().FolderVideoQualitysPriv, "file-uuid", "720p", "out0.ts"))
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/videos/qualitys/"+testLinkUUID+"/720p/out0.ts", nil)
@@ -36,7 +41,7 @@ func TestGetVideoDataUsesMediaClaims(t *testing.T) {
 		QualityIDs: map[string]uint{"720p": 3},
 	})
 
-	if err := GetVideoData(c); err != nil {
+	if err := h.GetVideoData(c); err != nil {
 		t.Fatalf("GetVideoData() error = %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -52,7 +57,8 @@ func TestGetVideoDataRejectsMissingMediaClaims(t *testing.T) {
 	c.SetParamNames("UUID", "QUALITY", "FILE")
 	c.SetParamValues(testLinkUUID, "720p", "out0.ts")
 
-	if err := GetVideoData(c); err != nil {
+	h := mediaTestHandlers(t, t.TempDir(), true)
+	if err := h.GetVideoData(c); err != nil {
 		t.Fatalf("GetVideoData() error = %v", err)
 	}
 	if rec.Code != http.StatusUnauthorized {
@@ -61,9 +67,8 @@ func TestGetVideoDataRejectsMissingMediaClaims(t *testing.T) {
 }
 
 func TestGetAudioDataUsesMediaClaims(t *testing.T) {
-	restore := setPrivateMediaRoot(t.TempDir())
-	defer restore()
-	mustWriteEmptyFile(t, filepath.Join(config.ENV.FolderVideoQualitysPriv, "file-uuid", testAudioUUID, "audio0.ts"))
+	h := mediaTestHandlers(t, t.TempDir(), true)
+	mustWriteEmptyFile(t, filepath.Join(h.Config().FolderVideoQualitysPriv, "file-uuid", testAudioUUID, "audio0.ts"))
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/videos/qualitys/"+testLinkUUID+"/"+testAudioUUID+"/audio/audio0.ts", nil)
@@ -79,7 +84,7 @@ func TestGetAudioDataUsesMediaClaims(t *testing.T) {
 		AudioIDs: map[string]uint{testAudioUUID: 4},
 	})
 
-	if err := GetAudioData(c); err != nil {
+	if err := h.GetAudioData(c); err != nil {
 		t.Fatalf("GetAudioData() error = %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -88,9 +93,8 @@ func TestGetAudioDataUsesMediaClaims(t *testing.T) {
 }
 
 func TestGetSubtitleDataUsesMediaClaims(t *testing.T) {
-	restore := setPrivateMediaRoot(t.TempDir())
-	defer restore()
-	mustWriteEmptyFile(t, filepath.Join(config.ENV.FolderVideoQualitysPriv, "file-uuid", testSubtitleUUID, "out.vtt"))
+	h := mediaTestHandlers(t, t.TempDir(), true)
+	mustWriteEmptyFile(t, filepath.Join(h.Config().FolderVideoQualitysPriv, "file-uuid", testSubtitleUUID, "out.vtt"))
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/videos/qualitys/"+testLinkUUID+"/"+testSubtitleUUID+"/subtitle/out.vtt", nil)
@@ -106,7 +110,7 @@ func TestGetSubtitleDataUsesMediaClaims(t *testing.T) {
 		SubtitleUUIDs: []string{testSubtitleUUID},
 	})
 
-	if err := GetSubtitleData(c); err != nil {
+	if err := h.GetSubtitleData(c); err != nil {
 		t.Fatalf("GetSubtitleData() error = %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -115,12 +119,7 @@ func TestGetSubtitleDataUsesMediaClaims(t *testing.T) {
 }
 
 func TestDownloadVideoHonorsDownloadEnabledBeforeDatabaseLookup(t *testing.T) {
-	previous := config.ENV.DownloadEnabled
-	disabled := false
-	config.ENV.DownloadEnabled = &disabled
-	defer func() {
-		config.ENV.DownloadEnabled = previous
-	}()
+	h := mediaTestHandlers(t, t.TempDir(), false)
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/videos/qualitys/"+testLinkUUID+"/720p/download/video.mkv", nil)
@@ -129,7 +128,7 @@ func TestDownloadVideoHonorsDownloadEnabledBeforeDatabaseLookup(t *testing.T) {
 	c.SetParamNames("UUID", "QUALITY")
 	c.SetParamValues(testLinkUUID, "720p")
 
-	if err := DownloadVideoController(c); err != nil {
+	if err := h.DownloadVideoController(c); err != nil {
 		t.Fatalf("DownloadVideoController() error = %v", err)
 	}
 	if rec.Code != http.StatusBadRequest {
@@ -137,12 +136,27 @@ func TestDownloadVideoHonorsDownloadEnabledBeforeDatabaseLookup(t *testing.T) {
 	}
 }
 
-func setPrivateMediaRoot(root string) func() {
-	previous := config.ENV.FolderVideoQualitysPriv
-	config.ENV.FolderVideoQualitysPriv = root
-	return func() {
-		config.ENV.FolderVideoQualitysPriv = previous
+func mediaTestHandlers(t *testing.T, root string, downloadEnabled bool) *Handlers {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
 	}
+	if err := db.AutoMigrate(&models.TrafficLog{}); err != nil {
+		t.Fatalf("migrate test db: %v", err)
+	}
+	deps := &app.Deps{
+		DB: db,
+		Snapshots: app.NewSnapshotStore(app.Snapshot{Config: config.Config{
+			FolderVideoQualitysPriv: root,
+			FolderVideoQualitysPub:  "/videos/qualitys",
+			DownloadEnabled:         &downloadEnabled,
+		}}),
+		RequestGate: app.NewRequestGate(),
+	}
+	logicSvc := logic.NewService(deps)
+	authSvc := auth.NewService(deps)
+	return NewHandlers(deps, authSvc, logicSvc, nil, nil)
 }
 
 func mustWriteEmptyFile(t *testing.T, path string) {

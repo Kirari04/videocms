@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"ch/kirari04/videocms/app"
 	"ch/kirari04/videocms/config"
 	"testing"
 	"time"
@@ -9,10 +10,9 @@ import (
 )
 
 func TestGenerateAndVerifyMediaToken(t *testing.T) {
-	restore := setMediaSecret("media-secret")
-	defer restore()
+	authSvc := newTestService("media-secret")
 
-	tokenString, expires, err := GenerateMediaToken(MediaClaims{
+	tokenString, expires, err := authSvc.GenerateMediaToken(MediaClaims{
 		LinkUUID:      "link-uuid",
 		FileUUID:      "file-uuid",
 		UserID:        1,
@@ -28,7 +28,7 @@ func TestGenerateAndVerifyMediaToken(t *testing.T) {
 		t.Fatal("GenerateMediaToken() returned an expired timestamp")
 	}
 
-	token, claims, err := VerifyMediaToken(tokenString)
+	token, claims, err := authSvc.VerifyMediaToken(tokenString)
 	if err != nil {
 		t.Fatalf("VerifyMediaToken() error = %v", err)
 	}
@@ -44,26 +44,23 @@ func TestGenerateAndVerifyMediaToken(t *testing.T) {
 }
 
 func TestVerifyMediaTokenRejectsWrongSecret(t *testing.T) {
-	restore := setMediaSecret("media-secret")
-	tokenString, _, err := GenerateMediaToken(MediaClaims{LinkUUID: "link-uuid", FileUUID: "file-uuid"})
-	restore()
+	authSvc := newTestService("media-secret")
+	tokenString, _, err := authSvc.GenerateMediaToken(MediaClaims{LinkUUID: "link-uuid", FileUUID: "file-uuid"})
 	if err != nil {
 		t.Fatalf("GenerateMediaToken() error = %v", err)
 	}
 
-	restore = setMediaSecret("different-secret")
-	defer restore()
+	otherAuthSvc := newTestService("different-secret")
 
-	if _, _, err := VerifyMediaToken(tokenString); err == nil {
+	if _, _, err := otherAuthSvc.VerifyMediaToken(tokenString); err == nil {
 		t.Fatal("VerifyMediaToken() accepted a token signed with a different secret")
 	}
 }
 
 func TestVerifyMediaTokenRejectsExpiredToken(t *testing.T) {
-	restore := setMediaSecret("media-secret")
-	defer restore()
+	authSvc := newTestService("media-secret")
 
-	tokenString := signMediaClaims(t, MediaClaims{
+	tokenString := signMediaClaims(t, "media-secret", MediaClaims{
 		LinkUUID: "link-uuid",
 		FileUUID: "file-uuid",
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -73,16 +70,15 @@ func TestVerifyMediaTokenRejectsExpiredToken(t *testing.T) {
 		},
 	})
 
-	if _, _, err := VerifyMediaToken(tokenString); err == nil {
+	if _, _, err := authSvc.VerifyMediaToken(tokenString); err == nil {
 		t.Fatal("VerifyMediaToken() accepted an expired token")
 	}
 }
 
 func TestVerifyMediaTokenRejectsWrongAudience(t *testing.T) {
-	restore := setMediaSecret("media-secret")
-	defer restore()
+	authSvc := newTestService("media-secret")
 
-	tokenString := signMediaClaims(t, MediaClaims{
+	tokenString := signMediaClaims(t, "media-secret", MediaClaims{
 		LinkUUID: "link-uuid",
 		FileUUID: "file-uuid",
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -92,16 +88,15 @@ func TestVerifyMediaTokenRejectsWrongAudience(t *testing.T) {
 		},
 	})
 
-	if _, _, err := VerifyMediaToken(tokenString); err == nil {
+	if _, _, err := authSvc.VerifyMediaToken(tokenString); err == nil {
 		t.Fatal("VerifyMediaToken() accepted a token with the wrong audience")
 	}
 }
 
 func TestVerifyMediaTokenRejectsSubjectMismatch(t *testing.T) {
-	restore := setMediaSecret("media-secret")
-	defer restore()
+	authSvc := newTestService("media-secret")
 
-	tokenString := signMediaClaims(t, MediaClaims{
+	tokenString := signMediaClaims(t, "media-secret", MediaClaims{
 		LinkUUID: "link-uuid",
 		FileUUID: "file-uuid",
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -111,23 +106,26 @@ func TestVerifyMediaTokenRejectsSubjectMismatch(t *testing.T) {
 		},
 	})
 
-	if _, _, err := VerifyMediaToken(tokenString); err == nil {
+	if _, _, err := authSvc.VerifyMediaToken(tokenString); err == nil {
 		t.Fatal("VerifyMediaToken() accepted mismatched subject and link UUID")
 	}
 }
 
-func setMediaSecret(secret string) func() {
-	previous := config.ENV.JwtMediaSecretKey
-	config.ENV.JwtMediaSecretKey = secret
-	return func() {
-		config.ENV.JwtMediaSecretKey = previous
-	}
+func newTestService(mediaSecret string) *Service {
+	return NewService(&app.Deps{
+		Snapshots: app.NewSnapshotStore(app.Snapshot{
+			Config: config.Config{
+				JwtSecretKey:      "jwt-secret",
+				JwtMediaSecretKey: mediaSecret,
+			},
+		}),
+	})
 }
 
-func signMediaClaims(t *testing.T, claims MediaClaims) string {
+func signMediaClaims(t *testing.T, secret string, claims MediaClaims) string {
 	t.Helper()
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(config.ENV.JwtMediaSecretKey))
+	tokenString, err := token.SignedString([]byte(secret))
 	if err != nil {
 		t.Fatalf("SignedString() error = %v", err)
 	}
