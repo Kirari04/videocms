@@ -2,19 +2,21 @@ package inits
 
 import (
 	"ch/kirari04/videocms/config"
+	"fmt"
 	"log"
 	"os"
 )
 
-func Folders() {
+func EnsureFolders(env config.Config) error {
 	// create folders
-	createFolders := []string{"./database", config.ENV.FolderVideoQualitysPriv, config.ENV.FolderVideoUploadsPriv, "./logs"}
+	createFolders := []string{"./database", env.FolderVideoQualitysPriv, env.FolderVideoUploadsPriv, "./logs"}
 	for _, createFolder := range createFolders {
 		if fileInfo, err := os.Stat(createFolder); err != nil || !fileInfo.IsDir() {
 			if err := os.MkdirAll(createFolder, 0766); err != nil {
-				log.Panicf("Failed to generate essential folder: %s", createFolder)
+				return fmt.Errorf("failed to generate essential folder %s: %w", createFolder, err)
 			}
 			log.Printf("Generated folder: %s\n", createFolder)
 		}
 	}
+	return nil
 }

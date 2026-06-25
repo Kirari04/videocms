@@ -1,36 +1,36 @@
 package routes
 
 import (
-	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/controllers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/middlewares"
 	"time"
 
+	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/time/rate"
 )
 
-func Web() {
-	inits.App.Static("/", "public/")
+func Web(app *echo.Echo, handlers *controllers.Handlers, middlewareFactory *middlewares.Factory) {
+	cfg := handlers.Config()
+	app.Static("/", "public/")
 
-	inits.App.GET("/captcha/challenge", controllers.GetCaptchaChallenge)
-	inits.App.POST("/captcha/verify", controllers.VerifyCaptchaChallenge)
+	app.GET("/captcha/challenge", handlers.GetCaptchaChallenge)
+	app.POST("/captcha/verify", handlers.VerifyCaptchaChallenge)
 
-	inits.App.GET("/v/:UUID", controllers.PlayerController,
-		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateWeb), config.ENV.RatelimitBurstWeb, time.Minute*5)))
-	inits.App.GET("/v/:UUID/status", controllers.PlayerStatusController,
-		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateWeb), config.ENV.RatelimitBurstWeb, time.Minute*5)))
+	app.GET("/v/:UUID", handlers.PlayerController,
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateWeb), cfg.RatelimitBurstWeb, time.Minute*5)))
+	app.GET("/v/:UUID/status", handlers.PlayerStatusController,
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateWeb), cfg.RatelimitBurstWeb, time.Minute*5)))
 
-	videoData := inits.App.Group(config.ENV.FolderVideoQualitysPub,
-		middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateWeb), config.ENV.RatelimitBurstWeb, time.Minute*5)))
-	videoData.GET("/:UUID/stream/muted/master.m3u8", controllers.GetM3u8Data, middlewares.MediaAuth())
-	videoData.GET("/:UUID/stream/multi/master.m3u8", controllers.GetM3u8DataMulti, middlewares.MediaAuth())
-	videoData.GET("/:UUID/image/thumb/:FILE", controllers.GetThumbnailData)
-	videoData.GET("/:UUID/:SUBUUID/subtitle/:FILE", controllers.GetSubtitleData, middlewares.MediaAuth())
-	videoData.GET("/:UUID/:AUDIOUUID/stream/master.m3u8", controllers.GetM3u8Data, middlewares.MediaAuth())
-	videoData.GET("/:UUID/:QUALITY/download/video.mkv", controllers.DownloadVideoController, middlewares.MediaAuth())
-	videoData.GET("/:UUID/:QUALITY/:STREAM/stream/video.mp4", controllers.DownloadVideoController, middlewares.MediaAuth())
-	videoData.GET("/:UUID/:QUALITY/:FILE", controllers.GetVideoData, middlewares.MediaAuth())
-	videoData.GET("/:UUID/:AUDIOUUID/audio/:FILE", controllers.GetAudioData, middlewares.MediaAuth())
+	videoData := app.Group(cfg.FolderVideoQualitysPub,
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateWeb), cfg.RatelimitBurstWeb, time.Minute*5)))
+	videoData.GET("/:UUID/stream/muted/master.m3u8", handlers.GetM3u8Data, middlewareFactory.MediaAuth())
+	videoData.GET("/:UUID/stream/multi/master.m3u8", handlers.GetM3u8DataMulti, middlewareFactory.MediaAuth())
+	videoData.GET("/:UUID/image/thumb/:FILE", handlers.GetThumbnailData)
+	videoData.GET("/:UUID/:SUBUUID/subtitle/:FILE", handlers.GetSubtitleData, middlewareFactory.MediaAuth())
+	videoData.GET("/:UUID/:AUDIOUUID/stream/master.m3u8", handlers.GetM3u8Data, middlewareFactory.MediaAuth())
+	videoData.GET("/:UUID/:QUALITY/download/video.mkv", handlers.DownloadVideoController, middlewareFactory.MediaAuth())
+	videoData.GET("/:UUID/:QUALITY/:STREAM/stream/video.mp4", handlers.DownloadVideoController, middlewareFactory.MediaAuth())
+	videoData.GET("/:UUID/:QUALITY/:FILE", handlers.GetVideoData, middlewareFactory.MediaAuth())
+	videoData.GET("/:UUID/:AUDIOUUID/audio/:FILE", handlers.GetAudioData, middlewareFactory.MediaAuth())
 }

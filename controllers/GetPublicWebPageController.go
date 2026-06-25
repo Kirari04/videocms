@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
 	"net/http"
@@ -11,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func GetPublicWebPage(c echo.Context) error {
+func (h *Handlers) GetPublicWebPage(c echo.Context) error {
 	// parse & validate request
 	var validatus models.WebPageGetValidation
 	if status, err := helpers.Validate(c, &validatus); err != nil {
@@ -19,7 +18,7 @@ func GetPublicWebPage(c echo.Context) error {
 	}
 
 	var webPage models.WebPage
-	if res := inits.DB.
+	if res := h.Deps.DB.
 		Where(&models.WebPage{
 			Path: validatus.Path,
 		}).

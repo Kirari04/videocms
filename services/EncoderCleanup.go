@@ -1,27 +1,31 @@
 package services
 
 import (
-	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
+	"context"
 	"log"
 	"os"
 	"time"
 )
 
-func EncoderCleanup() {
+func (w *WorkerGroup) EncoderCleanup(ctx context.Context) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	for {
-		runEncoderCleanup()
-		time.Sleep(time.Minute)
+		w.runEncoderCleanup()
+		if !sleepContext(ctx, time.Minute) {
+			return
+		}
 	}
 }
 
 /*
 This function deletes the originally uploaded file after all qualitys and subtitles were encoded
 */
-func runEncoderCleanup() {
+func (w *WorkerGroup) runEncoderCleanup() {
 	var dbReadyFiles []models.File
-	if res := inits.DB.
+	if res := w.deps.DB.
 		Preload("Qualitys").
 		Preload("Subtitles").
 		Preload("Audios").
@@ -35,7 +39,7 @@ func runEncoderCleanup() {
 
 	for _, dbReadyFile := range dbReadyFiles {
 		var qualityAmount int64
-		if res := inits.DB.
+		if res := w.deps.DB.
 			Model(&models.Quality{}).
 			Where(&models.Quality{
 				FileID: dbReadyFile.ID,
@@ -47,7 +51,7 @@ func runEncoderCleanup() {
 		}
 
 		var subtitleAmount int64
-		if res := inits.DB.
+		if res := w.deps.DB.
 			Model(&models.Subtitle{}).
 			Where(&models.Subtitle{
 				FileID: dbReadyFile.ID,
@@ -59,7 +63,7 @@ func runEncoderCleanup() {
 		}
 
 		var audioAmount int64
-		if res := inits.DB.
+		if res := w.deps.DB.
 			Model(&models.Audio{}).
 			Where(&models.Audio{
 				FileID: dbReadyFile.ID,
@@ -80,13 +84,13 @@ func runEncoderCleanup() {
 			}
 
 			// overwrite total filesize in file
-			newSize, err := helpers.DirSize(dbReadyFile.Folder)
+			newSize, err := dirSize(dbReadyFile.Folder)
 			if err != nil {
 				log.Printf("Failed to calc folder size after cleenup: %v", err)
 			}
 			dbReadyFile.Size = newSize
 			dbReadyFile.Path = ""
-			inits.DB.Save(&dbReadyFile)
+			w.deps.DB.Save(&dbReadyFile)
 		}
 	}
 }

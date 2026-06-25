@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
 	"net/http"
@@ -9,7 +8,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func GetSettings(c echo.Context) error {
+func (h *Handlers) GetSettings(c echo.Context) error {
 	_, ok := c.Get("UserID").(uint)
 	if !ok {
 		log.Println("Failed to catch user")
@@ -17,8 +16,8 @@ func GetSettings(c echo.Context) error {
 	}
 
 	var setting models.Setting
-	if res := inits.DB.FirstOrCreate(&setting); res.Error != nil {
-		log.Fatalln("Failed to get settings", res.Error)
+	if res := h.Deps.DB.FirstOrCreate(&setting); res.Error != nil {
+		log.Println("Failed to get settings", res.Error)
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	return c.JSON(http.StatusOK, &setting)

@@ -9,7 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func GetM3u8Data(c echo.Context) error {
+func (h *Handlers) GetM3u8Data(c echo.Context) error {
 	var requestValidation logic.GetM3u8DataRequest
 	var requestValidationMuted logic.GetM3u8DataRequestMuted
 	requestValidation.UUID = c.Param("UUID")
@@ -27,17 +27,17 @@ func GetM3u8Data(c echo.Context) error {
 		}
 	}
 
-	status, m3u8Str, userID, fileID, audioID, err := logic.GetM3u8Data(requestValidation.UUID, requestValidation.AUDIOUUID)
+	status, m3u8Str, userID, fileID, audioID, err := h.Logic.GetM3u8Data(requestValidation.UUID, requestValidation.AUDIOUUID)
 	if err != nil {
 		return c.String(status, err.Error())
 	}
 
-	helpers.TrackTraffic(userID, fileID, 0, audioID, uint64(len(*m3u8Str)))
+	h.Logic.TrackTraffic(userID, fileID, 0, audioID, uint64(len(*m3u8Str)))
 
 	return c.String(status, *m3u8Str)
 }
 
-func GetM3u8DataMulti(c echo.Context) error {
+func (h *Handlers) GetM3u8DataMulti(c echo.Context) error {
 	var requestValidationMuted logic.GetM3u8DataRequestMuted
 	requestValidationMuted.UUID = c.Param("UUID")
 
@@ -45,12 +45,12 @@ func GetM3u8DataMulti(c echo.Context) error {
 		return c.String(http.StatusBadRequest, fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
 	}
 
-	status, m3u8Str, userID, fileID, err := logic.GetM3u8DataMulti(requestValidationMuted.UUID)
+	status, m3u8Str, userID, fileID, err := h.Logic.GetM3u8DataMulti(requestValidationMuted.UUID)
 	if err != nil {
 		return c.String(status, err.Error())
 	}
 
-	helpers.TrackTraffic(userID, fileID, 0, 0, uint64(len(*m3u8Str)))
+	h.Logic.TrackTraffic(userID, fileID, 0, 0, uint64(len(*m3u8Str)))
 
 	return c.String(status, *m3u8Str)
 }

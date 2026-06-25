@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"ch/kirari04/videocms/config"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -14,9 +13,9 @@ type CaptchaClaims struct {
 
 var captchaSessionDuration = time.Minute * 20
 
-func GenerateCaptchaJWT(ip string) (string, time.Time, error) {
+func (s *Service) GenerateCaptchaJWT(ip string) (string, time.Time, error) {
 	expirationTime := time.Now().Add(captchaSessionDuration)
-	jwtKey := []byte(config.ENV.JwtSecretKey + "_captcha")
+	key := []byte(s.Config().JwtSecretKey + "_captcha")
 
 	claims := &CaptchaClaims{
 		IP: ip,
@@ -26,16 +25,16 @@ func GenerateCaptchaJWT(ip string) (string, time.Time, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(jwtKey)
+	tokenString, err := token.SignedString(key)
 	return tokenString, expirationTime, err
 }
 
-func VerifyCaptchaJWT(tokenString, ip string) bool {
-	jwtKey := []byte(config.ENV.JwtSecretKey + "_captcha")
+func (s *Service) VerifyCaptchaJWT(tokenString, ip string) bool {
+	key := []byte(s.Config().JwtSecretKey + "_captcha")
 	claims := &CaptchaClaims{}
 
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return jwtKey, nil
+		return key, nil
 	})
 
 	if err != nil || !token.Valid {

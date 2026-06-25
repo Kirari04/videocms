@@ -1,13 +1,11 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/logic"
-
 	"github.com/labstack/echo/v4"
 )
 
-func GetFileExample(c echo.Context) error {
-	status, response, err := logic.GetFileExample()
+func (h *Handlers) GetFileExample(c echo.Context) error {
+	status, response, err := h.Logic.GetFileExample()
 	if err != nil {
 		return c.String(status, err.Error())
 	}

@@ -2,7 +2,6 @@ package logic
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
 	"net/http"
@@ -17,10 +16,10 @@ type GetM3u8DataRequestMuted struct {
 	UUID string `validate:"required,uuid_rfc4122"`
 }
 
-func GetM3u8Data(UUID string, AUDIOUUID string) (status int, m3u8Str *string, userID uint, fileID uint, audioID uint, err error) {
+func (s *Service) GetM3u8Data(UUID string, AUDIOUUID string) (status int, m3u8Str *string, userID uint, fileID uint, audioID uint, err error) {
 	//translate link id to file id
 	var dbLink models.Link
-	if dbRes := inits.DB.
+	if dbRes := s.Deps.DB.
 		Model(&models.Link{}).
 		Preload("File").
 		Preload("File.Qualitys").
@@ -45,14 +44,14 @@ func GetM3u8Data(UUID string, AUDIOUUID string) (status int, m3u8Str *string, us
 			}
 		}
 	}
-	m3u8Response := helpers.GenM3u8Stream(&dbLink, &dbLink.File.Qualitys, dbAudioPtr)
+	m3u8Response := helpers.GenM3u8Stream(s.Config().FolderVideoQualitysPub, &dbLink, &dbLink.File.Qualitys, dbAudioPtr)
 	return http.StatusOK, &m3u8Response, dbLink.UserID, dbLink.FileID, audioID, nil
 }
 
-func GetM3u8DataMulti(UUID string) (status int, m3u8Str *string, userID uint, fileID uint, err error) {
+func (s *Service) GetM3u8DataMulti(UUID string) (status int, m3u8Str *string, userID uint, fileID uint, err error) {
 	//translate link id to file id
 	var dbLink models.Link
-	if dbRes := inits.DB.
+	if dbRes := s.Deps.DB.
 		Model(&models.Link{}).
 		Preload("File").
 		Preload("File.Qualitys").
@@ -64,6 +63,6 @@ func GetM3u8DataMulti(UUID string) (status int, m3u8Str *string, userID uint, fi
 		return http.StatusNotFound, nil, 0, 0, errors.New("link doesn't exist")
 	}
 
-	m3u8Response := helpers.GenM3u8StreamMulti(&dbLink, &dbLink.File.Qualitys, &dbLink.File.Audios)
+	m3u8Response := helpers.GenM3u8StreamMulti(s.Config().FolderVideoQualitysPub, &dbLink, &dbLink.File.Qualitys, &dbLink.File.Audios)
 	return http.StatusOK, &m3u8Response, dbLink.UserID, dbLink.FileID, nil
 }

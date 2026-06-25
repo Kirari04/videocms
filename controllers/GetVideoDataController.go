@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/middlewares"
 	"fmt"
@@ -12,7 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func GetVideoData(c echo.Context) error {
+func (h *Handlers) GetVideoData(c echo.Context) error {
 	type Request struct {
 		UUID    string `validate:"required,uuid_rfc4122" param:"UUID"`
 		QUALITY string `validate:"required,min=1,max=10" param:"QUALITY"`
@@ -41,10 +40,10 @@ func GetVideoData(c echo.Context) error {
 		return c.String(http.StatusNotFound, "Video doesn't exist")
 	}
 
-	filePath := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, claims.FileUUID, requestValidation.QUALITY, requestValidation.FILE)
+	filePath := fmt.Sprintf("%s/%s/%s/%s", h.Config().FolderVideoQualitysPriv, claims.FileUUID, requestValidation.QUALITY, requestValidation.FILE)
 	fileInfo, err := os.Stat(filePath)
 	if err == nil {
-		helpers.TrackTraffic(claims.UserID, claims.FileID, qualityID, 0, uint64(fileInfo.Size()))
+		h.Logic.TrackTraffic(claims.UserID, claims.FileID, qualityID, 0, uint64(fileInfo.Size()))
 	}
 
 	if err := c.File(filePath); err != nil {

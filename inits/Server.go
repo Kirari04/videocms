@@ -22,9 +22,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-var App *echo.Echo
-var Api echo.Group
-
 type Template struct {
 	templates *template.Template
 }
@@ -113,25 +110,25 @@ func fetchKeyCDNIPs() []string {
 	return ips
 }
 
-func Server() {
+func BuildServer(env config.Config, middlewareFactory *middlewares.Factory) *echo.Echo {
 	htmlTemplate := &Template{
 		templates: template.Must(template.ParseGlob("views/*.html")),
 	}
 	trustedProxies := []string{}
-	if *config.ENV.CloudflareEnabled {
+	if *env.CloudflareEnabled {
 		trustedProxies = append(trustedProxies, fetchCloudflareIPs()...)
 	}
-	if *config.ENV.BunnyCDNEnabled {
+	if *env.BunnyCDNEnabled {
 		trustedProxies = append(trustedProxies, fetchBunnyCDNIPs()...)
 	}
-	if *config.ENV.FastlyEnabled {
+	if *env.FastlyEnabled {
 		trustedProxies = append(trustedProxies, fetchFastlyIPs()...)
 	}
-	if *config.ENV.KeyCDNEnabled {
+	if *env.KeyCDNEnabled {
 		trustedProxies = append(trustedProxies, fetchKeyCDNIPs()...)
 	}
-	if config.ENV.TrustedProxies != "" {
-		manualProxies := strings.Split(config.ENV.TrustedProxies, ",")
+	if env.TrustedProxies != "" {
+		manualProxies := strings.Split(env.TrustedProxies, ",")
 		for _, proxy := range manualProxies {
 			trimmed := strings.TrimSpace(proxy)
 			if trimmed != "" {
@@ -143,9 +140,9 @@ func Server() {
 	app.Renderer = htmlTemplate
 
 	// global rate limiter
-	app.Use(middleware.RateLimiterWithConfig(*middlewares.LimiterConfig(rate.Limit(config.ENV.RatelimitRateGlobal), config.ENV.RatelimitBurstGlobal, time.Minute*5)))
+	app.Use(middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(env.RatelimitRateGlobal), env.RatelimitBurstGlobal, time.Minute*5)))
 
-	trustLocal := *config.ENV.TrustLocalTraffic
+	trustLocal := *env.TrustLocalTraffic
 	trustOptions := []echo.TrustOption{
 		echo.TrustLoopback(trustLocal),   // e.g. ipv4 start with 127.
 		echo.TrustLinkLocal(trustLocal),  // e.g. ipv4 start with 169.254
@@ -176,9 +173,9 @@ func Server() {
 		if code == 404 {
 			// the backend has 2 types of websites.
 			// one is /v/<UUID> containing the player
-			// one is config.ENV.FolderVideoQualitysPub containing the video data
+			// one is env.FolderVideoQualitysPub containing the video data
 			// in case its one of thiose and still 404 we render the backend 404 page
-			if strings.HasPrefix(c.Path(), config.ENV.FolderVideoQualitysPub) || strings.HasPrefix(c.Path(), "/v/") {
+			if strings.HasPrefix(c.Path(), env.FolderVideoQualitysPub) || strings.HasPrefix(c.Path(), "/v/") {
 				if err := c.Render(code, "404.html", echo.Map{}); err != nil {
 					c.Logger().Error(err)
 				}
@@ -200,7 +197,7 @@ func Server() {
 	app.Use(middleware.Recover())
 
 	// body limit
-	postMaxSize := int64(float64(config.ENV.MaxPostSize) / 1024)
+	postMaxSize := int64(float64(env.MaxPostSize) / 1024)
 	app.Use(middleware.BodyLimitWithConfig(middleware.BodyLimitConfig{
 		Limit: fmt.Sprintf("%dk", postMaxSize),
 		Skipper: func(c echo.Context) bool {
@@ -212,7 +209,7 @@ func Server() {
 	// Compression middleware
 	app.Use(middleware.GzipWithConfig(middleware.GzipConfig{
 		Skipper: func(c echo.Context) bool {
-			res := strings.HasPrefix(c.Path(), config.ENV.FolderVideoQualitysPub)
+			res := strings.HasPrefix(c.Path(), env.FolderVideoQualitysPub)
 			if res {
 				c.Response().Header().Add("Compress", "LevelDisabled")
 			} else {
@@ -224,19 +221,18 @@ func Server() {
 
 	// cors configuration
 	app.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{config.ENV.CorsAllowOrigins},
+		AllowOrigins:     []string{env.CorsAllowOrigins},
 		AllowMethods:     []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-		AllowHeaders:     append([]string{config.ENV.CorsAllowHeaders}, tusCorsHeaders()...),
+		AllowHeaders:     append([]string{env.CorsAllowHeaders}, tusCorsHeaders()...),
 		ExposeHeaders:    tusCorsExposeHeaders(),
-		AllowCredentials: *config.ENV.CorsAllowCredentials,
+		AllowCredentials: *env.CorsAllowCredentials,
 		MaxAge:           7200,
 	}))
 
 	// Logging
 	app.Use(middleware.RequestLogger())
 
-	App = app
-	Api = *app.Group("/api")
+	return app
 }
 
 func tusCorsHeaders() []string {
@@ -267,15 +263,15 @@ func tusCorsExposeHeaders() []string {
 	}
 }
 
-func ServerStart() {
+func ServerStartFor(app *echo.Echo, host string) {
 	// Start server
 	go func() {
-		if err := App.StartH2CServer(config.ENV.Host, &http2.Server{
+		if err := app.StartH2CServer(host, &http2.Server{
 			MaxConcurrentStreams: uint32(runtime.NumGoroutine()),
 			MaxReadFrameSize:     1048576,
 			IdleTimeout:          10 * time.Second,
 		}); err != nil && err != http.ErrServerClosed {
-			App.Logger.Fatal("shutting down the server", err)
+			app.Logger.Fatal("shutting down the server", err)
 		}
 	}()
 
@@ -286,7 +282,7 @@ func ServerStart() {
 	<-quit
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := App.Shutdown(ctx); err != nil {
-		App.Logger.Fatal(err)
+	if err := app.Shutdown(ctx); err != nil {
+		app.Logger.Fatal(err)
 	}
 }

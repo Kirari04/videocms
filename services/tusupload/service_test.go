@@ -17,12 +17,11 @@ import (
 	"testing"
 	"time"
 
-	"ch/kirari04/videocms/auth"
+	"ch/kirari04/videocms/app"
 	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/inits"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	tusd "github.com/tus/tusd/v2/pkg/handler"
 	"gorm.io/driver/sqlite"
@@ -31,6 +30,8 @@ import (
 )
 
 type tusTestEnv struct {
+	deps  *app.Deps
+	svc   *Service
 	db    *gorm.DB
 	user  models.User
 	token string
@@ -39,13 +40,6 @@ type tusTestEnv struct {
 
 func setupTusTest(t *testing.T) tusTestEnv {
 	t.Helper()
-
-	oldDB := inits.DB
-	oldENV := config.ENV
-	serverMu.Lock()
-	oldServer := server
-	server = nil
-	serverMu.Unlock()
 
 	root := t.TempDir()
 	uploads := filepath.Join(root, "uploads")
@@ -58,7 +52,7 @@ func setupTusTest(t *testing.T) tusTestEnv {
 	}
 
 	uploadEnabled := true
-	config.ENV = config.Config{
+	cfg := config.Config{
 		JwtSecretKey:                 "test-jwt-secret",
 		JwtMediaSecretKey:            "test-media-secret",
 		UploadEnabled:                &uploadEnabled,
@@ -79,7 +73,7 @@ func setupTusTest(t *testing.T) tusTestEnv {
 		CorsAllowCredentials:         &uploadEnabled,
 	}
 
-	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{
+	db, err := gorm.Open(sqlite.Open(filepath.Join(root, "test.db")), &gorm.Config{
 		Logger:                                   logger.Default.LogMode(logger.Silent),
 		DisableForeignKeyConstraintWhenMigrating: true,
 		IgnoreRelationshipsWhenMigrating:         true,
@@ -87,7 +81,11 @@ func setupTusTest(t *testing.T) tusTestEnv {
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
-	inits.DB = db
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("open sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
 
 	if err := db.AutoMigrate(
 		&models.User{},
@@ -113,20 +111,22 @@ func setupTusTest(t *testing.T) tusTestEnv {
 	if err := db.Create(&user).Error; err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	token, _, err := auth.GenerateJWT(user)
-	if err != nil {
-		t.Fatalf("generate jwt: %v", err)
+
+	deps := &app.Deps{
+		DB:        db,
+		Snapshots: app.NewSnapshotStore(app.Snapshot{Config: cfg}),
 	}
+	svc := NewService(deps, nil)
+	token := testJWT(t, user, cfg.JwtSecretKey)
 
 	t.Cleanup(func() {
-		serverMu.Lock()
-		server = oldServer
-		serverMu.Unlock()
-		inits.DB = oldDB
-		config.ENV = oldENV
+		svc.Close()
+		_ = sqlDB.Close()
 	})
 
 	return tusTestEnv{
+		deps:  deps,
+		svc:   svc,
 		db:    db,
 		user:  user,
 		token: token,
@@ -134,12 +134,35 @@ func setupTusTest(t *testing.T) tusTestEnv {
 	}
 }
 
-func TestTusCreateRequiresAuthentication(t *testing.T) {
-	setupTusTest(t)
-	srv, err := GetServer()
+func (env tusTestEnv) updateConfig(update func(*config.Config)) {
+	snapshot := env.deps.Snapshots.Current()
+	update(&snapshot.Config)
+	env.deps.Snapshots.Replace(snapshot)
+}
+
+func (env tusTestEnv) config() config.Config {
+	return env.deps.Config()
+}
+
+func testJWT(t *testing.T, user models.User, secret string) string {
+	t.Helper()
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &tusClaims{
+		UserID:   user.ID,
+		Username: user.Username,
+		Admin:    user.Admin,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		},
+	})
+	tokenString, err := token.SignedString([]byte(secret))
 	if err != nil {
-		t.Fatalf("get server: %v", err)
+		t.Fatalf("sign jwt: %v", err)
 	}
+	return tokenString
+}
+
+func TestTusCreateRequiresAuthentication(t *testing.T) {
+	env := setupTusTest(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/uploads", nil)
 	req.Header.Set("Tus-Resumable", "1.0.0")
@@ -147,7 +170,7 @@ func TestTusCreateRequiresAuthentication(t *testing.T) {
 	req.Header.Set("Upload-Metadata", tusMetadata(map[string]string{"filename": "movie.mp4"}))
 	rec := httptest.NewRecorder()
 
-	srv.ServeHTTP(rec, req)
+	env.svc.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", rec.Code, rec.Body.String())
@@ -156,10 +179,12 @@ func TestTusCreateRequiresAuthentication(t *testing.T) {
 
 func TestTusCreateRejectsDisabledUploads(t *testing.T) {
 	env := setupTusTest(t)
-	disabled := false
-	config.ENV.UploadEnabled = &disabled
+	env.updateConfig(func(cfg *config.Config) {
+		disabled := false
+		cfg.UploadEnabled = &disabled
+	})
 
-	rec := createTusUploadRequest(t, env.token, 10, map[string]string{"filename": "movie.mp4"})
+	rec := createTusUploadRequest(t, env, 10, map[string]string{"filename": "movie.mp4"})
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", rec.Code, rec.Body.String())
@@ -168,9 +193,11 @@ func TestTusCreateRejectsDisabledUploads(t *testing.T) {
 
 func TestTusCreateRejectsOversizedUploads(t *testing.T) {
 	env := setupTusTest(t)
-	config.ENV.MaxUploadFilesize = 4
+	env.updateConfig(func(cfg *config.Config) {
+		cfg.MaxUploadFilesize = 4
+	})
 
-	rec := createTusUploadRequest(t, env.token, 5, map[string]string{"filename": "movie.mp4"})
+	rec := createTusUploadRequest(t, env, 5, map[string]string{"filename": "movie.mp4"})
 
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("expected 413, got %d: %s", rec.Code, rec.Body.String())
@@ -179,13 +206,17 @@ func TestTusCreateRejectsOversizedUploads(t *testing.T) {
 
 func TestTusCreateUsesUpdatedMaxUploadFilesize(t *testing.T) {
 	env := setupTusTest(t)
-	config.ENV.MaxUploadFilesize = 4
-	if _, err := GetServer(); err != nil {
+	env.updateConfig(func(cfg *config.Config) {
+		cfg.MaxUploadFilesize = 4
+	})
+	if err := env.svc.ensureHandler(); err != nil {
 		t.Fatalf("get server: %v", err)
 	}
 
-	config.ENV.MaxUploadFilesize = 10
-	rec := createTusUploadRequest(t, env.token, 8, map[string]string{"filename": "movie.mp4"})
+	env.updateConfig(func(cfg *config.Config) {
+		cfg.MaxUploadFilesize = 10
+	})
+	rec := createTusUploadRequest(t, env, 8, map[string]string{"filename": "movie.mp4"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 after increasing max upload size, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -200,11 +231,7 @@ func TestTusCreateUsesUpdatedMaxUploadFilesize(t *testing.T) {
 
 	options := httptest.NewRequest(http.MethodOptions, "/api/uploads", nil)
 	optionsRec := httptest.NewRecorder()
-	srv, err := GetServer()
-	if err != nil {
-		t.Fatalf("get server: %v", err)
-	}
-	srv.ServeHTTP(optionsRec, options)
+	env.svc.ServeHTTP(optionsRec, options)
 	if optionsRec.Code != http.StatusNoContent && optionsRec.Code != http.StatusOK {
 		t.Fatalf("expected OPTIONS 204 or 200, got %d: %s", optionsRec.Code, optionsRec.Body.String())
 	}
@@ -214,12 +241,10 @@ func TestTusCreateUsesUpdatedMaxUploadFilesize(t *testing.T) {
 }
 
 func TestRewriteTusUploadURLUsesForwardedHTTPS(t *testing.T) {
-	setupTusTest(t)
-
 	req := httptest.NewRequest(http.MethodPost, "http://videocms.senpai.one/api/uploads", nil)
 	req.Header.Set("X-Forwarded-Proto", "https,http")
 
-	got := rewriteTusUploadURL(req, "http://videocms.senpai.one/api/uploads/upload-id")
+	got := rewriteTusUploadURLWithBaseURL(req, "http://videocms.senpai.one/api/uploads/upload-id", "")
 	want := "https://videocms.senpai.one/api/uploads/upload-id"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
@@ -227,12 +252,9 @@ func TestRewriteTusUploadURLUsesForwardedHTTPS(t *testing.T) {
 }
 
 func TestRewriteTusUploadURLUsesBaseURLForInternalHost(t *testing.T) {
-	setupTusTest(t)
-	config.ENV.BaseUrl = "https://videocms.senpai.one"
-
 	req := httptest.NewRequest(http.MethodPost, "http://videocms:3000/api/uploads", nil)
 
-	got := rewriteTusUploadURL(req, "http://videocms:3000/api/uploads/upload-id")
+	got := rewriteTusUploadURLWithBaseURL(req, "http://videocms:3000/api/uploads/upload-id", "https://videocms.senpai.one")
 	want := "https://videocms.senpai.one/api/uploads/upload-id"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
@@ -240,25 +262,21 @@ func TestRewriteTusUploadURLUsesBaseURLForInternalHost(t *testing.T) {
 }
 
 func TestRewriteTusUploadURLLeavesNonUploadLocationUnchanged(t *testing.T) {
-	setupTusTest(t)
-
 	req := httptest.NewRequest(http.MethodPost, "http://videocms.senpai.one/api/uploads", nil)
 	req.Header.Set("X-Forwarded-Proto", "https")
 
 	location := "http://videocms.senpai.one/api/other/upload-id"
-	if got := rewriteTusUploadURL(req, location); got != location {
+	if got := rewriteTusUploadURLWithBaseURL(req, location, ""); got != location {
 		t.Fatalf("expected non-upload location to remain %q, got %q", location, got)
 	}
 }
 
 func TestRewriteTusUploadURLIgnoresForwardedHost(t *testing.T) {
-	setupTusTest(t)
-
 	req := httptest.NewRequest(http.MethodPost, "http://videocms.senpai.one/api/uploads", nil)
 	req.Header.Set("X-Forwarded-Proto", "https")
 	req.Header.Set("X-Forwarded-Host", "evil.example")
 
-	got := rewriteTusUploadURL(req, "http://videocms.senpai.one/api/uploads/upload-id")
+	got := rewriteTusUploadURLWithBaseURL(req, "http://videocms.senpai.one/api/uploads/upload-id", "")
 	want := "https://videocms.senpai.one/api/uploads/upload-id"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
@@ -266,12 +284,10 @@ func TestRewriteTusUploadURLIgnoresForwardedHost(t *testing.T) {
 }
 
 func TestRewriteTusUploadConcatHeader(t *testing.T) {
-	setupTusTest(t)
-
 	req := httptest.NewRequest(http.MethodHead, "http://videocms.senpai.one/api/uploads/final-id", nil)
 	req.Header.Set("X-Forwarded-Proto", "https")
 
-	got := rewriteTusUploadConcatHeader(req, "final;http://videocms.senpai.one/api/uploads/one http://videocms.senpai.one/api/uploads/two")
+	got := rewriteTusUploadConcatHeaderWithBaseURL(req, "final;http://videocms.senpai.one/api/uploads/one http://videocms.senpai.one/api/uploads/two", "")
 	want := "final;https://videocms.senpai.one/api/uploads/one https://videocms.senpai.one/api/uploads/two"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
@@ -280,10 +296,6 @@ func TestRewriteTusUploadConcatHeader(t *testing.T) {
 
 func TestTusCreateLocationUsesForwardedHTTPS(t *testing.T) {
 	env := setupTusTest(t)
-	srv, err := GetServer()
-	if err != nil {
-		t.Fatalf("get server: %v", err)
-	}
 
 	req := httptest.NewRequest(http.MethodPost, "http://videocms.senpai.one/api/uploads", nil)
 	setTusAuthHeaders(req, env.token)
@@ -291,7 +303,7 @@ func TestTusCreateLocationUsesForwardedHTTPS(t *testing.T) {
 	req.Header.Set("Upload-Length", "10")
 	req.Header.Set("Upload-Metadata", tusMetadata(map[string]string{"filename": "movie.mp4"}))
 	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	env.svc.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
@@ -305,18 +317,16 @@ func TestTusCreateLocationUsesForwardedHTTPS(t *testing.T) {
 
 func TestTusCreateLocationUsesBaseURLForInternalHost(t *testing.T) {
 	env := setupTusTest(t)
-	config.ENV.BaseUrl = "https://videocms.senpai.one"
-	srv, err := GetServer()
-	if err != nil {
-		t.Fatalf("get server: %v", err)
-	}
+	env.updateConfig(func(cfg *config.Config) {
+		cfg.BaseUrl = "https://videocms.senpai.one"
+	})
 
 	req := httptest.NewRequest(http.MethodPost, "http://videocms:3000/api/uploads", nil)
 	setTusAuthHeaders(req, env.token)
 	req.Header.Set("Upload-Length", "10")
 	req.Header.Set("Upload-Metadata", tusMetadata(map[string]string{"filename": "movie.mp4"}))
 	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	env.svc.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
@@ -331,7 +341,7 @@ func TestTusCreateLocationUsesBaseURLForInternalHost(t *testing.T) {
 func TestTusCreateRejectsInvalidParentFolder(t *testing.T) {
 	env := setupTusTest(t)
 
-	rec := createTusUploadRequest(t, env.token, 10, map[string]string{
+	rec := createTusUploadRequest(t, env, 10, map[string]string{
 		"filename":         "movie.mp4",
 		"parent_folder_id": "999",
 	})
@@ -375,7 +385,7 @@ func TestPreUploadCreateFinalConcatenationUsesZeroQuotaAndRecordsParts(t *testin
 	}
 
 	ctx := context.WithValue(context.Background(), userIDContextKey, env.user.ID)
-	_, changes, err := preUploadCreate(tusd.HookEvent{
+	_, changes, err := env.svc.preUploadCreate(tusd.HookEvent{
 		Context: ctx,
 		Upload: tusd.FileInfo{
 			Size:           12,
@@ -419,10 +429,6 @@ func TestPreUploadCreateFinalConcatenationUsesZeroQuotaAndRecordsParts(t *testin
 
 func TestTusHTTPFinalConcatenationRecordsParts(t *testing.T) {
 	env := setupTusTest(t)
-	srv, err := GetServer()
-	if err != nil {
-		t.Fatalf("get server: %v", err)
-	}
 
 	clientUploadUUID := uuid.NewString()
 	payloads := [][]byte{[]byte("hello"), []byte("world!!")}
@@ -438,7 +444,7 @@ func TestTusHTTPFinalConcatenationRecordsParts(t *testing.T) {
 			"client_upload_uuid": clientUploadUUID,
 		}))
 		createRec := httptest.NewRecorder()
-		srv.ServeHTTP(createRec, create)
+		env.svc.ServeHTTP(createRec, create)
 		if createRec.Code != http.StatusCreated {
 			t.Fatalf("expected partial create 201, got %d: %s", createRec.Code, createRec.Body.String())
 		}
@@ -455,7 +461,7 @@ func TestTusHTTPFinalConcatenationRecordsParts(t *testing.T) {
 		patch.Header.Set("Upload-Offset", "0")
 		patch.ContentLength = int64(len(payload))
 		patchRec := httptest.NewRecorder()
-		srv.ServeHTTP(patchRec, patch)
+		env.svc.ServeHTTP(patchRec, patch)
 		if patchRec.Code != http.StatusNoContent {
 			t.Fatalf("expected partial PATCH 204, got %d: %s", patchRec.Code, patchRec.Body.String())
 		}
@@ -469,7 +475,7 @@ func TestTusHTTPFinalConcatenationRecordsParts(t *testing.T) {
 		"client_upload_uuid": clientUploadUUID,
 	}))
 	finalRec := httptest.NewRecorder()
-	srv.ServeHTTP(finalRec, finalCreate)
+	env.svc.ServeHTTP(finalRec, finalCreate)
 	if finalRec.Code != http.StatusCreated {
 		t.Fatalf("expected final create 201, got %d: %s", finalRec.Code, finalRec.Body.String())
 	}
@@ -508,7 +514,9 @@ func TestTusHTTPFinalConcatenationRecordsParts(t *testing.T) {
 
 func TestPreUploadCreateRejectsPartialGroupOverMaxFileSize(t *testing.T) {
 	env := setupTusTest(t)
-	config.ENV.MaxUploadFilesize = 10
+	env.updateConfig(func(cfg *config.Config) {
+		cfg.MaxUploadFilesize = 10
+	})
 	clientUploadUUID := uuid.NewString()
 	existingPartial := models.UploadSession{
 		UUID:             uuid.NewString(),
@@ -527,7 +535,7 @@ func TestPreUploadCreateRejectsPartialGroupOverMaxFileSize(t *testing.T) {
 	}
 
 	ctx := context.WithValue(context.Background(), userIDContextKey, env.user.ID)
-	_, _, err := preUploadCreate(tusd.HookEvent{
+	_, _, err := env.svc.preUploadCreate(tusd.HookEvent{
 		Context: ctx,
 		Upload: tusd.FileInfo{
 			Size:      4,
@@ -575,7 +583,7 @@ func TestAuthorizeUploadResourceRejectsWrongOwnerAndExpiredUploads(t *testing.T)
 	}
 
 	ctx := context.WithValue(context.Background(), userIDContextKey, other.ID)
-	if _, status, _ := authorizeUploadResource(ctx, session.TusID); status != http.StatusForbidden {
+	if _, status, _ := env.svc.authorizeUploadResource(ctx, session.TusID); status != http.StatusForbidden {
 		t.Fatalf("expected wrong owner status 403, got %d", status)
 	}
 
@@ -598,7 +606,7 @@ func TestAuthorizeUploadResourceRejectsWrongOwnerAndExpiredUploads(t *testing.T)
 	}
 
 	ctx = context.WithValue(context.Background(), userIDContextKey, other.ID)
-	if _, status, _ := authorizeUploadResource(ctx, expired.TusID); status != http.StatusGone {
+	if _, status, _ := env.svc.authorizeUploadResource(ctx, expired.TusID); status != http.StatusGone {
 		t.Fatalf("expected expired status 410, got %d", status)
 	}
 
@@ -680,17 +688,17 @@ func TestCheckStorageQuotaUsesQuotaBytesAndCanExcludeClientGroup(t *testing.T) {
 		t.Fatalf("create upload sessions: %v", err)
 	}
 
-	if status, err := logic.CheckStorageQuota(env.user.ID, 40, currentGroup); err != nil || status != http.StatusOK {
+	if status, err := env.svc.checkStorageQuota(env.user.ID, 40, currentGroup); err != nil || status != http.StatusOK {
 		t.Fatalf("expected quota check excluding current group to pass, status=%d err=%v", status, err)
 	}
-	if status, err := logic.CheckStorageQuota(env.user.ID, 40, ""); err == nil || status != http.StatusForbidden {
+	if status, err := env.svc.checkStorageQuota(env.user.ID, 40, ""); err == nil || status != http.StatusForbidden {
 		t.Fatalf("expected quota check including current group to fail with 403, status=%d err=%v", status, err)
 	}
 }
 
 func TestTusPatchHeadAndDeleteFlow(t *testing.T) {
 	env := setupTusTest(t)
-	rec := createTusUploadRequest(t, env.token, 11, map[string]string{"filename": "movie.mp4"})
+	rec := createTusUploadRequest(t, env, 11, map[string]string{"filename": "movie.mp4"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -699,16 +707,12 @@ func TestTusPatchHeadAndDeleteFlow(t *testing.T) {
 		t.Fatal("expected Location header")
 	}
 
-	srv, err := GetServer()
-	if err != nil {
-		t.Fatalf("get server: %v", err)
-	}
 	patch := httptest.NewRequest(http.MethodPatch, location, bytes.NewBufferString("hello"))
 	setTusAuthHeaders(patch, env.token)
 	patch.Header.Set("Content-Type", "application/offset+octet-stream")
 	patch.Header.Set("Upload-Offset", "0")
 	patchRec := httptest.NewRecorder()
-	srv.ServeHTTP(patchRec, patch)
+	env.svc.ServeHTTP(patchRec, patch)
 	if patchRec.Code != http.StatusNoContent {
 		t.Fatalf("expected PATCH 204, got %d: %s", patchRec.Code, patchRec.Body.String())
 	}
@@ -716,7 +720,7 @@ func TestTusPatchHeadAndDeleteFlow(t *testing.T) {
 	head := httptest.NewRequest(http.MethodHead, location, nil)
 	setTusAuthHeaders(head, env.token)
 	headRec := httptest.NewRecorder()
-	srv.ServeHTTP(headRec, head)
+	env.svc.ServeHTTP(headRec, head)
 	if headRec.Code != http.StatusOK {
 		t.Fatalf("expected HEAD 200, got %d: %s", headRec.Code, headRec.Body.String())
 	}
@@ -730,7 +734,7 @@ func TestTusPatchHeadAndDeleteFlow(t *testing.T) {
 	deleteReq := httptest.NewRequest(http.MethodDelete, location, nil)
 	setTusAuthHeaders(deleteReq, env.token)
 	deleteRec := httptest.NewRecorder()
-	srv.ServeHTTP(deleteRec, deleteReq)
+	env.svc.ServeHTTP(deleteRec, deleteReq)
 	if deleteRec.Code != http.StatusNoContent {
 		t.Fatalf("expected DELETE 204, got %d: %s", deleteRec.Code, deleteRec.Body.String())
 	}
@@ -743,7 +747,7 @@ func TestTusPatchHeadAndDeleteFlow(t *testing.T) {
 		}
 		return session.Status == models.UploadStatusCanceled && session.DeletedAt != nil && session.DeletedAt.Valid
 	})
-	if _, err := os.Stat(filepath.Join(config.ENV.FolderVideoUploadsPriv, "tus", tusID)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(env.config().FolderVideoUploadsPriv, "tus", tusID)); !os.IsNotExist(err) {
 		t.Fatalf("expected tus data file to be removed, stat err=%v", err)
 	}
 }
@@ -769,7 +773,7 @@ func TestExpirationResponseWriterPreservesResponseControllerDeadlines(t *testing
 
 func TestTusInterruptedPatchReportsAcceptedOffset(t *testing.T) {
 	env := setupTusTest(t)
-	rec := createTusUploadRequest(t, env.token, 10, map[string]string{"filename": "movie.mp4"})
+	rec := createTusUploadRequest(t, env, 10, map[string]string{"filename": "movie.mp4"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -778,10 +782,6 @@ func TestTusInterruptedPatchReportsAcceptedOffset(t *testing.T) {
 		t.Fatal("expected Location header")
 	}
 
-	srv, err := GetServer()
-	if err != nil {
-		t.Fatalf("get server: %v", err)
-	}
 	patch := httptest.NewRequest(http.MethodPatch, location, &unexpectedEOFReadCloser{data: []byte("hello")})
 	setTusAuthHeaders(patch, env.token)
 	patch.ContentLength = 10
@@ -789,7 +789,7 @@ func TestTusInterruptedPatchReportsAcceptedOffset(t *testing.T) {
 	patch.Header.Set("Content-Type", "application/offset+octet-stream")
 	patch.Header.Set("Upload-Offset", "0")
 	patchRec := httptest.NewRecorder()
-	srv.ServeHTTP(patchRec, patch)
+	env.svc.ServeHTTP(patchRec, patch)
 	if patchRec.Code != http.StatusBadRequest {
 		t.Fatalf("expected interrupted PATCH 400, got %d: %s", patchRec.Code, patchRec.Body.String())
 	}
@@ -800,7 +800,7 @@ func TestTusInterruptedPatchReportsAcceptedOffset(t *testing.T) {
 	head := httptest.NewRequest(http.MethodHead, location, nil)
 	setTusAuthHeaders(head, env.token)
 	headRec := httptest.NewRecorder()
-	srv.ServeHTTP(headRec, head)
+	env.svc.ServeHTTP(headRec, head)
 	if headRec.Code != http.StatusOK {
 		t.Fatalf("expected HEAD 200, got %d: %s", headRec.Code, headRec.Body.String())
 	}
@@ -825,7 +825,7 @@ func TestFinalizeRejectsPartialUploadsAndReturnsExistingLink(t *testing.T) {
 	if err := env.db.Create(&partial).Error; err != nil {
 		t.Fatalf("create partial session: %v", err)
 	}
-	if status, link, err := Finalize(partial.TusID, env.user.ID); err == nil || link != nil || status != http.StatusBadRequest {
+	if status, link, err := env.svc.Finalize(partial.TusID, env.user.ID); err == nil || link != nil || status != http.StatusBadRequest {
 		t.Fatalf("expected partial finalize 400, status=%d link=%v err=%v", status, link, err)
 	}
 
@@ -863,7 +863,7 @@ func TestFinalizeRejectsPartialUploadsAndReturnsExistingLink(t *testing.T) {
 		t.Fatalf("create done session: %v", err)
 	}
 
-	status, got, err := Finalize(done.TusID, env.user.ID)
+	status, got, err := env.svc.Finalize(done.TusID, env.user.ID)
 	if err != nil || status != http.StatusOK {
 		t.Fatalf("expected idempotent finalize success, status=%d err=%v", status, err)
 	}
@@ -894,25 +894,21 @@ func TestFinalizeRejectsConcurrentImport(t *testing.T) {
 		t.Fatalf("create importing session: %v", err)
 	}
 
-	status, link, err := Finalize(session.TusID, env.user.ID)
+	status, link, err := env.svc.Finalize(session.TusID, env.user.ID)
 	if err == nil || link != nil || status != http.StatusConflict {
 		t.Fatalf("expected concurrent finalize 409, status=%d link=%v err=%v", status, link, err)
 	}
 }
 
-func createTusUploadRequest(t *testing.T, token string, size int64, metadata map[string]string) *httptest.ResponseRecorder {
+func createTusUploadRequest(t *testing.T, env tusTestEnv, size int64, metadata map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
-	srv, err := GetServer()
-	if err != nil {
-		t.Fatalf("get server: %v", err)
-	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/uploads", nil)
-	setTusAuthHeaders(req, token)
+	setTusAuthHeaders(req, env.token)
 	req.Header.Set("Upload-Length", strconv.FormatInt(size, 10))
 	req.Header.Set("Upload-Metadata", tusMetadata(metadata))
 	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	env.svc.ServeHTTP(rec, req)
 	return rec
 }
 

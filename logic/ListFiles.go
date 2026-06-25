@@ -1,7 +1,6 @@
 package logic
 
 import (
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
 	"log"
@@ -10,10 +9,10 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func ListFiles(fromFolder uint, userId uint) (status int, response *[]models.Link, err error) {
+func (s *Service) ListFiles(fromFolder uint, userId uint) (status int, response *[]models.Link, err error) {
 	//check if requested folder exists
 	if fromFolder > 0 {
-		res := inits.DB.First(&models.Folder{}, fromFolder)
+		res := s.Deps.DB.First(&models.Folder{}, fromFolder)
 		if res.Error != nil {
 			return http.StatusBadRequest, nil, errors.New("parent folder doesn't exist")
 		}
@@ -21,7 +20,7 @@ func ListFiles(fromFolder uint, userId uint) (status int, response *[]models.Lin
 
 	// query all files
 	var links []models.Link
-	res := inits.DB.
+	res := s.Deps.DB.
 		Model(&models.Link{}).
 		Preload("User").
 		Preload("File").

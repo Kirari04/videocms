@@ -1,7 +1,6 @@
 package logic
 
 import (
-	"ch/kirari04/videocms/inits"
 	"math"
 	"time"
 )
@@ -36,7 +35,7 @@ type aggregatedResult struct {
 	ENCSubtitleQueue float64
 }
 
-func GetSystemStats(from time.Time, to time.Time, points int) (SystemStatsData, error) {
+func (s *Service) GetSystemStats(from time.Time, to time.Time, points int) (SystemStatsData, error) {
 	result := SystemStatsData{
 		Cpu:              make([]StatPoint, 0),
 		Mem:              make([]StatPoint, 0),
@@ -64,7 +63,7 @@ func GetSystemStats(from time.Time, to time.Time, points int) (SystemStatsData, 
 
 	// SQLite-specific optimization: Group by calculated time bucket
 	// (strftime('%s', created_at) / step) * step
-	if err := inits.DB.Table("system_resources").
+	if err := s.Deps.DB.Table("system_resources").
 		Select(`
 			(CAST(strftime('%s', created_at) AS INTEGER) / ? ) * ? as ts,
 			AVG(cpu) as cpu,

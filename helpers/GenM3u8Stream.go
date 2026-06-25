@@ -1,18 +1,17 @@
 package helpers
 
 import (
-	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/models"
 	"fmt"
 )
 
-func GenM3u8Stream(dbLink *models.Link, qualitys *[]models.Quality, audio *models.Audio) string {
+func GenM3u8Stream(folderVideoQualitysPub string, dbLink *models.Link, qualitys *[]models.Quality, audio *models.Audio) string {
 	m3u8 := "#EXTM3U\n#EXT-X-VERSION:6"
 	if audio != nil {
 		m3u8 += fmt.Sprintf(
 			"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"AAC\",NAME=\"Subtitle\",LANGUAGE=\"%s\",URI=\"%s\"",
 			audio.Lang,
-			fmt.Sprintf("%s/%s/%s/audio/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, audio.UUID, audio.OutputFile),
+			fmt.Sprintf("%s/%s/%s/audio/%s", folderVideoQualitysPub, dbLink.UUID, audio.UUID, audio.OutputFile),
 		)
 	}
 	for _, quality := range *qualitys {
@@ -21,7 +20,7 @@ func GenM3u8Stream(dbLink *models.Link, qualitys *[]models.Quality, audio *model
 				"\n#EXT-X-STREAM-INF:BANDWIDTH=%d,AUDIO=\"AAC\",RESOLUTION=%s,CODECS=\"avc1.640015,mp4a.40.2\"\n%s",
 				int64(quality.Height*quality.Width*2),
 				fmt.Sprintf("%dx%d", quality.Width, quality.Height),
-				fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, quality.Name, quality.OutputFile),
+				fmt.Sprintf("%s/%s/%s/%s", folderVideoQualitysPub, dbLink.UUID, quality.Name, quality.OutputFile),
 			)
 		}
 
@@ -29,7 +28,7 @@ func GenM3u8Stream(dbLink *models.Link, qualitys *[]models.Quality, audio *model
 	return m3u8
 }
 
-func GenM3u8StreamMulti(dbLink *models.Link, qualitys *[]models.Quality, audios *[]models.Audio) string {
+func GenM3u8StreamMulti(folderVideoQualitysPub string, dbLink *models.Link, qualitys *[]models.Quality, audios *[]models.Audio) string {
 	m3u8 := "#EXTM3U\n#EXT-X-VERSION:6"
 
 	// Check if there are any audios, if so, we use the "AAC" group (matching existing convention, though "audio" might be better, sticking to convention for safety)
@@ -52,7 +51,7 @@ func GenM3u8StreamMulti(dbLink *models.Link, qualitys *[]models.Quality, audios 
 					audio.Name, // Using Name instead of "Subtitle" as in the original single-audio function which seemed weird
 					audio.Lang,
 					isDefault,
-					fmt.Sprintf("%s/%s/%s/audio/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, audio.UUID, audio.OutputFile),
+					fmt.Sprintf("%s/%s/%s/audio/%s", folderVideoQualitysPub, dbLink.UUID, audio.UUID, audio.OutputFile),
 				)
 			}
 		}
@@ -69,7 +68,7 @@ func GenM3u8StreamMulti(dbLink *models.Link, qualitys *[]models.Quality, audios 
 				int64(quality.Height*quality.Width*2),
 				audioTag,
 				fmt.Sprintf("%dx%d", quality.Width, quality.Height),
-				fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPub, dbLink.UUID, quality.Name, quality.OutputFile),
+				fmt.Sprintf("%s/%s/%s/%s", folderVideoQualitysPub, dbLink.UUID, quality.Name, quality.OutputFile),
 			)
 		}
 

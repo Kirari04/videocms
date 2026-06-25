@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"net/http"
 	"time"
@@ -40,7 +39,7 @@ func parseUploadStatsRequest(c echo.Context) (from time.Time, to time.Time, poin
 	return from, to, points, validatus, nil
 }
 
-func GetUploadStats(c echo.Context) error {
+func (h *Handlers) GetUploadStats(c echo.Context) error {
 	from, to, points, _, err := parseUploadStatsRequest(c)
 	if err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
@@ -48,7 +47,7 @@ func GetUploadStats(c echo.Context) error {
 
 	userID := c.Get("UserID").(uint)
 
-	stats, err := logic.GetUploadStats(from, to, points, userID)
+	stats, err := h.Logic.GetUploadStats(from, to, points, userID)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
@@ -56,13 +55,13 @@ func GetUploadStats(c echo.Context) error {
 	return c.JSON(http.StatusOK, stats)
 }
 
-func GetAdminUploadStats(c echo.Context) error {
+func (h *Handlers) GetAdminUploadStats(c echo.Context) error {
 	from, to, points, validatus, err := parseUploadStatsRequest(c)
 	if err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
 	}
 
-	stats, err := logic.GetUploadStats(from, to, points, validatus.UserID)
+	stats, err := h.Logic.GetUploadStats(from, to, points, validatus.UserID)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
@@ -70,7 +69,7 @@ func GetAdminUploadStats(c echo.Context) error {
 	return c.JSON(http.StatusOK, stats)
 }
 
-func GetTopUploadStats(c echo.Context) error {
+func (h *Handlers) GetTopUploadStats(c echo.Context) error {
 	from, to, _, _, err := parseUploadStatsRequest(c)
 	if err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
@@ -83,14 +82,14 @@ func GetTopUploadStats(c echo.Context) error {
 
 	userID := c.Get("UserID").(uint)
 	limit := 10
-	results, err := logic.GetTopUpload(from, to, userID, limit, mode)
+	results, err := h.Logic.GetTopUpload(from, to, userID, limit, mode)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	return c.JSON(http.StatusOK, results)
 }
 
-func GetAdminTopUploadStats(c echo.Context) error {
+func (h *Handlers) GetAdminTopUploadStats(c echo.Context) error {
 	from, to, _, validatus, err := parseUploadStatsRequest(c)
 	if err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
@@ -102,7 +101,7 @@ func GetAdminTopUploadStats(c echo.Context) error {
 	}
 
 	limit := 10
-	results, err := logic.GetTopUpload(from, to, validatus.UserID, limit, mode)
+	results, err := h.Logic.GetTopUpload(from, to, validatus.UserID, limit, mode)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}

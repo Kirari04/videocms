@@ -2,13 +2,12 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 
 	"github.com/labstack/echo/v4"
 )
 
-func CreateWebhook(c echo.Context) error {
+func (h *Handlers) CreateWebhook(c echo.Context) error {
 	// parse & validate request
 
 	var webhookValidation models.WebhookCreateValidation
@@ -16,7 +15,7 @@ func CreateWebhook(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	status, res, err := logic.CreateWebhook(&webhookValidation, c.Get("UserID").(uint))
+	status, res, err := h.Logic.CreateWebhook(&webhookValidation, c.Get("UserID").(uint))
 
 	if err != nil {
 		return c.String(status, err.Error())

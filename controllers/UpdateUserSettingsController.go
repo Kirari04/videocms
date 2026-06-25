@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"log"
 	"net/http"
@@ -10,7 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func UpdateUserSettingsController(c echo.Context) error {
+func (h *Handlers) UpdateUserSettingsController(c echo.Context) error {
 	// parse & validate request
 	var validater models.UserSettingsUpdateValidation
 	if status, err := helpers.Validate(c, &validater); err != nil {
@@ -29,14 +28,14 @@ func UpdateUserSettingsController(c echo.Context) error {
 	}
 
 	var user models.User
-	if res := inits.DB.First(&user, userId); res.Error != nil {
+	if res := h.Deps.DB.First(&user, userId); res.Error != nil {
 		log.Println("Failed to catch userID on db")
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
 	user.Settings.EnablePlayerCaptcha = *validater.EnablePlayerCaptcha
 
-	if res := inits.DB.Save(&user); res.Error != nil {
+	if res := h.Deps.DB.Save(&user); res.Error != nil {
 		log.Println("Failed to update user settings", res.Error)
 		return c.NoContent(http.StatusInternalServerError)
 	}
@@ -51,7 +50,7 @@ func UpdateUserSettingsController(c echo.Context) error {
 		}
 		user.Hash = rawhash
 
-		if res := inits.DB.Save(&user); res.Error != nil {
+		if res := h.Deps.DB.Save(&user); res.Error != nil {
 			log.Println("Failed to update user password", res.Error)
 			return c.NoContent(http.StatusInternalServerError)
 		}

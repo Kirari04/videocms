@@ -1,8 +1,8 @@
 package configdb
 
 import (
+	"ch/kirari04/videocms/app"
 	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"fmt"
 	"log"
@@ -10,124 +10,126 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/xyproto/randomstring"
+	"gorm.io/gorm"
 )
 
-func Setup() {
+func LoadSnapshot(db *gorm.DB, base config.Config) (app.Snapshot, error) {
+	env := base.Clone()
 	var setting models.Setting
-	if res := inits.DB.FirstOrCreate(&setting); res.Error != nil {
-		log.Fatalln("Failed to load settings", res.Error)
+	if res := db.FirstOrCreate(&setting); res.Error != nil {
+		return app.Snapshot{}, fmt.Errorf("failed to load settings: %w", res.Error)
 	}
 
-	config.ENV.AppName = getEnvDb(&setting.AppName, "VideoCMS")
-	config.ENV.BaseUrl = getEnvDb(&setting.BaseUrl, "http://127.0.0.1:3000")
+	env.AppName = getEnvDb(&setting.AppName, "VideoCMS")
+	env.BaseUrl = getEnvDb(&setting.BaseUrl, "http://127.0.0.1:3000")
 
-	config.ENV.ProjectExampleVideo = getEnvDb(&setting.ProjectExampleVideo, "notfound")
+	env.ProjectExampleVideo = getEnvDb(&setting.ProjectExampleVideo, "notfound")
 
-	config.ENV.JwtSecretKey = getEnvDb(&setting.JwtSecretKey, randomstring.CookieFriendlyString(64))
-	config.ENV.JwtMediaSecretKey = getEnvDb(&setting.JwtMediaSecretKey, randomstring.CookieFriendlyString(64))
+	env.JwtSecretKey = getEnvDb(&setting.JwtSecretKey, randomstring.CookieFriendlyString(64))
+	env.JwtMediaSecretKey = getEnvDb(&setting.JwtMediaSecretKey, randomstring.CookieFriendlyString(64))
 
-	config.ENV.ReloadHtml = getEnvDb_bool(&setting.ReloadHtml, boolPtr(false))
-	config.ENV.EncodingEnabled = getEnvDb_bool(&setting.EncodingEnabled, boolPtr(true))
-	config.ENV.UploadEnabled = getEnvDb_bool(&setting.UploadEnabled, boolPtr(true))
-	config.ENV.RatelimitEnabled = getEnvDb_bool(&setting.RatelimitEnabled, boolPtr(false))
+	env.ReloadHtml = getEnvDb_bool(&setting.ReloadHtml, boolPtr(false))
+	env.EncodingEnabled = getEnvDb_bool(&setting.EncodingEnabled, boolPtr(true))
+	env.UploadEnabled = getEnvDb_bool(&setting.UploadEnabled, boolPtr(true))
+	env.RatelimitEnabled = getEnvDb_bool(&setting.RatelimitEnabled, boolPtr(false))
 
-	config.ENV.RatelimitRateGlobal = getEnvDb_float64(&setting.RatelimitRateGlobal, 100)
-	config.ENV.RatelimitBurstGlobal = getEnvDb_int(&setting.RatelimitBurstGlobal, 200)
-	config.ENV.RatelimitRateAuth = getEnvDb_float64(&setting.RatelimitRateAuth, 5)
-	config.ENV.RatelimitBurstAuth = getEnvDb_int(&setting.RatelimitBurstAuth, 10)
-	config.ENV.RatelimitRateApi = getEnvDb_float64(&setting.RatelimitRateApi, 50)
-	config.ENV.RatelimitBurstApi = getEnvDb_int(&setting.RatelimitBurstApi, 100)
-	config.ENV.RatelimitRateUpload = getEnvDb_float64(&setting.RatelimitRateUpload, 20)
-	config.ENV.RatelimitBurstUpload = getEnvDb_int(&setting.RatelimitBurstUpload, 50)
-	config.ENV.RatelimitRateWeb = getEnvDb_float64(&setting.RatelimitRateWeb, 50)
-	config.ENV.RatelimitBurstWeb = getEnvDb_int(&setting.RatelimitBurstWeb, 100)
+	env.RatelimitRateGlobal = getEnvDb_float64(&setting.RatelimitRateGlobal, 100)
+	env.RatelimitBurstGlobal = getEnvDb_int(&setting.RatelimitBurstGlobal, 200)
+	env.RatelimitRateAuth = getEnvDb_float64(&setting.RatelimitRateAuth, 5)
+	env.RatelimitBurstAuth = getEnvDb_int(&setting.RatelimitBurstAuth, 10)
+	env.RatelimitRateApi = getEnvDb_float64(&setting.RatelimitRateApi, 50)
+	env.RatelimitBurstApi = getEnvDb_int(&setting.RatelimitBurstApi, 100)
+	env.RatelimitRateUpload = getEnvDb_float64(&setting.RatelimitRateUpload, 20)
+	env.RatelimitBurstUpload = getEnvDb_int(&setting.RatelimitBurstUpload, 50)
+	env.RatelimitRateWeb = getEnvDb_float64(&setting.RatelimitRateWeb, 50)
+	env.RatelimitBurstWeb = getEnvDb_int(&setting.RatelimitBurstWeb, 100)
 
-	config.ENV.CloudflareEnabled = getEnvDb_bool(&setting.CloudflareEnabled, boolPtr(false))
-	config.ENV.BunnyCDNEnabled = getEnvDb_bool(&setting.BunnyCDNEnabled, boolPtr(false))
-	config.ENV.FastlyEnabled = getEnvDb_bool(&setting.FastlyEnabled, boolPtr(false))
-	config.ENV.KeyCDNEnabled = getEnvDb_bool(&setting.KeyCDNEnabled, boolPtr(false))
-	config.ENV.TrustedProxies = getEnvDb(&setting.TrustedProxies, "")
-	config.ENV.TrustLocalTraffic = getEnvDb_bool(&setting.TrustLocalTraffic, boolPtr(false))
+	env.CloudflareEnabled = getEnvDb_bool(&setting.CloudflareEnabled, boolPtr(false))
+	env.BunnyCDNEnabled = getEnvDb_bool(&setting.BunnyCDNEnabled, boolPtr(false))
+	env.FastlyEnabled = getEnvDb_bool(&setting.FastlyEnabled, boolPtr(false))
+	env.KeyCDNEnabled = getEnvDb_bool(&setting.KeyCDNEnabled, boolPtr(false))
+	env.TrustedProxies = getEnvDb(&setting.TrustedProxies, "")
+	env.TrustLocalTraffic = getEnvDb_bool(&setting.TrustLocalTraffic, boolPtr(false))
 
-	config.ENV.MaxItemsMultiDelete = getEnvDb_int64(&setting.MaxItemsMultiDelete, 1000)
-	config.ENV.MaxRunningEncodes = getEnvDb_int64(&setting.MaxRunningEncodes, 1)
-	config.ENV.MaxFramerate = getEnvDb_int64(&setting.MaxFramerate, 60)
+	env.MaxItemsMultiDelete = getEnvDb_int64(&setting.MaxItemsMultiDelete, 1000)
+	env.MaxRunningEncodes = getEnvDb_int64(&setting.MaxRunningEncodes, 1)
+	env.MaxFramerate = getEnvDb_int64(&setting.MaxFramerate, 60)
 
 	if setting.MaxUploadChunkSize == "" && setting.LegacyMaxUploadChunkSize != "" {
 		setting.MaxUploadChunkSize = setting.LegacyMaxUploadChunkSize
 	}
-	config.ENV.MaxUploadFilesize = getEnvDb_int64(&setting.MaxUploadFilesize, 5*1024*1024*1024) // 5gb
-	config.ENV.MaxUploadChunkSize = getEnvDb_int64(&setting.MaxUploadChunkSize, 20*1024*1024)   // 20mb
-	config.ENV.MaxUploadSessions = getEnvDb_int64(&setting.MaxUploadSessions, 10)
-	config.ENV.MaxPostSize = getEnvDb_int64(&setting.MaxPostSize, 100*1024*1024) // 100mb
+	env.MaxUploadFilesize = getEnvDb_int64(&setting.MaxUploadFilesize, 5*1024*1024*1024) // 5gb
+	env.MaxUploadChunkSize = getEnvDb_int64(&setting.MaxUploadChunkSize, 20*1024*1024)   // 20mb
+	env.MaxUploadSessions = getEnvDb_int64(&setting.MaxUploadSessions, 10)
+	env.MaxPostSize = getEnvDb_int64(&setting.MaxPostSize, 100*1024*1024) // 100mb
 
-	config.ENV.CorsAllowHeaders = getEnvDb(&setting.CorsAllowHeaders, "*")
-	config.ENV.CorsAllowOrigins = getEnvDb(&setting.CorsAllowOrigins, "*")
-	config.ENV.CorsAllowCredentials = getEnvDb_bool(&setting.CorsAllowCredentials, boolPtr(true))
+	env.CorsAllowHeaders = getEnvDb(&setting.CorsAllowHeaders, "*")
+	env.CorsAllowOrigins = getEnvDb(&setting.CorsAllowOrigins, "*")
+	env.CorsAllowCredentials = getEnvDb_bool(&setting.CorsAllowCredentials, boolPtr(true))
 
-	config.ENV.CaptchaEnabled = getEnvDb_bool(&setting.CaptchaEnabled, boolPtr(false))
-	config.ENV.CaptchaLoginEnabled = getEnvDb_bool(&setting.CaptchaLoginEnabled, boolPtr(false))
-	config.ENV.CaptchaPlayerEnabled = getEnvDb_bool(&setting.CaptchaPlayerEnabled, boolPtr(false))
-	config.ENV.CaptchaType = getEnvDb(&setting.CaptchaType, "")
-	config.ENV.Captcha_Recaptcha_PrivateKey = getEnvDb(&setting.Captcha_Recaptcha_PrivateKey, "")
-	config.ENV.Captcha_Recaptcha_PublicKey = getEnvDb(&setting.Captcha_Recaptcha_PublicKey, "")
-	config.ENV.Captcha_Hcaptcha_PrivateKey = getEnvDb(&setting.Captcha_Hcaptcha_PrivateKey, "")
-	config.ENV.Captcha_Hcaptcha_PublicKey = getEnvDb(&setting.Captcha_Hcaptcha_PublicKey, "")
-	config.ENV.Captcha_Turnstile_PrivateKey = getEnvDb(&setting.Captcha_Turnstile_PrivateKey, "")
-	config.ENV.Captcha_Turnstile_PublicKey = getEnvDb(&setting.Captcha_Turnstile_PublicKey, "")
+	env.CaptchaEnabled = getEnvDb_bool(&setting.CaptchaEnabled, boolPtr(false))
+	env.CaptchaLoginEnabled = getEnvDb_bool(&setting.CaptchaLoginEnabled, boolPtr(false))
+	env.CaptchaPlayerEnabled = getEnvDb_bool(&setting.CaptchaPlayerEnabled, boolPtr(false))
+	env.CaptchaType = getEnvDb(&setting.CaptchaType, "")
+	env.Captcha_Recaptcha_PrivateKey = getEnvDb(&setting.Captcha_Recaptcha_PrivateKey, "")
+	env.Captcha_Recaptcha_PublicKey = getEnvDb(&setting.Captcha_Recaptcha_PublicKey, "")
+	env.Captcha_Hcaptcha_PrivateKey = getEnvDb(&setting.Captcha_Hcaptcha_PrivateKey, "")
+	env.Captcha_Hcaptcha_PublicKey = getEnvDb(&setting.Captcha_Hcaptcha_PublicKey, "")
+	env.Captcha_Turnstile_PrivateKey = getEnvDb(&setting.Captcha_Turnstile_PrivateKey, "")
+	env.Captcha_Turnstile_PublicKey = getEnvDb(&setting.Captcha_Turnstile_PublicKey, "")
 
-	config.ENV.EncodeHls240p = getEnvDb_bool(&setting.EncodeHls240p, boolPtr(true))
-	config.ENV.Hls240pVideoBitrate = getEnvDb(&setting.Hls240pVideoBitrate, "600k")
-	config.ENV.Hls240pCrf = getEnvDb_int(&setting.Hls240pCrf, 23)
-	config.ENV.EncodeHls360p = getEnvDb_bool(&setting.EncodeHls360p, boolPtr(true))
-	config.ENV.Hls360pVideoBitrate = getEnvDb(&setting.Hls360pVideoBitrate, "1200k")
-	config.ENV.Hls360pCrf = getEnvDb_int(&setting.Hls360pCrf, 23)
-	config.ENV.EncodeHls480p = getEnvDb_bool(&setting.EncodeHls480p, boolPtr(true))
-	config.ENV.Hls480pVideoBitrate = getEnvDb(&setting.Hls480pVideoBitrate, "2500k")
-	config.ENV.Hls480pCrf = getEnvDb_int(&setting.Hls480pCrf, 23)
-	config.ENV.EncodeHls720p = getEnvDb_bool(&setting.EncodeHls720p, boolPtr(true))
-	config.ENV.Hls720pVideoBitrate = getEnvDb(&setting.Hls720pVideoBitrate, "4500k")
-	config.ENV.Hls720pCrf = getEnvDb_int(&setting.Hls720pCrf, 23)
-	config.ENV.EncodeHls1080p = getEnvDb_bool(&setting.EncodeHls1080p, boolPtr(true))
-	config.ENV.Hls1080pVideoBitrate = getEnvDb(&setting.Hls1080pVideoBitrate, "8000k")
-	config.ENV.Hls1080pCrf = getEnvDb_int(&setting.Hls1080pCrf, 23)
-	config.ENV.EncodeHls1440p = getEnvDb_bool(&setting.EncodeHls1440p, boolPtr(false))
-	config.ENV.Hls1440pVideoBitrate = getEnvDb(&setting.Hls1440pVideoBitrate, "15000k")
-	config.ENV.Hls1440pCrf = getEnvDb_int(&setting.Hls1440pCrf, 23)
-	config.ENV.EncodeHls2160p = getEnvDb_bool(&setting.EncodeHls2160p, boolPtr(false))
-	config.ENV.Hls2160pVideoBitrate = getEnvDb(&setting.Hls2160pVideoBitrate, "25000k")
-	config.ENV.Hls2160pCrf = getEnvDb_int(&setting.Hls2160pCrf, 23)
+	env.EncodeHls240p = getEnvDb_bool(&setting.EncodeHls240p, boolPtr(true))
+	env.Hls240pVideoBitrate = getEnvDb(&setting.Hls240pVideoBitrate, "600k")
+	env.Hls240pCrf = getEnvDb_int(&setting.Hls240pCrf, 23)
+	env.EncodeHls360p = getEnvDb_bool(&setting.EncodeHls360p, boolPtr(true))
+	env.Hls360pVideoBitrate = getEnvDb(&setting.Hls360pVideoBitrate, "1200k")
+	env.Hls360pCrf = getEnvDb_int(&setting.Hls360pCrf, 23)
+	env.EncodeHls480p = getEnvDb_bool(&setting.EncodeHls480p, boolPtr(true))
+	env.Hls480pVideoBitrate = getEnvDb(&setting.Hls480pVideoBitrate, "2500k")
+	env.Hls480pCrf = getEnvDb_int(&setting.Hls480pCrf, 23)
+	env.EncodeHls720p = getEnvDb_bool(&setting.EncodeHls720p, boolPtr(true))
+	env.Hls720pVideoBitrate = getEnvDb(&setting.Hls720pVideoBitrate, "4500k")
+	env.Hls720pCrf = getEnvDb_int(&setting.Hls720pCrf, 23)
+	env.EncodeHls1080p = getEnvDb_bool(&setting.EncodeHls1080p, boolPtr(true))
+	env.Hls1080pVideoBitrate = getEnvDb(&setting.Hls1080pVideoBitrate, "8000k")
+	env.Hls1080pCrf = getEnvDb_int(&setting.Hls1080pCrf, 23)
+	env.EncodeHls1440p = getEnvDb_bool(&setting.EncodeHls1440p, boolPtr(false))
+	env.Hls1440pVideoBitrate = getEnvDb(&setting.Hls1440pVideoBitrate, "15000k")
+	env.Hls1440pCrf = getEnvDb_int(&setting.Hls1440pCrf, 23)
+	env.EncodeHls2160p = getEnvDb_bool(&setting.EncodeHls2160p, boolPtr(false))
+	env.Hls2160pVideoBitrate = getEnvDb(&setting.Hls2160pVideoBitrate, "25000k")
+	env.Hls2160pCrf = getEnvDb_int(&setting.Hls2160pCrf, 23)
 
-	config.ENV.PluginPgsServer = getEnvDb(&setting.PluginPgsServer, "http://127.0.0.1:5000")
-	config.ENV.EnablePluginPgsServer = getEnvDb_bool(&setting.EnablePluginPgsServer, boolPtr(false))
+	env.PluginPgsServer = getEnvDb(&setting.PluginPgsServer, "http://127.0.0.1:5000")
+	env.EnablePluginPgsServer = getEnvDb_bool(&setting.EnablePluginPgsServer, boolPtr(false))
 
-	config.ENV.DownloadEnabled = getEnvDb_bool(&setting.DownloadEnabled, boolPtr(true))
-	config.ENV.RemoteDownloadEnabled = getEnvDb_bool(&setting.RemoteDownloadEnabled, boolPtr(true))
-	config.ENV.ContinueWatchingPopupEnabled = getEnvDb_bool(&setting.ContinueWatchingPopupEnabled, boolPtr(true))
-	config.ENV.PlayerV2Enabled = getEnvDb_bool(&setting.PlayerV2Enabled, boolPtr(true))
+	env.DownloadEnabled = getEnvDb_bool(&setting.DownloadEnabled, boolPtr(true))
+	env.RemoteDownloadEnabled = getEnvDb_bool(&setting.RemoteDownloadEnabled, boolPtr(true))
+	env.ContinueWatchingPopupEnabled = getEnvDb_bool(&setting.ContinueWatchingPopupEnabled, boolPtr(true))
+	env.PlayerV2Enabled = getEnvDb_bool(&setting.PlayerV2Enabled, boolPtr(true))
 
-	config.ENV.MaxParallelDownloads = getEnvDb_int64(&setting.MaxParallelDownloads, 1)
-	config.ENV.RemoteDownloadTimeout = getEnvDb_int64(&setting.RemoteDownloadTimeout, 3600) // 1 hour
+	env.MaxParallelDownloads = getEnvDb_int64(&setting.MaxParallelDownloads, 1)
+	env.RemoteDownloadTimeout = getEnvDb_int64(&setting.RemoteDownloadTimeout, 3600) // 1 hour
 
 	// validate config before saving
 	validate := validator.New(validator.WithRequiredStructEnabled())
 	err := validate.Struct(&setting)
 	if err != nil {
-		log.Fatalln("Invalid configuration", err)
+		return app.Snapshot{}, fmt.Errorf("invalid configuration: %w", err)
 	}
-	if res := inits.DB.Save(&setting); res.Error != nil {
-		log.Fatalln("failed to save db configuration", res.Error)
+	if res := db.Save(&setting); res.Error != nil {
+		return app.Snapshot{}, fmt.Errorf("failed to save db configuration: %w", res.Error)
 	}
 
-	models.AvailableQualitys = []models.AvailableQuality{
+	qualities := []models.AvailableQuality{
 		{
 			Name:       "240p",
 			FolderName: "240p",
 			Height:     240,
 			Width:      426,
-			Crf:        config.ENV.Hls240pCrf,
+			Crf:        env.Hls240pCrf,
 
-			VideoBitrate:   config.ENV.Hls240pVideoBitrate,
+			VideoBitrate:   env.Hls240pVideoBitrate,
 			AudioBitrate:   "64k",
 			Profile:        "baseline",
 			Level:          "1.3",
@@ -136,16 +138,16 @@ func Setup() {
 			Type:       "hls",
 			Muted:      true,
 			OutputFile: "out.m3u8",
-			Enabled:    *config.ENV.EncodeHls240p,
+			Enabled:    *env.EncodeHls240p,
 		},
 		{
 			Name:       "360p",
 			FolderName: "360p",
 			Height:     360,
 			Width:      640,
-			Crf:        config.ENV.Hls360pCrf,
+			Crf:        env.Hls360pCrf,
 
-			VideoBitrate:   config.ENV.Hls360pVideoBitrate,
+			VideoBitrate:   env.Hls360pVideoBitrate,
 			AudioBitrate:   "96k",
 			Profile:        "main",
 			Level:          "3.0",
@@ -154,16 +156,16 @@ func Setup() {
 			Type:       "hls",
 			Muted:      true,
 			OutputFile: "out.m3u8",
-			Enabled:    *config.ENV.EncodeHls360p,
+			Enabled:    *env.EncodeHls360p,
 		},
 		{
 			Name:       "480p",
 			FolderName: "480p",
 			Height:     480,
 			Width:      854,
-			Crf:        config.ENV.Hls480pCrf,
+			Crf:        env.Hls480pCrf,
 
-			VideoBitrate:   config.ENV.Hls480pVideoBitrate,
+			VideoBitrate:   env.Hls480pVideoBitrate,
 			AudioBitrate:   "128k",
 			Profile:        "main",
 			Level:          "3.1",
@@ -172,16 +174,16 @@ func Setup() {
 			Type:       "hls",
 			Muted:      true,
 			OutputFile: "out.m3u8",
-			Enabled:    *config.ENV.EncodeHls480p,
+			Enabled:    *env.EncodeHls480p,
 		},
 		{
 			Name:       "720p",
 			FolderName: "720p",
 			Height:     720,
 			Width:      1280,
-			Crf:        config.ENV.Hls720pCrf,
+			Crf:        env.Hls720pCrf,
 
-			VideoBitrate:   config.ENV.Hls720pVideoBitrate,
+			VideoBitrate:   env.Hls720pVideoBitrate,
 			AudioBitrate:   "192k",
 			Profile:        "high",
 			Level:          "4.0",
@@ -190,16 +192,16 @@ func Setup() {
 			Type:       "hls",
 			Muted:      true,
 			OutputFile: "out.m3u8",
-			Enabled:    *config.ENV.EncodeHls720p,
+			Enabled:    *env.EncodeHls720p,
 		},
 		{
 			Name:       "1080p",
 			FolderName: "1080p",
 			Height:     1080,
 			Width:      1920,
-			Crf:        config.ENV.Hls1080pCrf,
+			Crf:        env.Hls1080pCrf,
 
-			VideoBitrate:   config.ENV.Hls1080pVideoBitrate,
+			VideoBitrate:   env.Hls1080pVideoBitrate,
 			AudioBitrate:   "256k",
 			Profile:        "high",
 			Level:          "4.2",
@@ -208,16 +210,16 @@ func Setup() {
 			Type:       "hls",
 			Muted:      true,
 			OutputFile: "out.m3u8",
-			Enabled:    *config.ENV.EncodeHls1080p,
+			Enabled:    *env.EncodeHls1080p,
 		},
 		{
 			Name:       "1440p",
 			FolderName: "1440p",
 			Height:     1440,
 			Width:      2560,
-			Crf:        config.ENV.Hls1440pCrf,
+			Crf:        env.Hls1440pCrf,
 
-			VideoBitrate:   config.ENV.Hls1440pVideoBitrate,
+			VideoBitrate:   env.Hls1440pVideoBitrate,
 			AudioBitrate:   "256k",
 			Profile:        "high",
 			Level:          "5.1",
@@ -226,16 +228,16 @@ func Setup() {
 			Type:       "hls",
 			Muted:      true,
 			OutputFile: "out.m3u8",
-			Enabled:    *config.ENV.EncodeHls1440p,
+			Enabled:    *env.EncodeHls1440p,
 		},
 		{
 			Name:       "2160p",
 			FolderName: "2160p",
 			Height:     2160,
 			Width:      3840,
-			Crf:        config.ENV.Hls2160pCrf,
+			Crf:        env.Hls2160pCrf,
 
-			VideoBitrate:   config.ENV.Hls2160pVideoBitrate,
+			VideoBitrate:   env.Hls2160pVideoBitrate,
 			AudioBitrate:   "320k",
 			Profile:        "high",
 			Level:          "5.2",
@@ -244,9 +246,10 @@ func Setup() {
 			Type:       "hls",
 			Muted:      true,
 			OutputFile: "out.m3u8",
-			Enabled:    *config.ENV.EncodeHls2160p,
+			Enabled:    *env.EncodeHls2160p,
 		},
 	}
+	return app.Snapshot{Config: env, Qualities: qualities}, nil
 }
 
 func getEnvDb(value *string, defaultValue string) string {
@@ -269,13 +272,17 @@ func getEnvDb_bool(value *string, defaultValue *bool) *bool {
 		case "0":
 			return boolPtr(false)
 		default:
-			log.Panicf("Failed to get bool from value: %v", value)
+			log.Printf("Failed to parse bool from value %q; using default", *value)
 		}
 	}
 	if defaultValue != nil && *defaultValue == true {
-		*value = "true"
+		if value != nil {
+			*value = "true"
+		}
 	} else {
-		*value = "false"
+		if value != nil {
+			*value = "false"
+		}
 	}
 	return defaultValue
 }
@@ -284,22 +291,30 @@ func getEnvDb_int64(value *string, defaultValue int64) int64 {
 	if value != nil && *value != "" {
 		res, err := strconv.ParseInt(*value, 10, 64)
 		if err != nil {
-			log.Panicf("Failed to parse int from value %v", value)
+			log.Printf("Failed to parse int from value %q; using default", *value)
+			*value = fmt.Sprint(defaultValue)
+			return defaultValue
 		}
 		return res
 	}
-	*value = fmt.Sprint(defaultValue)
+	if value != nil {
+		*value = fmt.Sprint(defaultValue)
+	}
 	return defaultValue
 }
 func getEnvDb_int(value *string, defaultValue int) int {
 	if value != nil && *value != "" {
 		res, err := strconv.Atoi(*value)
 		if err != nil {
-			log.Panicf("Failed to parse int from value %v", value)
+			log.Printf("Failed to parse int from value %q; using default", *value)
+			*value = fmt.Sprint(defaultValue)
+			return defaultValue
 		}
 		return res
 	}
-	*value = fmt.Sprint(defaultValue)
+	if value != nil {
+		*value = fmt.Sprint(defaultValue)
+	}
 	return defaultValue
 }
 
@@ -307,11 +322,15 @@ func getEnvDb_float64(value *string, defaultValue float64) float64 {
 	if value != nil && *value != "" {
 		res, err := strconv.ParseFloat(*value, 64)
 		if err != nil {
-			log.Panicf("Failed to parse float from value %v", value)
+			log.Printf("Failed to parse float from value %q; using default", *value)
+			*value = fmt.Sprintf("%v", defaultValue)
+			return defaultValue
 		}
 		return res
 	}
-	*value = fmt.Sprintf("%v", defaultValue)
+	if value != nil {
+		*value = fmt.Sprintf("%v", defaultValue)
+	}
 	return defaultValue
 }
 

@@ -1,6 +1,7 @@
 package middlewares
 
 import (
+	"ch/kirari04/videocms/app"
 	"ch/kirari04/videocms/auth"
 	"ch/kirari04/videocms/config"
 	"net/http"
@@ -52,7 +53,8 @@ func runMediaAuth(t *testing.T, routeUUID string, cookieValue string) *httptest.
 	c.SetParamNames("UUID")
 	c.SetParamValues(routeUUID)
 
-	handler := MediaAuth()(func(c echo.Context) error {
+	factory := newMediaAuthFactory()
+	handler := factory.MediaAuth()(func(c echo.Context) error {
 		claims, ok := MediaClaims(c)
 		if !ok {
 			t.Fatal("media claims were not stored in context")
@@ -70,13 +72,9 @@ func runMediaAuth(t *testing.T, routeUUID string, cookieValue string) *httptest.
 
 func mediaAuthToken(t *testing.T, linkUUID string) string {
 	t.Helper()
-	previous := config.ENV.JwtMediaSecretKey
-	config.ENV.JwtMediaSecretKey = "media-secret"
-	t.Cleanup(func() {
-		config.ENV.JwtMediaSecretKey = previous
-	})
+	factory := newMediaAuthFactory()
 
-	tokenString, _, err := auth.GenerateMediaToken(auth.MediaClaims{
+	tokenString, _, err := factory.Auth.GenerateMediaToken(auth.MediaClaims{
 		LinkUUID: linkUUID,
 		FileUUID: "file-uuid",
 	})
@@ -84,4 +82,16 @@ func mediaAuthToken(t *testing.T, linkUUID string) string {
 		t.Fatalf("GenerateMediaToken() error = %v", err)
 	}
 	return tokenString
+}
+
+func newMediaAuthFactory() *Factory {
+	deps := &app.Deps{
+		Snapshots: app.NewSnapshotStore(app.Snapshot{
+			Config: config.Config{
+				JwtSecretKey:      "jwt-secret",
+				JwtMediaSecretKey: "media-secret",
+			},
+		}),
+	}
+	return NewFactory(deps, auth.NewService(deps))
 }

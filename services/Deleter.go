@@ -1,23 +1,28 @@
 package services
 
 import (
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
+	"context"
 	"log"
 	"os"
 	"time"
 )
 
-func Deleter() {
+func (w *WorkerGroup) Deleter(ctx context.Context) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	for {
-		runDeleter()
-		time.Sleep(time.Second * 20)
+		w.runDeleter()
+		if !sleepContext(ctx, time.Second*20) {
+			return
+		}
 	}
 }
 
-func runDeleter() {
+func (w *WorkerGroup) runDeleter() {
 	var notReferencedFiles []uint
-	if res := inits.DB.
+	if res := w.deps.DB.
 		Raw(`
 		SELECT files.id FROM files
 		JOIN links ON links.file_id = files.id
@@ -29,14 +34,14 @@ func runDeleter() {
 	}
 
 	if len(notReferencedFiles) > 0 {
-		if res := inits.DB.Delete(&models.File{}, notReferencedFiles); res.Error != nil {
+		if res := w.deps.DB.Delete(&models.File{}, notReferencedFiles); res.Error != nil {
 			log.Printf("Failed to delete unreferenced files: %v", res.Error)
 			return
 		}
 	}
 
 	var todos []models.File
-	if res := inits.DB.
+	if res := w.deps.DB.
 		Model(&models.File{}).
 		Preload("Qualitys").
 		Preload("Subtitles").
@@ -78,7 +83,7 @@ func runDeleter() {
 
 		if encoding {
 			// kill ffmpeg process if active
-			for _, v := range ActiveEncodings {
+			for _, v := range w.activeEncodingsForFile(todo.ID) {
 				if v.FileID == todo.ID && v.Channel != nil {
 					*v.Channel <- true
 				}
@@ -90,7 +95,7 @@ func runDeleter() {
 		}
 
 		// delete related stuff
-		if res := inits.DB.
+		if res := w.deps.DB.
 			Unscoped().
 			Where(&models.Subtitle{
 				FileID: todo.ID,
@@ -100,7 +105,7 @@ func runDeleter() {
 			continue
 		}
 
-		if res := inits.DB.
+		if res := w.deps.DB.
 			Unscoped().
 			Where(&models.Audio{
 				FileID: todo.ID,
@@ -110,7 +115,7 @@ func runDeleter() {
 			continue
 		}
 
-		if res := inits.DB.
+		if res := w.deps.DB.
 			Unscoped().
 			Where(&models.Quality{
 				FileID: todo.ID,
@@ -139,7 +144,7 @@ func runDeleter() {
 		}
 
 		// delete file from database
-		if res := inits.DB.
+		if res := w.deps.DB.
 			Unscoped().
 			Delete(&todo); res.Error != nil {
 			log.Printf("Failed to delete File from database: %v", res.Error)

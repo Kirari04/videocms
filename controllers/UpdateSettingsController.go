@@ -1,19 +1,16 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/configdb"
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
-	"ch/kirari04/videocms/services"
 	"log"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
 )
 
-func UpdateSettings(c echo.Context) error {
+func (h *Handlers) UpdateSettings(c echo.Context) error {
 
 	// parse & validate request
 	var validation models.SettingValidation
@@ -22,7 +19,7 @@ func UpdateSettings(c echo.Context) error {
 	}
 
 	var previousSetting models.Setting
-	if res := inits.DB.First(&previousSetting, validation.ID); res.Error != nil {
+	if res := h.Deps.DB.First(&previousSetting, validation.ID); res.Error != nil {
 		return c.String(http.StatusBadRequest, "Setting not found by id")
 	}
 	remoteDownloadsWereEnabled := previousSetting.RemoteDownloadEnabled != "false"
@@ -105,19 +102,18 @@ func UpdateSettings(c echo.Context) error {
 	setting.MaxParallelDownloads = validation.MaxParallelDownloads
 	setting.RemoteDownloadTimeout = validation.RemoteDownloadTimeout
 
-	if res := inits.DB.Save(&setting); res.Error != nil {
-		log.Fatalln("Failed to save settings", res.Error)
+	if res := h.Deps.DB.Save(&setting); res.Error != nil {
+		log.Println("Failed to save settings", res.Error)
 		return c.NoContent(http.StatusInternalServerError)
 	}
-	if remoteDownloadsWereEnabled && remoteDownloadsNowDisabled {
-		disabled := false
-		config.ENV.RemoteDownloadEnabled = &disabled
-		services.CancelAllRemoteDownloads("Remote downloads disabled by administrator")
+	snapshot, err := configdb.LoadSnapshot(h.Deps.DB, h.Config())
+	if err != nil {
+		log.Println("Failed to reload settings", err)
+		return c.NoContent(http.StatusInternalServerError)
 	}
-	// reload config in background
-	go func() {
-		configdb.Setup()
-		log.Println("reloaded config")
-	}()
+	h.Deps.Snapshots.Replace(snapshot)
+	if remoteDownloadsWereEnabled && remoteDownloadsNowDisabled {
+		h.Workers.CancelAllRemoteDownloads("Remote downloads disabled by administrator")
+	}
 	return c.String(http.StatusOK, "ok")
 }

@@ -1,17 +1,18 @@
 package cmd
 
 import (
-	"ch/kirari04/videocms/config"
 	"encoding/json"
 	"fmt"
+	"os"
 )
 
 func Config() {
-	Init()
+	deps, err := InitRuntime()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
-	// for setting up configuration file from env
-	config.Setup()
-
-	res2B, _ := json.MarshalIndent(config.ENV, "", "  ")
+	res2B, _ := json.MarshalIndent(deps.Config(), "", "  ")
 	fmt.Println(string(res2B))
 }

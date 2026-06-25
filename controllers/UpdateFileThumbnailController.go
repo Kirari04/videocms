@@ -2,14 +2,13 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
 )
 
-func UpdateFileThumbnail(c echo.Context) error {
+func (h *Handlers) UpdateFileThumbnail(c echo.Context) error {
 	var validation models.LinkThumbnailValidation
 	if status, err := helpers.Validate(c, &validation); err != nil {
 		return c.String(status, err.Error())
@@ -27,7 +26,7 @@ func UpdateFileThumbnail(c echo.Context) error {
 	defer src.Close()
 
 	isAdmin, _ := c.Get("Admin").(bool)
-	status, err := logic.UpdateLinkThumbnail(
+	status, err := h.Logic.UpdateLinkThumbnail(
 		validation.LinkID,
 		c.Get("UserID").(uint),
 		isAdmin,
@@ -42,14 +41,14 @@ func UpdateFileThumbnail(c echo.Context) error {
 	return c.NoContent(status)
 }
 
-func DeleteFileThumbnail(c echo.Context) error {
+func (h *Handlers) DeleteFileThumbnail(c echo.Context) error {
 	var validation models.LinkThumbnailValidation
 	if status, err := helpers.Validate(c, &validation); err != nil {
 		return c.String(status, err.Error())
 	}
 
 	isAdmin, _ := c.Get("Admin").(bool)
-	status, err := logic.ResetLinkThumbnail(validation.LinkID, c.Get("UserID").(uint), isAdmin)
+	status, err := h.Logic.ResetLinkThumbnail(validation.LinkID, c.Get("UserID").(uint), isAdmin)
 	if err != nil {
 		return c.String(status, err.Error())
 	}

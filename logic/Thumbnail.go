@@ -12,7 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func CreateThumbnail(imageCountAxis int, inputFile string, height int, outputFile string, outputFolder string, videoDuration float64, fps float64) (status int, err error) {
+func (s *Service) CreateThumbnail(imageCountAxis int, inputFile string, height int, outputFile string, outputFolder string, videoDuration float64, fps float64) (status int, err error) {
 	// read file & folder
 	absOutputFolder, err := filepath.Abs(outputFolder)
 	if err != nil {

@@ -1,9 +1,6 @@
 package services
 
 import (
-	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/inits"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"context"
 	"errors"
@@ -17,53 +14,57 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
 	"github.com/google/uuid"
 )
 
-var (
-	activeDownloadsMu     sync.Mutex
-	activeDownloadCancels = map[uint]context.CancelFunc{}
-)
-
-func Downloader() {
-	time.Sleep(time.Second * 5)
-	resetStaleRemoteDownloads()
+func (w *WorkerGroup) Downloader(ctx context.Context) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if !sleepContext(ctx, time.Second*5) {
+		return
+	}
+	w.resetStaleRemoteDownloads()
 
 	for {
-		if remoteDownloadsEnabled() {
-			loadDownloadTasks()
+		if w.remoteDownloadsEnabled() {
+			w.loadDownloadTasks(ctx)
 		}
-		time.Sleep(time.Second * 5)
+		if !sleepContext(ctx, time.Second*5) {
+			return
+		}
 	}
 }
 
-func loadDownloadTasks() {
-	availableSlots := availableRemoteDownloadSlots()
+func (w *WorkerGroup) loadDownloadTasks(ctx context.Context) {
+	availableSlots := w.availableRemoteDownloadSlots()
 	if availableSlots <= 0 {
 		return
 	}
 
 	var pendingDownloads []models.RemoteDownload
-	inits.DB.
+	w.deps.DB.
 		Where("status = ?", models.RemoteDownloadStatusPending).
 		Order("created_at ASC").
 		Limit(availableSlots).
 		Find(&pendingDownloads)
 
 	for _, download := range pendingDownloads {
-		if availableRemoteDownloadSlots() <= 0 {
+		if ctx.Err() != nil {
 			return
 		}
-		if !remoteDownloadsEnabled() {
+		if w.availableRemoteDownloadSlots() <= 0 {
+			return
+		}
+		if !w.remoteDownloadsEnabled() {
 			return
 		}
 
 		now := time.Now()
-		claimed := inits.DB.Model(&models.RemoteDownload{}).
+		claimed := w.deps.DB.Model(&models.RemoteDownload{}).
 			Where("id = ? AND status = ?", download.ID, models.RemoteDownloadStatusPending).
 			Updates(map[string]interface{}{
 				"status":     models.RemoteDownloadStatusDownloading,
@@ -77,88 +78,91 @@ func loadDownloadTasks() {
 
 		download.Status = models.RemoteDownloadStatusDownloading
 		download.StartedAt = &now
-		ctx, cancel := context.WithCancel(context.Background())
-		registerActiveDownload(download.ID, cancel)
+		downloadCtx, cancel := context.WithCancel(ctx)
+		w.registerActiveDownload(download.ID, cancel)
 
 		go func(task models.RemoteDownload) {
-			defer unregisterActiveDownload(task.ID)
-			processDownload(ctx, task)
+			defer w.unregisterActiveDownload(task.ID)
+			w.processDownload(downloadCtx, task)
 		}(download)
 	}
 }
 
-func availableRemoteDownloadSlots() int {
+func (w *WorkerGroup) availableRemoteDownloadSlots() int {
 	maxDownloads := 1
-	if config.ENV.MaxParallelDownloads > 0 {
-		maxDownloads = int(config.ENV.MaxParallelDownloads)
+	cfg := w.Config()
+	if cfg.MaxParallelDownloads > 0 {
+		maxDownloads = int(cfg.MaxParallelDownloads)
 	}
 
-	activeDownloadsMu.Lock()
-	activeCount := len(activeDownloadCancels)
-	activeDownloadsMu.Unlock()
+	w.activeDownloadsMu.Lock()
+	activeCount := len(w.activeDownloadCancels)
+	w.activeDownloadsMu.Unlock()
 
 	return maxDownloads - activeCount
 }
 
-func remoteDownloadsEnabled() bool {
-	return config.ENV.RemoteDownloadEnabled == nil || *config.ENV.RemoteDownloadEnabled
+func (w *WorkerGroup) remoteDownloadsEnabled() bool {
+	cfg := w.Config()
+	return cfg.RemoteDownloadEnabled == nil || *cfg.RemoteDownloadEnabled
 }
 
-func registerActiveDownload(id uint, cancel context.CancelFunc) {
-	activeDownloadsMu.Lock()
-	activeDownloadCancels[id] = cancel
-	activeDownloadsMu.Unlock()
+func (w *WorkerGroup) registerActiveDownload(id uint, cancel context.CancelFunc) {
+	w.activeDownloadsMu.Lock()
+	w.activeDownloadCancels[id] = cancel
+	w.activeDownloadsMu.Unlock()
 }
 
-func unregisterActiveDownload(id uint) {
-	activeDownloadsMu.Lock()
-	delete(activeDownloadCancels, id)
-	activeDownloadsMu.Unlock()
+func (w *WorkerGroup) unregisterActiveDownload(id uint) {
+	w.activeDownloadsMu.Lock()
+	delete(w.activeDownloadCancels, id)
+	w.activeDownloadsMu.Unlock()
 }
 
-func activeRemoteDownloadIDs() map[uint]bool {
-	activeDownloadsMu.Lock()
-	defer activeDownloadsMu.Unlock()
+func (w *WorkerGroup) activeRemoteDownloadIDs() map[uint]bool {
+	w.activeDownloadsMu.Lock()
+	defer w.activeDownloadsMu.Unlock()
 
-	ids := make(map[uint]bool, len(activeDownloadCancels))
-	for id := range activeDownloadCancels {
+	ids := make(map[uint]bool, len(w.activeDownloadCancels))
+	for id := range w.activeDownloadCancels {
 		ids[id] = true
 	}
 	return ids
 }
 
-func processDownload(parentCtx context.Context, task models.RemoteDownload) {
-	if isCancelRequested(task.ID) {
-		finishCanceled(&task, "Download canceled")
+func (w *WorkerGroup) processDownload(parentCtx context.Context, task models.RemoteDownload) {
+	if w.isCancelRequested(task.ID) {
+		w.finishCanceled(&task, "Download canceled")
 		return
 	}
 	if err := validateRemoteURLScheme(task.Url); err != nil {
-		failDownload(&task, err.Error())
+		w.failDownload(&task, err.Error())
 		return
 	}
 
 	downloadCtx := parentCtx
 	cancelTimeout := func() {}
-	if config.ENV.RemoteDownloadTimeout > 0 {
-		downloadCtx, cancelTimeout = context.WithTimeout(parentCtx, time.Duration(config.ENV.RemoteDownloadTimeout)*time.Second)
+	cfg := w.Config()
+	if cfg.RemoteDownloadTimeout > 0 {
+		downloadCtx, cancelTimeout = context.WithTimeout(parentCtx, time.Duration(cfg.RemoteDownloadTimeout)*time.Second)
 	}
 	defer cancelTimeout()
 
 	req, err := http.NewRequestWithContext(downloadCtx, http.MethodGet, task.Url, nil)
 	if err != nil {
-		failOrCancelDownload(&task, fmt.Sprintf("Failed to create request: %v", err))
+		w.failOrCancelDownload(&task, fmt.Sprintf("Failed to create request: %v", err))
 		return
 	}
 
 	resp, err := secureHTTPClient().Do(req)
 	if err != nil {
-		failOrCancelDownload(&task, fmt.Sprintf("Network error: %v", err))
+		w.failOrCancelDownload(&task, fmt.Sprintf("Network error: %v", err))
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		failDownload(&task, fmt.Sprintf("HTTP error: %s", resp.Status))
+		w.failDownload(&task, fmt.Sprintf("HTTP error: %s", resp.Status))
 		return
 	}
 
@@ -166,87 +170,88 @@ func processDownload(parentCtx context.Context, task models.RemoteDownload) {
 	if resp.ContentLength > 0 {
 		totalSize = resp.ContentLength
 	}
-	if totalSize > 0 && config.ENV.MaxUploadFilesize > 0 && totalSize > config.ENV.MaxUploadFilesize {
-		failDownload(&task, fmt.Sprintf("Remote file exceeds max upload size (%d bytes)", config.ENV.MaxUploadFilesize))
+	cfg = w.Config()
+	if totalSize > 0 && cfg.MaxUploadFilesize > 0 && totalSize > cfg.MaxUploadFilesize {
+		w.failDownload(&task, fmt.Sprintf("Remote file exceeds max upload size (%d bytes)", cfg.MaxUploadFilesize))
 		return
 	}
 
 	fileName := resolveRemoteFileName(task, resp)
-	tempPath := filepath.Join(config.ENV.FolderVideoUploadsPriv, fmt.Sprintf("remote_%d_%s.download", task.ID, uuid.NewString()))
+	tempPath := filepath.Join(cfg.FolderVideoUploadsPriv, fmt.Sprintf("remote_%d_%s.download", task.ID, uuid.NewString()))
 	if err := os.MkdirAll(filepath.Dir(tempPath), 0755); err != nil {
-		failDownload(&task, fmt.Sprintf("Failed to prepare upload folder: %v", err))
+		w.failDownload(&task, fmt.Sprintf("Failed to prepare upload folder: %v", err))
 		return
 	}
 
 	task.Name = fileName
 	task.TotalSize = totalSize
 	task.TempPath = tempPath
-	if res := inits.DB.Model(&task).Updates(map[string]interface{}{
+	if res := w.deps.DB.Model(&task).Updates(map[string]interface{}{
 		"name":       task.Name,
 		"total_size": task.TotalSize,
 		"temp_path":  task.TempPath,
 	}); res.Error != nil {
-		failDownload(&task, "Failed to persist download metadata")
+		w.failDownload(&task, "Failed to persist download metadata")
 		return
 	}
 
 	out, err := os.Create(tempPath)
 	if err != nil {
-		failDownload(&task, fmt.Sprintf("Failed to create temp file: %v", err))
+		w.failDownload(&task, fmt.Sprintf("Failed to create temp file: %v", err))
 		return
 	}
 
-	copied, copyErr := copyRemoteBody(downloadCtx, resp.Body, out, &task)
+	copied, copyErr := w.copyRemoteBody(downloadCtx, resp.Body, out, &task)
 	closeErr := out.Close()
 	if copyErr != nil {
 		cleanupRemoteTemp(tempPath, fileName)
-		failOrCancelDownload(&task, fmt.Sprintf("Download failed: %v", copyErr))
+		w.failOrCancelDownload(&task, fmt.Sprintf("Download failed: %v", copyErr))
 		return
 	}
 	if closeErr != nil {
 		cleanupRemoteTemp(tempPath, fileName)
-		failDownload(&task, fmt.Sprintf("Failed to close temp file: %v", closeErr))
+		w.failDownload(&task, fmt.Sprintf("Failed to close temp file: %v", closeErr))
 		return
 	}
 
 	task.BytesDownloaded = copied
-	if isCancelRequested(task.ID) {
+	if w.isCancelRequested(task.ID) {
 		cleanupRemoteTemp(tempPath, fileName)
-		finishCanceled(&task, "Download canceled")
+		w.finishCanceled(&task, "Download canceled")
 		return
 	}
 
-	if res := inits.DB.Model(&task).Updates(map[string]interface{}{
+	if res := w.deps.DB.Model(&task).Updates(map[string]interface{}{
 		"status":           models.RemoteDownloadStatusImporting,
 		"bytes_downloaded": task.BytesDownloaded,
 		"progress":         0.95,
 	}); res.Error != nil {
 		cleanupRemoteTemp(tempPath, fileName)
-		failDownload(&task, "Failed to update import status")
+		w.failDownload(&task, "Failed to update import status")
 		return
 	}
 	task.Status = models.RemoteDownloadStatusImporting
 	task.Progress = 0.95
 
 	fileUUID := uuid.NewString()
-	status, dbLink, cloned, err := logic.CreateFile(&tempPath, task.ParentFolderID, task.Name, fileUUID, task.BytesDownloaded, task.UserID, "")
+	status, dbLink, cloned, err := w.logic.CreateFile(&tempPath, task.ParentFolderID, task.Name, fileUUID, task.BytesDownloaded, task.UserID, "")
 	if err != nil {
 		cleanupRemoteTemp(tempPath, fileName)
-		failDownload(&task, fmt.Sprintf("Import failed (status %d): %v", status, err))
+		w.failDownload(&task, fmt.Sprintf("Import failed (status %d): %v", status, err))
 		return
 	}
 	if dbLink == nil {
 		cleanupRemoteTemp(tempPath, fileName)
-		failDownload(&task, "Import failed: missing created link")
+		w.failDownload(&task, "Import failed: missing created link")
 		return
 	}
 
-	if isCancelRequested(task.ID) {
-		_ = deleteImportedRemoteLink(task.UserID, dbLink.ID)
+	if w.isCancelRequested(task.ID) {
+		_ = w.deleteImportedRemoteLink(task.UserID, dbLink.ID)
 		if cloned {
 			cleanupRemoteTemp(tempPath, fileName)
 		}
-		finishCanceled(&task, "Download canceled")
+		w.finishCanceled(&task, "Download canceled")
 		return
 	}
 
@@ -269,9 +274,9 @@ func processDownload(parentCtx context.Context, task models.RemoteDownload) {
 	task.FileID = dbLink.FileID
 	task.Error = ""
 	task.TempPath = ""
-	inits.DB.Save(&task)
+	w.deps.DB.Save(&task)
 
-	logStats(task)
+	w.logStats(task)
 }
 
 func secureHTTPClient() *http.Client {
@@ -400,7 +405,7 @@ func sanitizeRemoteFileName(name string, id uint) string {
 	return string(runes[:maxNameLength])
 }
 
-func copyRemoteBody(ctx context.Context, src io.Reader, dst io.Writer, task *models.RemoteDownload) (int64, error) {
+func (w *WorkerGroup) copyRemoteBody(ctx context.Context, src io.Reader, dst io.Writer, task *models.RemoteDownload) (int64, error) {
 	buffer := make([]byte, 64*1024)
 	var downloaded int64
 	lastUpdate := time.Now()
@@ -413,8 +418,9 @@ func copyRemoteBody(ctx context.Context, src io.Reader, dst io.Writer, task *mod
 		n, readErr := src.Read(buffer)
 		if n > 0 {
 			downloaded += int64(n)
-			if config.ENV.MaxUploadFilesize > 0 && downloaded > config.ENV.MaxUploadFilesize {
-				return downloaded, fmt.Errorf("remote file exceeds max upload size (%d bytes)", config.ENV.MaxUploadFilesize)
+			cfg := w.Config()
+			if cfg.MaxUploadFilesize > 0 && downloaded > cfg.MaxUploadFilesize {
+				return downloaded, fmt.Errorf("remote file exceeds max upload size (%d bytes)", cfg.MaxUploadFilesize)
 			}
 			if _, err := dst.Write(buffer[:n]); err != nil {
 				return downloaded, err
@@ -425,7 +431,7 @@ func copyRemoteBody(ctx context.Context, src io.Reader, dst io.Writer, task *mod
 				if task.TotalSize > 0 {
 					task.Progress = float64(downloaded) / float64(task.TotalSize)
 				}
-				inits.DB.Model(task).Updates(map[string]interface{}{
+				w.deps.DB.Model(task).Updates(map[string]interface{}{
 					"bytes_downloaded": task.BytesDownloaded,
 					"progress":         task.Progress,
 				})
@@ -438,7 +444,7 @@ func copyRemoteBody(ctx context.Context, src io.Reader, dst io.Writer, task *mod
 				if task.TotalSize > 0 {
 					task.Progress = float64(downloaded) / float64(task.TotalSize)
 				}
-				inits.DB.Model(task).Updates(map[string]interface{}{
+				w.deps.DB.Model(task).Updates(map[string]interface{}{
 					"bytes_downloaded": task.BytesDownloaded,
 					"progress":         task.Progress,
 				})
@@ -449,16 +455,16 @@ func copyRemoteBody(ctx context.Context, src io.Reader, dst io.Writer, task *mod
 	}
 }
 
-func failOrCancelDownload(task *models.RemoteDownload, reason string) {
-	if isCancelRequested(task.ID) {
+func (w *WorkerGroup) failOrCancelDownload(task *models.RemoteDownload, reason string) {
+	if w.isCancelRequested(task.ID) {
 		cleanupRemoteTemp(task.TempPath, task.Name)
-		finishCanceled(task, "Download canceled")
+		w.finishCanceled(task, "Download canceled")
 		return
 	}
-	failDownload(task, reason)
+	w.failDownload(task, reason)
 }
 
-func failDownload(task *models.RemoteDownload, reason string) {
+func (w *WorkerGroup) failDownload(task *models.RemoteDownload, reason string) {
 	now := time.Now()
 	task.Status = models.RemoteDownloadStatusFailed
 	task.Error = truncateRemoteError(reason)
@@ -467,10 +473,10 @@ func failDownload(task *models.RemoteDownload, reason string) {
 		task.Duration = now.Sub(*task.StartedAt).Seconds()
 	}
 	task.TempPath = ""
-	inits.DB.Save(task)
+	w.deps.DB.Save(task)
 }
 
-func finishCanceled(task *models.RemoteDownload, reason string) {
+func (w *WorkerGroup) finishCanceled(task *models.RemoteDownload, reason string) {
 	now := time.Now()
 	task.Status = models.RemoteDownloadStatusCanceled
 	task.Error = truncateRemoteError(reason)
@@ -481,12 +487,12 @@ func finishCanceled(task *models.RemoteDownload, reason string) {
 		task.Duration = now.Sub(*task.StartedAt).Seconds()
 	}
 	task.TempPath = ""
-	inits.DB.Save(task)
+	w.deps.DB.Save(task)
 }
 
-func isCancelRequested(id uint) bool {
+func (w *WorkerGroup) isCancelRequested(id uint) bool {
 	var current models.RemoteDownload
-	if res := inits.DB.Select("status").First(&current, id); res.Error != nil {
+	if res := w.deps.DB.Select("status").First(&current, id); res.Error != nil {
 		return false
 	}
 	return current.Status == models.RemoteDownloadStatusCanceling || current.Status == models.RemoteDownloadStatusCanceled
@@ -502,11 +508,11 @@ func cleanupRemoteTemp(tempPath string, fileName string) {
 	}
 }
 
-func deleteImportedRemoteLink(userID uint, linkID uint) error {
+func (w *WorkerGroup) deleteImportedRemoteLink(userID uint, linkID uint) error {
 	if linkID == 0 {
 		return nil
 	}
-	_, err := logic.DeleteFiles(&models.LinksDeleteValidation{
+	_, err := w.logic.DeleteFiles(&models.LinksDeleteValidation{
 		LinkIDs: []models.LinkDeleteValidation{{LinkID: linkID}},
 	}, userID, false)
 	return err
@@ -520,9 +526,9 @@ func truncateRemoteError(reason string) string {
 	return reason[:maxErrorLength]
 }
 
-func CancelRemoteDownload(userID uint, downloadID uint) (int, error) {
+func (w *WorkerGroup) CancelRemoteDownload(userID uint, downloadID uint) (int, error) {
 	var task models.RemoteDownload
-	if res := inits.DB.Where("id = ? AND user_id = ?", downloadID, userID).First(&task); res.Error != nil {
+	if res := w.deps.DB.Where("id = ? AND user_id = ?", downloadID, userID).First(&task); res.Error != nil {
 		return http.StatusNotFound, errors.New("download not found")
 	}
 
@@ -538,12 +544,12 @@ func CancelRemoteDownload(userID uint, downloadID uint) (int, error) {
 		task.CancelRequestedAt = &now
 		task.CanceledAt = &now
 		task.FinishedAt = &now
-		if res := inits.DB.Save(&task); res.Error != nil {
+		if res := w.deps.DB.Save(&task); res.Error != nil {
 			return http.StatusInternalServerError, errors.New("failed to cancel download")
 		}
 		return http.StatusOK, nil
 	default:
-		if res := inits.DB.Model(&task).Updates(map[string]interface{}{
+		if res := w.deps.DB.Model(&task).Updates(map[string]interface{}{
 			"status":              models.RemoteDownloadStatusCanceling,
 			"error":               "Cancellation requested",
 			"cancel_requested_at": &now,
@@ -551,9 +557,9 @@ func CancelRemoteDownload(userID uint, downloadID uint) (int, error) {
 			return http.StatusInternalServerError, errors.New("failed to request cancellation")
 		}
 
-		activeDownloadsMu.Lock()
-		cancel := activeDownloadCancels[task.ID]
-		activeDownloadsMu.Unlock()
+		w.activeDownloadsMu.Lock()
+		cancel := w.activeDownloadCancels[task.ID]
+		w.activeDownloadsMu.Unlock()
 		if cancel != nil {
 			cancel()
 			return http.StatusOK, nil
@@ -565,21 +571,21 @@ func CancelRemoteDownload(userID uint, downloadID uint) (int, error) {
 		task.CanceledAt = &now
 		task.FinishedAt = &now
 		task.TempPath = ""
-		inits.DB.Save(&task)
+		w.deps.DB.Save(&task)
 		return http.StatusOK, nil
 	}
 }
 
-func CancelAllRemoteDownloads(reason string) {
+func (w *WorkerGroup) CancelAllRemoteDownloads(reason string) {
 	now := time.Now()
-	activeIDsMap := activeRemoteDownloadIDs()
+	activeIDsMap := w.activeRemoteDownloadIDs()
 	activeIDs := make([]uint, 0, len(activeIDsMap))
 	for id := range activeIDsMap {
 		activeIDs = append(activeIDs, id)
 	}
 
 	if len(activeIDs) > 0 {
-		inits.DB.Model(&models.RemoteDownload{}).
+		w.deps.DB.Model(&models.RemoteDownload{}).
 			Where("id IN ? AND status IN ?", activeIDs, []string{
 				models.RemoteDownloadStatusDownloading,
 				models.RemoteDownloadStatusImporting,
@@ -591,14 +597,14 @@ func CancelAllRemoteDownloads(reason string) {
 				"cancel_requested_at": &now,
 			})
 
-		activeDownloadsMu.Lock()
-		for _, cancel := range activeDownloadCancels {
+		w.activeDownloadsMu.Lock()
+		for _, cancel := range w.activeDownloadCancels {
 			cancel()
 		}
-		activeDownloadsMu.Unlock()
+		w.activeDownloadsMu.Unlock()
 	}
 
-	cancelQuery := inits.DB.Model(&models.RemoteDownload{}).
+	cancelQuery := w.deps.DB.Model(&models.RemoteDownload{}).
 		Where("status = ?", models.RemoteDownloadStatusPending)
 	if len(activeIDs) > 0 {
 		cancelQuery = cancelQuery.Or("status IN ? AND id NOT IN ?", []string{
@@ -623,9 +629,9 @@ func CancelAllRemoteDownloads(reason string) {
 	})
 }
 
-func resetStaleRemoteDownloads() {
+func (w *WorkerGroup) resetStaleRemoteDownloads() {
 	var staleDownloads []models.RemoteDownload
-	if res := inits.DB.Where("status IN ?", []string{
+	if res := w.deps.DB.Where("status IN ?", []string{
 		models.RemoteDownloadStatusDownloading,
 		models.RemoteDownloadStatusImporting,
 		models.RemoteDownloadStatusCanceling,
@@ -647,11 +653,11 @@ func resetStaleRemoteDownloads() {
 		}
 		task.FinishedAt = &now
 		task.TempPath = ""
-		inits.DB.Save(&task)
+		w.deps.DB.Save(&task)
 	}
 }
 
-func logStats(task models.RemoteDownload) {
+func (w *WorkerGroup) logStats(task models.RemoteDownload) {
 	domain := "unknown"
 	u, err := url.Parse(task.Url)
 	if err == nil && u.Host != "" {
@@ -669,5 +675,5 @@ func logStats(task models.RemoteDownload) {
 		Bytes:   uint64(task.BytesDownloaded),
 		Seconds: task.Duration,
 	}
-	inits.DB.Create(&stat)
+	w.deps.DB.Create(&stat)
 }

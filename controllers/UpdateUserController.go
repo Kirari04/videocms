@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/logic"
 	"net/http"
 	"strconv"
 
@@ -19,7 +18,7 @@ type UpdateUserRequest struct {
 	RemoteDownloadEnabled *bool    `json:"remoteDownloadEnabled" validate:"omitempty,boolean"`
 }
 
-func UpdateUser(c echo.Context) error {
+func (h *Handlers) UpdateUser(c echo.Context) error {
 	idParam := c.Param("id")
 	id, err := strconv.ParseUint(idParam, 10, 64)
 	if err != nil {
@@ -31,7 +30,7 @@ func UpdateUser(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	status, user, err := logic.UpdateUser(id, req.Username, req.Email, req.Admin, req.Storage, req.Balance, req.MaxRemoteDownloads, req.RemoteDownloadEnabled)
+	status, user, err := h.Logic.UpdateUser(id, req.Username, req.Email, req.Admin, req.Storage, req.Balance, req.MaxRemoteDownloads, req.RemoteDownloadEnabled)
 	if err != nil {
 		return c.String(status, err.Error())
 	}

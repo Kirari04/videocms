@@ -1,7 +1,6 @@
 package middlewares
 
 import (
-	"ch/kirari04/videocms/config"
 	"net/http"
 	"time"
 
@@ -14,9 +13,10 @@ var LimiterWhitelistIps = map[string]bool{
 	"127.0.0.1": true,
 }
 
-func LimiterWhitelistNext(c echo.Context) bool {
+func (f *Factory) LimiterWhitelistNext(c echo.Context) bool {
 	// disable ratelimit by env
-	if !*config.ENV.RatelimitEnabled {
+	ratelimitEnabled := f.Config().RatelimitEnabled
+	if ratelimitEnabled == nil || !*ratelimitEnabled {
 		return true
 	}
 	// disable ratelimit by ip
@@ -28,9 +28,9 @@ func LimiterWhitelistNext(c echo.Context) bool {
 	return false
 }
 
-func LimiterConfig(rate rate.Limit, burst int, expiration time.Duration) *middleware.RateLimiterConfig {
+func (f *Factory) LimiterConfig(rate rate.Limit, burst int, expiration time.Duration) *middleware.RateLimiterConfig {
 	return &middleware.RateLimiterConfig{
-		Skipper: LimiterWhitelistNext,
+		Skipper: f.LimiterWhitelistNext,
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{Rate: rate, Burst: burst, ExpiresIn: expiration},
 		),

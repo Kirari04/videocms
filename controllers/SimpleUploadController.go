@@ -1,9 +1,7 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"fmt"
 	"net/http"
@@ -11,9 +9,9 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func SimpleUploadController(c echo.Context) error {
+func (h *Handlers) SimpleUploadController(c echo.Context) error {
 	// check if uploads are enabled
-	if !*config.ENV.UploadEnabled {
+	if !*h.Config().UploadEnabled {
 		return c.String(http.StatusForbidden, "Uploads are disabled")
 	}
 
@@ -35,8 +33,8 @@ func SimpleUploadController(c echo.Context) error {
 	}
 
 	// size check
-	if file.Size > config.ENV.MaxUploadFilesize {
-		return c.String(http.StatusRequestEntityTooLarge, fmt.Sprintf("Exceeded max upload filesize: %v", config.ENV.MaxUploadFilesize))
+	if file.Size > h.Config().MaxUploadFilesize {
+		return c.String(http.StatusRequestEntityTooLarge, fmt.Sprintf("Exceeded max upload filesize: %v", h.Config().MaxUploadFilesize))
 	}
 
 	src, err := file.Open()
@@ -47,7 +45,7 @@ func SimpleUploadController(c echo.Context) error {
 	defer src.Close()
 
 	// Business logic
-	status, response, err := logic.SimpleUpload(
+	status, response, err := h.Logic.SimpleUpload(
 		validation.ParentFolderID,
 		validation.Name,
 		src,

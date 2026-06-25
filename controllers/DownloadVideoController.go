@@ -1,9 +1,7 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"fmt"
 	"net/http"
@@ -16,7 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func DownloadVideoController(c echo.Context) error {
+func (h *Handlers) DownloadVideoController(c echo.Context) error {
 	type Request struct {
 		UUID    string `validate:"required,uuid_rfc4122" param:"UUID"`
 		QUALITY string `validate:"required,min=1,max=10" param:"QUALITY"`
@@ -36,13 +34,13 @@ func DownloadVideoController(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "bad quality format")
 	}
 
-	if config.ENV.DownloadEnabled == nil || !*config.ENV.DownloadEnabled {
+	if h.Config().DownloadEnabled == nil || !*h.Config().DownloadEnabled {
 		return c.String(http.StatusBadRequest, "download disabled")
 	}
 
 	//translate link id to file id
 	var dbLink models.Link
-	if dbRes := inits.DB.
+	if dbRes := h.Deps.DB.
 		Model(&models.Link{}).
 		Preload("File").
 		Preload("File.Subtitles").
@@ -106,7 +104,7 @@ func DownloadVideoController(c echo.Context) error {
 		files = append(files, "-map", fmt.Sprintf("%d", i))
 	}
 
-	tmpFilePath := fmt.Sprintf("%s/%s-tmp-enc.mp4", config.ENV.FolderVideoUploadsPriv, uuid.NewString())
+	tmpFilePath := fmt.Sprintf("%s/%s-tmp-enc.mp4", h.Config().FolderVideoUploadsPriv, uuid.NewString())
 	defer os.Remove(tmpFilePath)
 	var cmdString []string
 	if !*requestValidation.Stream {
@@ -140,7 +138,7 @@ func DownloadVideoController(c echo.Context) error {
 				break
 			}
 		}
-		helpers.TrackTraffic(dbLink.File.UserID, dbLink.FileID, qualityID, 0, uint64(fileInfo.Size()))
+		h.Logic.TrackTraffic(dbLink.File.UserID, dbLink.FileID, qualityID, 0, uint64(fileInfo.Size()))
 	}
 
 	if *requestValidation.Stream {

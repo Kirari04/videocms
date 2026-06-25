@@ -1,13 +1,12 @@
 package logic
 
 import (
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"math"
 	"time"
 )
 
-func GetRemoteDownloadStats(from time.Time, to time.Time, points int, userID uint) (TrafficStatsData, error) {
+func (s *Service) GetRemoteDownloadStats(from time.Time, to time.Time, points int, userID uint) (TrafficStatsData, error) {
 	result := TrafficStatsData{
 		Traffic: make([]TrafficStatPoint, 0),
 	}
@@ -24,7 +23,7 @@ func GetRemoteDownloadStats(from time.Time, to time.Time, points int, userID uin
 
 	var aggregations []aggregatedTrafficResult
 
-	query := inits.DB.Model(&models.RemoteDownloadLog{}).
+	query := s.Deps.DB.Model(&models.RemoteDownloadLog{}).
 		Select(`
 			(CAST(strftime('%s', created_at) AS INTEGER) / ? ) * ? as ts,
 			CAST(SUM(bytes) AS INTEGER) as bytes
@@ -62,7 +61,7 @@ func GetRemoteDownloadStats(from time.Time, to time.Time, points int, userID uin
 	return result, nil
 }
 
-func GetRemoteDownloadDurationStats(from time.Time, to time.Time, points int, userID uint) (TrafficStatsData, error) {
+func (s *Service) GetRemoteDownloadDurationStats(from time.Time, to time.Time, points int, userID uint) (TrafficStatsData, error) {
 	result := TrafficStatsData{
 		Traffic: make([]TrafficStatPoint, 0),
 	}
@@ -79,7 +78,7 @@ func GetRemoteDownloadDurationStats(from time.Time, to time.Time, points int, us
 
 	var aggregations []aggregatedEncodingResult
 
-	query := inits.DB.Model(&models.RemoteDownloadLog{}).
+	query := s.Deps.DB.Model(&models.RemoteDownloadLog{}).
 		Select(`
 			(CAST(strftime('%s', created_at) AS INTEGER) / ? ) * ? as ts,
 			SUM(seconds) as seconds
@@ -117,10 +116,10 @@ func GetRemoteDownloadDurationStats(from time.Time, to time.Time, points int, us
 	return result, nil
 }
 
-func GetTopRemoteDownloadTraffic(from time.Time, to time.Time, userID uint, limit int, mode string) ([]TopTrafficResult, error) {
+func (s *Service) GetTopRemoteDownloadTraffic(from time.Time, to time.Time, userID uint, limit int, mode string) ([]TopTrafficResult, error) {
 	var results []TopTrafficResult
 
-	query := inits.DB.Model(&models.RemoteDownloadLog{}).
+	query := s.Deps.DB.Model(&models.RemoteDownloadLog{}).
 		Where("CAST(strftime('%s', remote_download_logs.created_at) AS INTEGER) >= ? AND CAST(strftime('%s', remote_download_logs.created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
 
 	switch mode {

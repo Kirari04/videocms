@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/logic"
 	"net/http"
 	"strconv"
 
@@ -13,7 +12,7 @@ type ResetPasswordRequest struct {
 	NewPassword string `json:"new_password" validate:"required,min=8,max=250"`
 }
 
-func ResetUserPassword(c echo.Context) error {
+func (h *Handlers) ResetUserPassword(c echo.Context) error {
 	idParam := c.Param("id")
 	id, err := strconv.ParseUint(idParam, 10, 64)
 	if err != nil {
@@ -25,7 +24,7 @@ func ResetUserPassword(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	status, err := logic.ResetUserPassword(id, req.NewPassword)
+	status, err := h.Logic.ResetUserPassword(id, req.NewPassword)
 	if err != nil {
 		return c.String(status, err.Error())
 	}

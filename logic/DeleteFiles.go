@@ -1,8 +1,6 @@
 package logic
 
 import (
-	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
@@ -12,11 +10,11 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func DeleteFiles(fileValidation *models.LinksDeleteValidation, userID uint, isAdmin bool) (status int, err error) {
+func (s *Service) DeleteFiles(fileValidation *models.LinksDeleteValidation, userID uint, isAdmin bool) (status int, err error) {
 	if len(fileValidation.LinkIDs) == 0 {
 		return http.StatusBadRequest, errors.New("array LinkIDs is empty")
 	}
-	if int64(len(fileValidation.LinkIDs)) > config.ENV.MaxItemsMultiDelete {
+	if int64(len(fileValidation.LinkIDs)) > s.Config().MaxItemsMultiDelete {
 		return http.StatusBadRequest, errors.New("max requested items exceeded")
 	}
 
@@ -26,7 +24,7 @@ func DeleteFiles(fileValidation *models.LinksDeleteValidation, userID uint, isAd
 	linksToDelete := []models.Link{}
 	for _, LinkValidation := range fileValidation.LinkIDs {
 		var link models.Link
-		query := inits.DB.Model(&models.Link{}).Preload("File")
+		query := s.Deps.DB.Model(&models.Link{}).Preload("File")
 		if !isAdmin {
 			query = query.Where("user_id = ?", userID)
 		}
@@ -43,12 +41,12 @@ func DeleteFiles(fileValidation *models.LinksDeleteValidation, userID uint, isAd
 	}
 
 	// delete links
-	if res := inits.DB.Delete(&models.Link{}, linkIdDeleteList); res.Error != nil {
+	if res := s.Deps.DB.Delete(&models.Link{}, linkIdDeleteList); res.Error != nil {
 		log.Printf("Failed to delete links: %v", res.Error)
 		return http.StatusInternalServerError, echo.ErrInternalServerError
 	}
 	for _, link := range linksToDelete {
-		RemoveLinkThumbnailFile(link)
+		s.RemoveLinkThumbnailFile(link)
 	}
 
 	return http.StatusOK, nil

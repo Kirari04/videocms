@@ -1,8 +1,6 @@
 package logic
 
 import (
-	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
@@ -23,28 +21,28 @@ const maxLinkThumbnailUploadBytes int64 = 10 * 1024 * 1024
 
 var safeThumbnailFileName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
-func LinkThumbnailFilename(linkUUID string) string {
+func (s *Service) LinkThumbnailFilename(linkUUID string) string {
 	return fmt.Sprintf("link-%s.webp", linkUUID)
 }
 
-func ResolvedThumbnailFilename(link models.Link) string {
+func (s *Service) ResolvedThumbnailFilename(link models.Link) string {
 	if link.Thumbnail != "" {
 		return link.Thumbnail
 	}
 	return link.File.Thumbnail
 }
 
-func ResolvedThumbnailURL(link models.Link) string {
+func (s *Service) ResolvedThumbnailURL(link models.Link) string {
 	return fmt.Sprintf(
 		"%s/%s/image/thumb/%s",
-		strings.TrimRight(config.ENV.FolderVideoQualitysPub, "/"),
+		strings.TrimRight(s.Config().FolderVideoQualitysPub, "/"),
 		link.UUID,
-		ResolvedThumbnailFilename(link),
+		s.ResolvedThumbnailFilename(link),
 	)
 }
 
-func UpdateLinkThumbnail(linkID uint, userID uint, isAdmin bool, input io.Reader, fileSize int64, contentType string) (status int, err error) {
-	dbLink, status, err := loadThumbnailLink(linkID, userID, isAdmin)
+func (s *Service) UpdateLinkThumbnail(linkID uint, userID uint, isAdmin bool, input io.Reader, fileSize int64, contentType string) (status int, err error) {
+	dbLink, status, err := s.loadThumbnailLink(linkID, userID, isAdmin)
 	if err != nil {
 		return status, err
 	}
@@ -52,15 +50,15 @@ func UpdateLinkThumbnail(linkID uint, userID uint, isAdmin bool, input io.Reader
 	if fileSize <= 0 {
 		return http.StatusBadRequest, errors.New("thumbnail is empty")
 	}
-	maxBytes := MaxLinkThumbnailUploadBytes()
+	maxBytes := s.MaxLinkThumbnailUploadBytes()
 	if fileSize > maxBytes {
 		return http.StatusRequestEntityTooLarge, fmt.Errorf("exceeded max thumbnail filesize: %d", maxBytes)
 	}
-	if !allowedThumbnailContentType(contentType) {
+	if !s.allowedThumbnailContentType(contentType) {
 		return http.StatusBadRequest, errors.New("thumbnail must be a JPEG, PNG, or WebP image")
 	}
 
-	outputFolder := filepath.Join(config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID)
+	outputFolder := filepath.Join(s.Config().FolderVideoQualitysPriv, dbLink.File.UUID)
 	if err := os.MkdirAll(outputFolder, 0o777); err != nil {
 		log.Printf("Failed to create thumbnail folder: %v", err)
 		return http.StatusInternalServerError, echo.ErrInternalServerError
@@ -97,12 +95,12 @@ func UpdateLinkThumbnail(linkID uint, userID uint, isAdmin bool, input io.Reader
 	tmpOutput.Close()
 	defer os.Remove(tmpOutputPath)
 
-	if err := convertThumbnailToWebP(tmpInputPath, tmpOutputPath); err != nil {
+	if err := s.convertThumbnailToWebP(tmpInputPath, tmpOutputPath); err != nil {
 		log.Printf("Failed to convert custom thumbnail for link %s: %v", dbLink.UUID, err)
 		return http.StatusBadRequest, errors.New("failed to process thumbnail image")
 	}
 
-	thumbnailFileName := LinkThumbnailFilename(dbLink.UUID)
+	thumbnailFileName := s.LinkThumbnailFilename(dbLink.UUID)
 	finalPath := filepath.Join(outputFolder, thumbnailFileName)
 	backupPath := ""
 	if _, err := os.Stat(finalPath); err == nil {
@@ -128,7 +126,7 @@ func UpdateLinkThumbnail(linkID uint, userID uint, isAdmin bool, input io.Reader
 		return http.StatusInternalServerError, echo.ErrInternalServerError
 	}
 
-	if res := inits.DB.Model(&dbLink).Update("thumbnail", thumbnailFileName); res.Error != nil {
+	if res := s.Deps.DB.Model(&dbLink).Update("thumbnail", thumbnailFileName); res.Error != nil {
 		restoreBackup()
 		log.Printf("Failed to save custom thumbnail: %v", res.Error)
 		return http.StatusInternalServerError, echo.ErrInternalServerError
@@ -140,8 +138,8 @@ func UpdateLinkThumbnail(linkID uint, userID uint, isAdmin bool, input io.Reader
 	return http.StatusOK, nil
 }
 
-func ResetLinkThumbnail(linkID uint, userID uint, isAdmin bool) (status int, err error) {
-	dbLink, status, err := loadThumbnailLink(linkID, userID, isAdmin)
+func (s *Service) ResetLinkThumbnail(linkID uint, userID uint, isAdmin bool) (status int, err error) {
+	dbLink, status, err := s.loadThumbnailLink(linkID, userID, isAdmin)
 	if err != nil {
 		return status, err
 	}
@@ -149,8 +147,8 @@ func ResetLinkThumbnail(linkID uint, userID uint, isAdmin bool) (status int, err
 		return http.StatusOK, nil
 	}
 
-	thumbnailPath := linkThumbnailPath(dbLink)
-	if res := inits.DB.Model(&dbLink).Update("thumbnail", ""); res.Error != nil {
+	thumbnailPath := s.linkThumbnailPath(dbLink)
+	if res := s.Deps.DB.Model(&dbLink).Update("thumbnail", ""); res.Error != nil {
 		log.Printf("Failed to clear custom thumbnail: %v", res.Error)
 		return http.StatusInternalServerError, echo.ErrInternalServerError
 	}
@@ -163,25 +161,25 @@ func ResetLinkThumbnail(linkID uint, userID uint, isAdmin bool) (status int, err
 	return http.StatusOK, nil
 }
 
-func MaxLinkThumbnailUploadBytes() int64 {
-	if config.ENV.MaxPostSize > 0 && config.ENV.MaxPostSize < maxLinkThumbnailUploadBytes {
-		return config.ENV.MaxPostSize
+func (s *Service) MaxLinkThumbnailUploadBytes() int64 {
+	if s.Config().MaxPostSize > 0 && s.Config().MaxPostSize < maxLinkThumbnailUploadBytes {
+		return s.Config().MaxPostSize
 	}
 	return maxLinkThumbnailUploadBytes
 }
 
-func RemoveLinkThumbnailFile(link models.Link) {
+func (s *Service) RemoveLinkThumbnailFile(link models.Link) {
 	if link.Thumbnail == "" {
 		return
 	}
-	if err := os.Remove(linkThumbnailPath(link)); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(s.linkThumbnailPath(link)); err != nil && !os.IsNotExist(err) {
 		log.Printf("Failed to delete custom thumbnail for link %s: %v", link.UUID, err)
 	}
 }
 
-func loadThumbnailLink(linkID uint, userID uint, isAdmin bool) (models.Link, int, error) {
+func (s *Service) loadThumbnailLink(linkID uint, userID uint, isAdmin bool) (models.Link, int, error) {
 	var dbLink models.Link
-	if res := inits.DB.
+	if res := s.Deps.DB.
 		Preload("File").
 		First(&dbLink, linkID); res.Error != nil {
 		return models.Link{}, http.StatusBadRequest, errors.New("file doesn't exist")
@@ -192,11 +190,11 @@ func loadThumbnailLink(linkID uint, userID uint, isAdmin bool) (models.Link, int
 	return dbLink, http.StatusOK, nil
 }
 
-func linkThumbnailPath(link models.Link) string {
-	return filepath.Join(config.ENV.FolderVideoQualitysPriv, link.File.UUID, link.Thumbnail)
+func (s *Service) linkThumbnailPath(link models.Link) string {
+	return filepath.Join(s.Config().FolderVideoQualitysPriv, link.File.UUID, link.Thumbnail)
 }
 
-func convertThumbnailToWebP(inputPath string, outputPath string) error {
+func (s *Service) convertThumbnailToWebP(inputPath string, outputPath string) error {
 	cmd := exec.Command(
 		"ffmpeg",
 		"-y",
@@ -209,7 +207,7 @@ func convertThumbnailToWebP(inputPath string, outputPath string) error {
 	return cmd.Run()
 }
 
-func allowedThumbnailContentType(contentType string) bool {
+func (s *Service) allowedThumbnailContentType(contentType string) bool {
 	baseType := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
 	switch baseType {
 	case "image/jpeg", "image/png", "image/webp":
@@ -219,7 +217,7 @@ func allowedThumbnailContentType(contentType string) bool {
 	}
 }
 
-func thumbnailFileAllowedForLink(fileName string, link models.Link) bool {
+func (s *Service) thumbnailFileAllowedForLink(fileName string, link models.Link) bool {
 	if fileName == "" || strings.ContainsAny(fileName, `/\`) || !safeThumbnailFileName.MatchString(fileName) {
 		return false
 	}

@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
@@ -17,16 +16,15 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-var jwtKey []byte
 var sessionDuration = time.Hour * 24 * 7
 
-func GenerateJWT(user models.User) (string, time.Time, error) {
+func (s *Service) GenerateJWT(user models.User) (string, time.Time, error) {
 	expirationTime := time.Now().Add(sessionDuration)
-	return GenerateTimeJWT(user, expirationTime)
+	return s.GenerateTimeJWT(user, expirationTime)
 }
 
-func GenerateTimeJWT(user models.User, expirationTime time.Time) (string, time.Time, error) {
-	jwtKey = []byte(config.ENV.JwtSecretKey)
+func (s *Service) GenerateTimeJWT(user models.User, expirationTime time.Time) (string, time.Time, error) {
+	key := []byte(s.Config().JwtSecretKey)
 	// Create the JWT claims, which includes the username and expiry time
 	claims := &Claims{
 		UserID:   user.ID,
@@ -41,15 +39,15 @@ func GenerateTimeJWT(user models.User, expirationTime time.Time) (string, time.T
 	// Declare the token with the algorithm used for signing, and the claims
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	// Create the JWT string
-	tokenString, err := token.SignedString(jwtKey)
+	tokenString, err := token.SignedString(key)
 	if err != nil {
 		return "", time.Now(), err
 	}
 	return tokenString, expirationTime, nil
 }
 
-func VerifyJWT(tknStr string) (*jwt.Token, *Claims, error) {
-	jwtKey = []byte(config.ENV.JwtSecretKey)
+func (s *Service) VerifyJWT(tknStr string) (*jwt.Token, *Claims, error) {
+	key := []byte(s.Config().JwtSecretKey)
 	claims := &Claims{}
 
 	// Parse the JWT string and store the result in `claims`.
@@ -57,7 +55,7 @@ func VerifyJWT(tknStr string) (*jwt.Token, *Claims, error) {
 	// if the token is invalid (if it has expired according to the expiry time we set on sign in),
 	// or if the signature does not match
 	tkn, err := jwt.ParseWithClaims(tknStr, claims, func(token *jwt.Token) (interface{}, error) {
-		return jwtKey, nil
+		return key, nil
 	})
 	if err != nil {
 		return nil, nil, err
@@ -65,11 +63,11 @@ func VerifyJWT(tknStr string) (*jwt.Token, *Claims, error) {
 	return tkn, claims, nil
 }
 
-func RefreshJWT(tknStr string) (string, time.Time, error) {
-	jwtKey = []byte(config.ENV.JwtSecretKey)
+func (s *Service) RefreshJWT(tknStr string) (string, time.Time, error) {
+	key := []byte(s.Config().JwtSecretKey)
 	claims := &Claims{}
 	tkn, err := jwt.ParseWithClaims(tknStr, claims, func(token *jwt.Token) (interface{}, error) {
-		return jwtKey, nil
+		return key, nil
 	})
 	if err != nil {
 		return "", time.Now(), errors.New("Malformated jwt key")
@@ -89,7 +87,7 @@ func RefreshJWT(tknStr string) (string, time.Time, error) {
 	expirationTime := time.Now().Add(sessionDuration)
 	claims.ExpiresAt = jwt.NewNumericDate(expirationTime)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(jwtKey)
+	tokenString, err := token.SignedString(key)
 	if err != nil {
 		return "", time.Now(), err
 	}

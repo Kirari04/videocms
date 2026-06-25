@@ -2,13 +2,12 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 
 	"github.com/labstack/echo/v4"
 )
 
-func DeleteFolder(c echo.Context) error {
+func (h *Handlers) DeleteFolder(c echo.Context) error {
 	// parse & validate request
 	var folderValidation models.FolderDeleteValidation
 	if status, err := helpers.Validate(c, &folderValidation); err != nil {
@@ -19,7 +18,7 @@ func DeleteFolder(c echo.Context) error {
 	isAdmin, _ := c.Get("Admin").(bool)
 
 	// Business logic
-	status, err := logic.DeleteFolders(&models.FoldersDeleteValidation{
+	status, err := h.Logic.DeleteFolders(&models.FoldersDeleteValidation{
 		FolderIDs: []models.FolderDeleteValidation{
 			folderValidation,
 		},

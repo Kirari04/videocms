@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"ch/kirari04/videocms/config"
 	"errors"
 	"time"
 
@@ -24,8 +23,9 @@ type MediaClaims struct {
 	jwt.RegisteredClaims
 }
 
-func GenerateMediaToken(claims MediaClaims) (string, time.Time, error) {
-	if config.ENV.JwtMediaSecretKey == "" {
+func (s *Service) GenerateMediaToken(claims MediaClaims) (string, time.Time, error) {
+	mediaKey := []byte(s.Config().JwtMediaSecretKey)
+	if len(mediaKey) == 0 {
 		return "", time.Now(), errors.New("media secret key is empty")
 	}
 
@@ -38,15 +38,16 @@ func GenerateMediaToken(claims MediaClaims) (string, time.Time, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(config.ENV.JwtMediaSecretKey))
+	tokenString, err := token.SignedString(mediaKey)
 	if err != nil {
 		return "", time.Now(), err
 	}
 	return tokenString, expirationTime, nil
 }
 
-func VerifyMediaToken(tknStr string) (*jwt.Token, *MediaClaims, error) {
-	if config.ENV.JwtMediaSecretKey == "" {
+func (s *Service) VerifyMediaToken(tknStr string) (*jwt.Token, *MediaClaims, error) {
+	mediaKey := []byte(s.Config().JwtMediaSecretKey)
+	if len(mediaKey) == 0 {
 		return nil, nil, errors.New("media secret key is empty")
 	}
 
@@ -57,7 +58,7 @@ func VerifyMediaToken(tknStr string) (*jwt.Token, *MediaClaims, error) {
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
 	)
 	tkn, err := parser.ParseWithClaims(tknStr, claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(config.ENV.JwtMediaSecretKey), nil
+		return mediaKey, nil
 	})
 	if err != nil {
 		return nil, nil, err

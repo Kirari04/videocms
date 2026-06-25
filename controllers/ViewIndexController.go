@@ -1,8 +1,6 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"fmt"
 	"net/http"
@@ -10,16 +8,16 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func ViewIndex(c echo.Context) error {
+func (h *Handlers) ViewIndex(c echo.Context) error {
 	var link models.Link
-	if res := inits.DB.First(&link); res.Error != nil {
+	if res := h.Deps.DB.First(&link); res.Error != nil {
 		return c.Render(http.StatusOK, "index.html", echo.Map{
 			"ExampleVideo": fmt.Sprintf("/%v", "notfound"),
-			"AppName":      config.ENV.AppName,
+			"AppName":      h.Config().AppName,
 		})
 	}
 	return c.Render(http.StatusOK, "index.html", echo.Map{
 		"ExampleVideo": fmt.Sprintf("/%v", link.UUID),
-		"AppName":      config.ENV.AppName,
+		"AppName":      h.Config().AppName,
 	})
 }

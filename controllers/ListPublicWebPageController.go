@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"net/http"
 
@@ -14,9 +13,9 @@ type listPublicWebPageRes struct {
 	ListInFooter bool
 }
 
-func ListPublicWebPage(c echo.Context) error {
+func (h *Handlers) ListPublicWebPage(c echo.Context) error {
 	var webPages []listPublicWebPageRes
-	if res := inits.DB.
+	if res := h.Deps.DB.
 		Model(&models.WebPage{}).
 		Select(
 			"path",

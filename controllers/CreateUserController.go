@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/logic"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -19,13 +18,13 @@ type CreateUserRequest struct {
 	RemoteDownloadEnabled *bool   `json:"remoteDownloadEnabled" validate:"omitempty,boolean"`
 }
 
-func CreateUser(c echo.Context) error {
+func (h *Handlers) CreateUser(c echo.Context) error {
 	req := new(CreateUserRequest)
 	if status, err := helpers.Validate(c, req); err != nil {
 		return c.String(status, err.Error())
 	}
 
-	status, user, err := logic.CreateUser(req.Username, req.Password, req.Email, req.Admin, req.Storage, req.Balance, req.MaxRemoteDownloads, req.RemoteDownloadEnabled)
+	status, user, err := h.Logic.CreateUser(req.Username, req.Password, req.Email, req.Admin, req.Storage, req.Balance, req.MaxRemoteDownloads, req.RemoteDownloadEnabled)
 	if err != nil {
 		return c.String(status, err.Error())
 	}

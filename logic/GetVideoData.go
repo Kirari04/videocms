@@ -1,8 +1,6 @@
 package logic
 
 import (
-	"ch/kirari04/videocms/config"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
@@ -10,7 +8,7 @@ import (
 	"regexp"
 )
 
-func GetVideoData(fileName string, qualityName string, UUID string) (status int, filePath *string, userID uint, fileID uint, qualityID uint, err error) {
+func (s *Service) GetVideoData(fileName string, qualityName string, UUID string) (status int, filePath *string, userID uint, fileID uint, qualityID uint, err error) {
 	reQUALITY := regexp.MustCompile(`^([0-9]{3,4}p|(h264))$`)
 	reFILE := regexp.MustCompile(`^out[0-9]{0,4}\.(m3u8|ts|webm|mp4)$`)
 
@@ -24,7 +22,7 @@ func GetVideoData(fileName string, qualityName string, UUID string) (status int,
 
 	//translate link id to file id
 	var dbLink models.Link
-	if dbRes := inits.DB.
+	if dbRes := s.Deps.DB.
 		Model(&models.Link{}).
 		Preload("File").
 		Where(&models.Link{
@@ -36,7 +34,7 @@ func GetVideoData(fileName string, qualityName string, UUID string) (status int,
 
 	// find quality id
 	var dbQuality models.Quality
-	if dbRes := inits.DB.
+	if dbRes := s.Deps.DB.
 		Model(&models.Quality{}).
 		Where(&models.Quality{
 			FileID: dbLink.FileID,
@@ -46,6 +44,6 @@ func GetVideoData(fileName string, qualityName string, UUID string) (status int,
 		qualityID = dbQuality.ID
 	}
 
-	fileRes := fmt.Sprintf("%s/%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbLink.File.UUID, qualityName, fileName)
+	fileRes := fmt.Sprintf("%s/%s/%s/%s", s.Config().FolderVideoQualitysPriv, dbLink.File.UUID, qualityName, fileName)
 	return http.StatusOK, &fileRes, dbLink.UserID, dbLink.FileID, qualityID, nil
 }

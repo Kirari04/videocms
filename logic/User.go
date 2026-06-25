@@ -2,7 +2,6 @@ package logic
 
 import (
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
@@ -23,7 +22,7 @@ type UserResponse struct {
 	FileCount             int64 `json:"file_count"`
 }
 
-func NewUserResponse(user models.User, usedStorage int64, fileCount int64) UserResponse {
+func (s *Service) NewUserResponse(user models.User, usedStorage int64, fileCount int64) UserResponse {
 	return UserResponse{
 		Model:                 user.Model,
 		Username:              user.Username,
@@ -39,7 +38,7 @@ func NewUserResponse(user models.User, usedStorage int64, fileCount int64) UserR
 	}
 }
 
-func GetUsers(page, limit int, search string) (int, interface{}, error) {
+func (s *Service) GetUsers(page, limit int, search string) (int, interface{}, error) {
 	type UserWithUsage struct {
 		models.User
 		UsedStorage int64 `json:"used_storage"`
@@ -51,7 +50,7 @@ func GetUsers(page, limit int, search string) (int, interface{}, error) {
 
 	offset := (page - 1) * limit
 
-	query := inits.DB.Model(&models.User{})
+	query := s.Deps.DB.Model(&models.User{})
 
 	if search != "" {
 		searchTerm := "%" + search + "%"
@@ -76,7 +75,7 @@ func GetUsers(page, limit int, search string) (int, interface{}, error) {
 
 	userResponses := make([]UserResponse, 0, len(users))
 	for _, user := range users {
-		userResponses = append(userResponses, NewUserResponse(user.User, user.UsedStorage, user.FileCount))
+		userResponses = append(userResponses, s.NewUserResponse(user.User, user.UsedStorage, user.FileCount))
 	}
 
 	return http.StatusOK, map[string]interface{}{
@@ -89,17 +88,17 @@ func GetUsers(page, limit int, search string) (int, interface{}, error) {
 	}, nil
 }
 
-func CreateUser(username, password, email string, admin bool, storage int64, balance float64, maxRemoteDownloads *int, remoteDownloadEnabled *bool) (int, *UserResponse, error) {
+func (s *Service) CreateUser(username, password, email string, admin bool, storage int64, balance float64, maxRemoteDownloads *int, remoteDownloadEnabled *bool) (int, *UserResponse, error) {
 	// Check for existing username
 	var count int64
-	inits.DB.Model(&models.User{}).Where("username = ?", username).Count(&count)
+	s.Deps.DB.Model(&models.User{}).Where("username = ?", username).Count(&count)
 	if count > 0 {
 		return http.StatusConflict, nil, errors.New("username already exists")
 	}
 
 	// Check for existing email (only if provided)
 	if email != "" {
-		inits.DB.Model(&models.User{}).Where("email = ?", email).Count(&count)
+		s.Deps.DB.Model(&models.User{}).Where("email = ?", email).Count(&count)
 		if count > 0 {
 			return http.StatusConflict, nil, errors.New("email already exists")
 		}
@@ -132,32 +131,32 @@ func CreateUser(username, password, email string, admin bool, storage int64, bal
 		},
 	}
 
-	if result := inits.DB.Create(&user); result.Error != nil {
+	if result := s.Deps.DB.Create(&user); result.Error != nil {
 		return http.StatusInternalServerError, nil, errors.New("failed to create user")
 	}
 
-	response := NewUserResponse(user, 0, 0)
+	response := s.NewUserResponse(user, 0, 0)
 	return http.StatusCreated, &response, nil
 }
 
-func GetUser(id uint64) (int, *UserResponse, error) {
+func (s *Service) GetUser(id uint64) (int, *UserResponse, error) {
 	var user models.User
-	if result := inits.DB.First(&user, id); result.Error != nil {
+	if result := s.Deps.DB.First(&user, id); result.Error != nil {
 		return http.StatusNotFound, nil, errors.New("user not found")
 	}
-	response := NewUserResponse(user, 0, 0)
+	response := s.NewUserResponse(user, 0, 0)
 	return http.StatusOK, &response, nil
 }
 
-func UpdateUser(id uint64, username, email string, admin *bool, storage *int64, balance *float64, maxRemoteDownloads *int, remoteDownloadEnabled *bool) (int, *UserResponse, error) {
+func (s *Service) UpdateUser(id uint64, username, email string, admin *bool, storage *int64, balance *float64, maxRemoteDownloads *int, remoteDownloadEnabled *bool) (int, *UserResponse, error) {
 	var user models.User
-	if result := inits.DB.First(&user, id); result.Error != nil {
+	if result := s.Deps.DB.First(&user, id); result.Error != nil {
 		return http.StatusNotFound, nil, errors.New("user not found")
 	}
 
 	if username != "" && username != user.Username {
 		var count int64
-		inits.DB.Model(&models.User{}).Where("username = ?", username).Count(&count)
+		s.Deps.DB.Model(&models.User{}).Where("username = ?", username).Count(&count)
 		if count > 0 {
 			return http.StatusConflict, nil, errors.New("username already exists")
 		}
@@ -166,7 +165,7 @@ func UpdateUser(id uint64, username, email string, admin *bool, storage *int64, 
 
 	if email != "" && email != user.Email {
 		var count int64
-		inits.DB.Model(&models.User{}).Where("email = ?", email).Count(&count)
+		s.Deps.DB.Model(&models.User{}).Where("email = ?", email).Count(&count)
 		if count > 0 {
 			return http.StatusConflict, nil, errors.New("email already exists")
 		}
@@ -192,25 +191,25 @@ func UpdateUser(id uint64, username, email string, admin *bool, storage *int64, 
 		user.Settings.RemoteDownloadEnabled = remoteDownloadEnabled
 	}
 
-	if result := inits.DB.Save(&user); result.Error != nil {
+	if result := s.Deps.DB.Save(&user); result.Error != nil {
 		return http.StatusInternalServerError, nil, errors.New("failed to update user")
 	}
 
-	inits.Cache.Delete(fmt.Sprintf("account-%d", id))
-	response := NewUserResponse(user, 0, 0)
+	s.Deps.Cache.Delete(fmt.Sprintf("account-%d", id))
+	response := s.NewUserResponse(user, 0, 0)
 	return http.StatusOK, &response, nil
 }
 
-func DeleteUser(id uint64) (int, error) {
-	if result := inits.DB.Delete(&models.User{}, id); result.Error != nil {
+func (s *Service) DeleteUser(id uint64) (int, error) {
+	if result := s.Deps.DB.Delete(&models.User{}, id); result.Error != nil {
 		return http.StatusInternalServerError, errors.New("failed to delete user")
 	}
 	return http.StatusNoContent, nil
 }
 
-func ResetUserPassword(id uint64, newPassword string) (int, error) {
+func (s *Service) ResetUserPassword(id uint64, newPassword string) (int, error) {
 	var user models.User
-	if result := inits.DB.First(&user, id); result.Error != nil {
+	if result := s.Deps.DB.First(&user, id); result.Error != nil {
 		return http.StatusNotFound, errors.New("user not found")
 	}
 
@@ -220,16 +219,16 @@ func ResetUserPassword(id uint64, newPassword string) (int, error) {
 	}
 
 	user.Hash = hash
-	if result := inits.DB.Save(&user); result.Error != nil {
+	if result := s.Deps.DB.Save(&user); result.Error != nil {
 		return http.StatusInternalServerError, errors.New("failed to update password")
 	}
 
 	return http.StatusOK, nil
 }
 
-func CheckStorageQuota(userId uint, additionalSize int64, excludeClientUploadUUID string) (int, error) {
+func (s *Service) CheckStorageQuota(userId uint, additionalSize int64, excludeClientUploadUUID string) (int, error) {
 	var user models.User
-	if err := inits.DB.First(&user, userId).Error; err != nil {
+	if err := s.Deps.DB.First(&user, userId).Error; err != nil {
 		return http.StatusInternalServerError, errors.New("failed to fetch user")
 	}
 
@@ -238,7 +237,7 @@ func CheckStorageQuota(userId uint, additionalSize int64, excludeClientUploadUUI
 	}
 
 	var usedStorage int64
-	if err := inits.DB.Model(&models.Link{}).
+	if err := s.Deps.DB.Model(&models.Link{}).
 		Joins("inner join files on files.id = links.file_id").
 		Where("links.user_id = ?", userId).
 		Select("COALESCE(SUM(files.size), 0)").
@@ -247,7 +246,7 @@ func CheckStorageQuota(userId uint, additionalSize int64, excludeClientUploadUUI
 	}
 
 	var pendingStorage int64
-	query := inits.DB.Model(&models.UploadSession{}).
+	query := s.Deps.DB.Model(&models.UploadSession{}).
 		Where("user_id = ?", userId).
 		Where("status IN ?", []string{
 			models.UploadStatusCreated,

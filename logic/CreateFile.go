@@ -3,7 +3,6 @@ package logic
 import (
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
-	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/models"
 	"context"
 	"errors"
@@ -23,10 +22,10 @@ import (
 	"gorm.io/gorm"
 )
 
-func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint, excludeSessionUUID string) (status int, newFile *models.Link, cloned bool, err error) {
+func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint, excludeSessionUUID string) (status int, newFile *models.Link, cloned bool, err error) {
 	//check if requested folder exists (if set)
 	if toFolder > 0 {
-		res := inits.DB.First(&models.Folder{}, toFolder)
+		res := s.Deps.DB.First(&models.Folder{}, toFolder)
 		if res.Error != nil {
 			return http.StatusBadRequest, nil, false, errors.New("parent folder doesn't exist")
 		}
@@ -40,13 +39,13 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 	}
 
 	// check file hash with database
-	status, newLink, err := CloneFileByHash(FileHash, toFolder, fileName, userId, excludeSessionUUID)
+	status, newLink, err := s.CloneFileByHash(FileHash, toFolder, fileName, userId, excludeSessionUUID)
 	if err == nil {
 		return status, newLink, true, err
 	}
 
 	// check storage quota for new file
-	if status, err := CheckStorageQuota(userId, fileSize, excludeSessionUUID); err != nil {
+	if status, err := s.CheckStorageQuota(userId, fileSize, excludeSessionUUID); err != nil {
 		return status, nil, false, err
 	}
 
@@ -159,12 +158,12 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 	thumbnailFileName := "4x4.webp"
 	go func() {
 		if avgFramerate > 0 {
-			if _, err := CreateThumbnail(
+			if _, err := s.CreateThumbnail(
 				4,
 				*fromFile,
 				1080,
 				thumbnailFileName,
-				fmt.Sprintf("%s/%s", config.ENV.FolderVideoQualitysPriv, fileId),
+				fmt.Sprintf("%s/%s", s.Config().FolderVideoQualitysPriv, fileId),
 				videoDuration,
 				avgFramerate,
 			); err != nil {
@@ -176,13 +175,13 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 	var dbLink models.Link
 	// create an transaction consisting of the file and its link
 	// a transaction is necessary so the service Deleter wont mark an file as unreferenced by accident
-	if err := inits.DB.Transaction(func(tx *gorm.DB) error {
+	if err := s.Deps.DB.Transaction(func(tx *gorm.DB) error {
 		dbFile = models.File{
 			UUID:         fileId,
 			Hash:         FileHash,
 			Thumbnail:    thumbnailFileName,
 			Path:         *fromFile,
-			Folder:       fmt.Sprintf("%s/%s", config.ENV.FolderVideoQualitysPriv, fileId),
+			Folder:       fmt.Sprintf("%s/%s", s.Config().FolderVideoQualitysPriv, fileId),
 			UserID:       userId,
 			Height:       int64(videoHeight),
 			Width:        int64(videoWidth),
@@ -238,14 +237,14 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 				Type:          subOpt.Type,
 				OutputFile:    subOpt.OutputFile,
 				FileID:        dbFile.ID,
-				Path:          fmt.Sprintf("%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbFile.UUID, subtitleId),
+				Path:          fmt.Sprintf("%s/%s/%s", s.Config().FolderVideoQualitysPriv, dbFile.UUID, subtitleId),
 				OriginalCodec: subtitleStream.CodecName,
 				Encoding:      false,
 				Failed:        false,
 				Ready:         false,
 				Error:         "",
 			}
-			if res := inits.DB.Create(&dbSubtitle); res.Error != nil {
+			if res := s.Deps.DB.Create(&dbSubtitle); res.Error != nil {
 				log.Printf("Error saving Subtitle in database: %v", res.Error)
 				return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
 			}
@@ -273,7 +272,7 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 			audioId := uuid.NewString()
 
 			// save  audio data to database
-			if res := inits.DB.Create(&models.Audio{
+			if res := s.Deps.DB.Create(&models.Audio{
 				UUID:          audioId,
 				Name:          audioName,
 				Lang:          audioLang,
@@ -282,7 +281,7 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 				Type:          audioOpt.Type,
 				OutputFile:    audioOpt.OutputFile,
 				FileID:        dbFile.ID,
-				Path:          fmt.Sprintf("%s/%s/%s", config.ENV.FolderVideoQualitysPriv, dbFile.UUID, audioId),
+				Path:          fmt.Sprintf("%s/%s/%s", s.Config().FolderVideoQualitysPriv, dbFile.UUID, audioId),
 				OriginalCodec: audioStream.CodecName,
 				Encoding:      false,
 				Failed:        false,
@@ -296,21 +295,21 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 	}
 
 	// add qualitys to database so they can be converted later
-	for _, qualityOpt := range models.AvailableQualitys {
+	for _, qualityOpt := range s.Qualities() {
 		if !qualityOpt.Enabled {
 			continue
 		}
-		qualityPath := fmt.Sprintf("%s/%s/%s", config.ENV.FolderVideoQualitysPriv, fileId, qualityOpt.FolderName)
+		qualityPath := fmt.Sprintf("%s/%s/%s", s.Config().FolderVideoQualitysPriv, fileId, qualityOpt.FolderName)
 		// switch framerate if too high
 		var qualityFrameRate float64 = 0
-		if avgFramerate > float64(config.ENV.MaxFramerate) {
-			qualityFrameRate = float64(config.ENV.MaxFramerate)
+		if avgFramerate > float64(s.Config().MaxFramerate) {
+			qualityFrameRate = float64(s.Config().MaxFramerate)
 		}
 
 		if float64(videoWidth/videoHeight) > float64(16/9) {
 			// smaller than 16:9 ratio should be fixed by height
 			if qualityOpt.Width <= int64(videoWidth) {
-				if res := inits.DB.Create(&models.Quality{
+				if res := s.Deps.DB.Create(&models.Quality{
 					FileID: dbFile.ID,
 					Name:   qualityOpt.Name,
 					Width:  int64(math.RoundToEven((float64(videoWidth)/(float64(videoHeight)/float64(qualityOpt.Height)))/2) * 2),
@@ -340,7 +339,7 @@ func CreateFile(fromFile *string, toFolder uint, fileName string, fileId string,
 		} else {
 			// bigger than 16:9 ratio should be fixed by width
 			if qualityOpt.Height <= int64(videoHeight) {
-				if res := inits.DB.Create(&models.Quality{
+				if res := s.Deps.DB.Create(&models.Quality{
 					FileID: dbFile.ID,
 					Name:   qualityOpt.Name,
 					Width:  int64(math.RoundToEven(float64(qualityOpt.Width)/2) * 2),
