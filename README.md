@@ -56,39 +56,14 @@ make docker-build
 
 ## Docker Images
 
-Images are published to both registries:
+Published images are available from:
 
 - `ghcr.io/kirari04/videocms`
 - `kirari04/videocms`
 
 Available tags:
 
-- `staging`: release-candidate image built from the `staging` branch.
-- `beta`: accepted beta/default release built from `master`.
-- `latest`: same image as `beta` while VideoCMS is still in beta.
-- `vX.Y.Z`: immutable version tag for an accepted `master` release.
-
-## Release Flow
-
-Development work starts on feature branches and opens pull requests into `dev`.
-The `dev` branch is the active integration branch and only runs validation:
-Go tests, vet/build checks, frontend generation, docs build, and Docker build
-validation. It does not publish Docker images.
-
-When `dev` is ready for release testing, open a pull request from `dev` into
-`staging`. A push to `staging` publishes only the mutable `staging` Docker tag
-to GHCR and Docker Hub.
-
-When staging is accepted, open a pull request from `staging` into `master`.
-The `master` branch is release-only. Every accepted push to `master` verifies
-the project, resolves the next patch version, builds Linux binaries, publishes
-multi-arch Docker images, creates the Git tag, creates or updates the GitHub
-Release, and uploads checksums.
-
-After the workflow changes are merged to `master`, repository maintainers can
-create the `dev` and `staging` branches, set `dev` as the default branch, and
-apply branch/tag protections with:
-
-```bash
-scripts/setup-release-flow.sh
-```
+- `latest`
+- `beta`
+- `staging`
+- `vX.Y.Z`
