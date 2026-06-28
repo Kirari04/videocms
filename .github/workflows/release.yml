@@ -1,0 +1,234 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch --tags --force
+
+          head_tag="$(git tag --points-at HEAD --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1 || true)"
+          if [ -n "$head_tag" ]; then
+            echo "version=$head_tag" >> "$GITHUB_OUTPUT"
+            echo "Release version already tagged on HEAD: $head_tag"
+            exit 0
+          fi
+
+          source_version="$(tr -d '[:space:]' < VERSION.txt)"
+          latest_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1 || true)"
+
+          if [ -z "$latest_tag" ]; then
+            version="$source_version"
+          elif [ -n "$source_version" ] && ! git rev-parse -q --verify "refs/tags/$source_version" >/dev/null && [ "$(printf '%s\n%s\n' "$latest_tag" "$source_version" | sort -V | tail -n1)" = "$source_version" ]; then
+            version="$source_version"
+          else
+            raw="${latest_tag#v}"
+            IFS=. read -r major minor patch <<< "$raw"
+            version="v${major}.${minor}.$((patch + 1))"
+          fi
+
+          if ! [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Resolved invalid release version: $version"
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Resolved release version: $version"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.5'
+          cache: true
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.2.18'
+
+      - name: Verify Go project
+        run: |
+          go mod download
+          go test ./...
+          go vet ./...
+          go build -o /tmp/videocms ./main.go
+
+      - name: Verify frontend generation
+        working-directory: videocms-frontend
+        run: |
+          bun install --frozen-lockfile
+          cat > .env <<'EOF'
+          NUXT_PUBLIC_API_URL=/api
+          NUXT_PUBLIC_BASE_URL=
+          NUXT_PUBLIC_DOCKER_HUB_TAG=kirari04/videocms:beta
+          NUXT_PUBLIC_NAME=VideoCMS
+          NUXT_PUBLIC_DEMO=false
+          NUXT_PUBLIC_RELEASE_CHANNEL=beta
+          EOF
+          bun run generate
+
+      - name: Verify docs build
+        working-directory: videocms-docs
+        run: |
+          bun install --frozen-lockfile
+          bun run docs:build
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build release binaries
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p dist/linux-amd64 dist/linux-arm64
+
+          docker buildx build \
+            --platform linux/amd64 \
+            --target binary \
+            --output type=local,dest=dist/linux-amd64 \
+            --build-arg VERSION="$VERSION" \
+            --build-arg CHANNEL=beta \
+            --build-arg DOCKER_IMAGE_TAG=kirari04/videocms:beta \
+            .
+
+          docker buildx build \
+            --platform linux/arm64 \
+            --target binary \
+            --output type=local,dest=dist/linux-arm64 \
+            --build-arg VERSION="$VERSION" \
+            --build-arg CHANNEL=beta \
+            --build-arg DOCKER_IMAGE_TAG=kirari04/videocms:beta \
+            .
+
+          mv dist/linux-amd64/videocms dist/videocms_linux_amd64
+          mv dist/linux-arm64/videocms dist/videocms_linux_arm64
+          chmod +x dist/videocms_linux_amd64 dist/videocms_linux_arm64
+          (cd dist && sha256sum videocms_linux_amd64 videocms_linux_arm64 > checksums.txt)
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push release images
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/kirari04/videocms:beta
+            ghcr.io/kirari04/videocms:latest
+            ghcr.io/kirari04/videocms:${{ steps.version.outputs.version }}
+            kirari04/videocms:beta
+            kirari04/videocms:latest
+            kirari04/videocms:${{ steps.version.outputs.version }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            CHANNEL=beta
+            DOCKER_IMAGE_TAG=kirari04/videocms:beta
+
+      - name: Create tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "Tag $VERSION already exists."
+            exit 0
+          fi
+
+          git tag "$VERSION"
+          git push origin "$VERSION"
+
+      - name: Write release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          previous_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v "^${VERSION}$" | head -n1 || true)"
+
+          {
+            echo "VideoCMS ${VERSION}"
+            echo
+            echo "Docker images:"
+            echo
+            echo "- ghcr.io/kirari04/videocms:${VERSION}"
+            echo "- ghcr.io/kirari04/videocms:beta"
+            echo "- ghcr.io/kirari04/videocms:latest"
+            echo "- kirari04/videocms:${VERSION}"
+            echo "- kirari04/videocms:beta"
+            echo "- kirari04/videocms:latest"
+            echo
+            if [ -n "$previous_tag" ]; then
+              echo "Changes since ${previous_tag}:"
+              echo
+              git log --oneline "${previous_tag}..HEAD"
+            else
+              echo "Initial automated release."
+            fi
+          } > release-notes.md
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release edit "$VERSION" --title "$VERSION" --notes-file release-notes.md --latest
+          else
+            gh release create "$VERSION" --title "$VERSION" --notes-file release-notes.md --latest
+          fi
+
+          gh release upload "$VERSION" \
+            dist/videocms_linux_amd64 \
+            dist/videocms_linux_arm64 \
+            dist/checksums.txt \
+            --clobber

@@ -1,0 +1,166 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - staging
+      - master
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  promotion-source:
+    name: promotion-source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate promotion source
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TARGET_BRANCH: ${{ github.base_ref }}
+          SOURCE_BRANCH: ${{ github.head_ref }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "Promotion source checks only apply to pull requests."
+            exit 0
+          fi
+
+          target="$TARGET_BRANCH"
+          source="$SOURCE_BRANCH"
+
+          case "$target" in
+            staging)
+              if [ "$source" != "dev" ]; then
+                echo "Pull requests into staging must come from dev, got: $source"
+                exit 1
+              fi
+              ;;
+            master)
+              if [ "$source" != "staging" ]; then
+                echo "Pull requests into master must come from staging, got: $source"
+                exit 1
+              fi
+              ;;
+            dev)
+              echo "Feature and maintenance branches may target dev."
+              ;;
+            *)
+              echo "No promotion policy configured for target branch: $target"
+              ;;
+          esac
+
+  go:
+    name: go
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.5'
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build -o /tmp/videocms ./main.go
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.2.18'
+
+      - name: Install dependencies
+        working-directory: videocms-frontend
+        run: bun install --frozen-lockfile
+
+      - name: Configure frontend build
+        working-directory: videocms-frontend
+        run: |
+          cat > .env <<'EOF'
+          NUXT_PUBLIC_API_URL=/api
+          NUXT_PUBLIC_BASE_URL=
+          NUXT_PUBLIC_DOCKER_HUB_TAG=kirari04/videocms:ci
+          NUXT_PUBLIC_NAME=VideoCMS
+          NUXT_PUBLIC_DEMO=false
+          NUXT_PUBLIC_RELEASE_CHANNEL=ci
+          EOF
+
+      - name: Generate frontend
+        working-directory: videocms-frontend
+        run: bun run generate
+
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.2.18'
+
+      - name: Install dependencies
+        working-directory: videocms-docs
+        run: bun install --frozen-lockfile
+
+      - name: Build docs
+        working-directory: videocms-docs
+        run: bun run docs:build
+
+  docker-build:
+    name: docker-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate Docker build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: false
+          build-args: |
+            VERSION=ci-${{ github.sha }}
+            CHANNEL=ci
+            DOCKER_IMAGE_TAG=kirari04/videocms:ci

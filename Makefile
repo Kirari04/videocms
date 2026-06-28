@@ -1,14 +1,30 @@
+.PHONY: dev docker-build dckb dcktest publish bump-minor bump-patch
+
+VERSION ?= $(shell tr -d '\n' < VERSION.txt)
+LOCAL_IMAGE ?= videocms:local
+
 dev:
 	Host=:3000 go tool air serve:main
 
-publish:
-	docker build -f Dockerfile --platform linux/amd64 -t kirari04/videocms:beta --push . --no-cache
+docker-build:
+	docker buildx build \
+		-f Dockerfile \
+		--platform linux/amd64 \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg CHANNEL=local \
+		--build-arg DOCKER_IMAGE_TAG=$(LOCAL_IMAGE) \
+		-t $(LOCAL_IMAGE) \
+		--load \
+		.
 
-dckb:
-	docker build -f Dockerfile --platform linux/amd64 -t kirari04/videocms:beta --load .
+dckb: docker-build
 
 dcktest:
-	docker run --rm -it -p 3000:3000 kirari04/videocms:beta
+	docker run --rm -it -p 3000:3000 $(LOCAL_IMAGE)
+
+publish:
+	@echo "Publishing is handled by GitHub Actions from staging and master."
+	@exit 1
 
 bump-minor:
 	@NEW_VERSION=$$(awk -F. '{print $$1"."$$2+1".0"}' VERSION.txt); \

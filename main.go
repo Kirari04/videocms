@@ -2,6 +2,7 @@ package main
 
 import (
 	"ch/kirari04/videocms/cmd"
+	"ch/kirari04/videocms/config"
 	"fmt"
 
 	"github.com/thatisuday/commando"
@@ -10,7 +11,7 @@ import (
 func main() {
 	commando.
 		SetExecutableName("videocms").
-		SetVersion("v1.0.0").
+		SetVersion(config.VERSION).
 		SetDescription("Videocms cli - To manage your instances.")
 
 	commando.

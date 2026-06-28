@@ -1,89 +1,99 @@
-FROM alpine:latest AS frontend
+# syntax=docker/dockerfile:1.7
+
+ARG ALPINE_VERSION=3.22
+ARG BUN_VERSION=1.2.18
+ARG GO_VERSION=1.25.5
+
+FROM --platform=$BUILDPLATFORM oven/bun:${BUN_VERSION} AS frontend_build
 
 WORKDIR /app
 
-RUN apk add --no-cache git
+ARG CHANNEL=beta
+ARG DOCKER_IMAGE_TAG=kirari04/videocms:beta
 
-# Clone the frontend repository
-RUN git clone https://github.com/Kirari04/videocms-frontend.git .
+COPY videocms-frontend/package.json videocms-frontend/bun.lock ./
+RUN bun install --frozen-lockfile
 
-FROM oven/bun:latest AS frontend_build
+COPY videocms-frontend/ .
 
-WORKDIR /app
+RUN printf '%s\n' \
+    'NUXT_PUBLIC_API_URL=/api' \
+    'NUXT_PUBLIC_BASE_URL=' \
+    "NUXT_PUBLIC_DOCKER_HUB_TAG=${DOCKER_IMAGE_TAG}" \
+    'NUXT_PUBLIC_NAME=VideoCMS' \
+    'NUXT_PUBLIC_DEMO=false' \
+    "NUXT_PUBLIC_RELEASE_CHANNEL=${CHANNEL}" \
+    > .env
 
-COPY --from=frontend /app .
-
-RUN echo "NUXT_PUBLIC_API_URL=/api" >> .env
-RUN echo "NUXT_PUBLIC_BASE_URL=" >> .env
-RUN echo "NUXT_PUBLIC_DOCKER_HUB_TAG=kirari04/videocms:beta" >> .env
-RUN echo "NUXT_PUBLIC_NAME=VideoCMS" >> .env
-RUN echo "NUXT_PUBLIC_DEMO=false" >> .env
-
-RUN bun install
 RUN bun run generate
 
-FROM golang:latest AS builder
+FROM --platform=$TARGETPLATFORM golang:${GO_VERSION} AS go_build
 
 WORKDIR /build
 
-# Install Syft for SBOM generation
-RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /go/bin
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+ARG VERSION=v0.0.0-dev
+ARG CHANNEL=dev
 
-# Copy source code
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code after dependencies so stale go.mod/go.sum is caught by CI.
 COPY . .
 
-# Tidy dependencies
-RUN go mod tidy
+RUN mkdir -p /out && \
+    CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build \
+    -ldflags "-linkmode external -extldflags -static -X ch/kirari04/videocms/config.VERSION=${VERSION}" \
+    -a -installsuffix cgo \
+    -o /out/videocms \
+    ./main.go
 
-# Build the Go binary
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-linkmode external -extldflags -static" -a -installsuffix cgo -o main_linux_amd64.bin main.go
+FROM go_build AS sbom
 
-# Generate SBOM for the application
-# This scans the built binary and vendor dependencies
-RUN /go/bin/syft packages . -o spdx-json=sbom.spdx.json
+RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /go/bin
 
-# Generate a checksum for the binary
-RUN sha256sum main_linux_amd64.bin > main_linux_amd64.bin.sha256sum
+RUN /go/bin/syft packages . -o spdx-json=/out/sbom.spdx.json
 
+FROM scratch AS binary
 
-FROM alpine:latest AS alpine_upgraded
+COPY --from=go_build /out/videocms /videocms
 
-RUN apk upgrade --no-cache
-
-
-FROM alpine_upgraded
+FROM --platform=$TARGETPLATFORM alpine:${ALPINE_VERSION}
 
 WORKDIR /app
 
-# update packages
-# System dependencies
 RUN apk add --no-cache ffmpeg bash
 
-# Copy the application binary from the builder stage
-COPY --from=builder /build/main_linux_amd64.bin ./main.bin
+ARG VERSION=v0.0.0-dev
+ARG CHANNEL=dev
+ARG DOCKER_IMAGE_TAG=kirari04/videocms:dev
 
-# Copy the SBOM from the builder stage
-COPY --from=builder /build/sbom.spdx.json /app/sbom.spdx.json
+LABEL org.opencontainers.image.title="VideoCMS" \
+      org.opencontainers.image.description="Self-hosted video content management system" \
+      org.opencontainers.image.source="https://github.com/Kirari04/videocms" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.ref.name="${DOCKER_IMAGE_TAG}" \
+      ch.kirari04.videocms.channel="${CHANNEL}"
 
-# Copy other necessary application files
+COPY --from=go_build /out/videocms ./main.bin
+COPY --from=sbom /out/sbom.spdx.json /app/sbom.spdx.json
+
 COPY ./views ./views/
 COPY ./public ./public/
 COPY --from=frontend_build /app/.output/public ./public/
 
-# Set up volumes for persistent data
 VOLUME /app/videos
 VOLUME /app/public
 VOLUME /app/database
 
-# Environment variables
 ENV Host=:3000
 ENV FolderVideoQualitysPriv=./videos/qualitys
 ENV FolderVideoQualitysPub=/videos/qualitys
 ENV FolderVideoUploadsPriv=./videos/uploads
 ENV StatsDriveName=nvme0n1
 
-# Expose the application port
 EXPOSE 3000
 
-# Define the command to run the application
 CMD ["./main.bin", "serve:main"]
