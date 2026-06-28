@@ -222,9 +222,9 @@ jobs:
           set -euo pipefail
 
           if gh release view "$VERSION" >/dev/null 2>&1; then
-            gh release edit "$VERSION" --title "$VERSION" --notes-file release-notes.md --latest
+            gh release edit "$VERSION" --title "$VERSION" --notes-file release-notes.md --latest --target "$GITHUB_SHA"
           else
-            gh release create "$VERSION" --title "$VERSION" --notes-file release-notes.md --latest
+            gh release create "$VERSION" --title "$VERSION" --notes-file release-notes.md --latest --verify-tag --target "$GITHUB_SHA"
           fi
 
           gh release upload "$VERSION" \
