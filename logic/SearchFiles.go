@@ -8,13 +8,14 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func (s *Service) SearchFiles(userId uint, query string) (status int, response *[]models.Link, err error) {
+func (s *Service) SearchFiles(userId uint, query string) (status int, response *[]LinkListItem, err error) {
 	// query all files matching the search query
 	var links []models.Link
 	res := s.Deps.DB.
 		Model(&models.Link{}).
 		Preload("User").
 		Preload("File").
+		Preload("File.Qualitys").
 		Preload("Tags").
 		Where("user_id = ? AND name LIKE ?", userId, "%"+query+"%").
 		Order("name ASC").
@@ -24,5 +25,5 @@ func (s *Service) SearchFiles(userId uint, query string) (status int, response *
 		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
 
-	return http.StatusOK, &links, nil
+	return http.StatusOK, s.buildLinkListItems(links), nil
 }
