@@ -3,6 +3,9 @@
 *.sqlite-shm
 *.sqlite-wal
 .env
+.agents/
+.claude/
+skills-lock.json
 *_bin
 videos/*
 build/cmd
