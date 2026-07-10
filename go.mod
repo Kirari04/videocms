@@ -13,7 +13,7 @@ require (
 	github.com/tus/tusd/v2 v2.9.2
 	github.com/xyproto/randomstring v1.2.0
 	golang.org/x/net v0.56.0
-	golang.org/x/term v0.44.0
+	golang.org/x/term v0.45.0
 	golang.org/x/time v0.15.0
 	gopkg.in/vansante/go-ffprobe.v2 v2.3.0
 	gorm.io/driver/sqlite v1.6.0
@@ -72,7 +72,7 @@ require (
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	golang.org/x/crypto v0.53.0
-	golang.org/x/sys v0.46.0
+	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.38.0 // indirect
 )
 
