@@ -4,6 +4,8 @@ on:
   - push
 jobs:
   disord_test_message:
+    # Dependabot-triggered workflows cannot access repository action secrets.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     name: discord commits
     steps:
