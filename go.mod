@@ -12,7 +12,7 @@ require (
 	github.com/thatisuday/commando v1.0.4
 	github.com/tus/tusd/v2 v2.9.2
 	github.com/xyproto/randomstring v1.2.0
-	golang.org/x/net v0.56.0
+	golang.org/x/net v0.57.0
 	golang.org/x/term v0.45.0
 	golang.org/x/time v0.15.0
 	gopkg.in/vansante/go-ffprobe.v2 v2.3.0
@@ -75,9 +75,9 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.42 // indirect
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	golang.org/x/crypto v0.53.0
+	golang.org/x/crypto v0.54.0
 	golang.org/x/sys v0.47.0
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 )
 
 replace github.com/quic-go/quic-go => github.com/quic-go/quic-go v0.58.0
