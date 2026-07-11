@@ -6,7 +6,7 @@ require (
 	github.com/dpapathanasiou/go-recaptcha v0.0.0-20190121160230-be5090b17804
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/imroc/req/v3 v3.57.0
+	github.com/imroc/req/v3 v3.59.0
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/thatisuday/commando v1.0.4
@@ -45,7 +45,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.59.0 // indirect
+	github.com/quic-go/quic-go v0.60.0 // indirect
 	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/shoenig/go-m1cpu v0.2.1 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
@@ -80,6 +80,6 @@ require (
 	golang.org/x/text v0.40.0 // indirect
 )
 
-replace github.com/quic-go/quic-go => github.com/quic-go/quic-go v0.58.0
+replace github.com/quic-go/quic-go => github.com/quic-go/quic-go v0.60.0
 
 tool github.com/air-verse/air
