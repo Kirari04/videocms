@@ -10,7 +10,7 @@ require (
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/thatisuday/commando v1.0.4
-	github.com/tus/tusd/v2 v2.9.2
+	github.com/tus/tusd/v2 v2.10.0
 	github.com/xyproto/randomstring v1.2.0
 	golang.org/x/net v0.57.0
 	golang.org/x/term v0.45.0

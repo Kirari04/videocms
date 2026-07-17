@@ -253,8 +253,8 @@ github.com/tklauser/numcpus v0.11.0 h1:nSTwhKH5e1dMNsCdVBukSZrURJRoHbSEQjdEbY+9R
 github.com/tklauser/numcpus v0.11.0/go.mod h1:z+LwcLq54uWZTX0u/bGobaV34u6V7KNlTZejzM6/3MQ=
 github.com/tus/lockfile v1.2.0 h1:92dMoNyeb5zaNi8eQ79WLqt/npUWUFkaM5ZM9kOMIDM=
 github.com/tus/lockfile v1.2.0/go.mod h1:JyfWCHNyfd7eGxudGohrkt38kuKRki6L0JH82p2e+mc=
-github.com/tus/tusd/v2 v2.9.2 h1:Dd/Dh0CG7+/wom4lDQnnhca+1p5qVwgnbyEBacj1v7c=
-github.com/tus/tusd/v2 v2.9.2/go.mod h1:+a9uNLru2Qy+CUu7QUIshmQ+X0fLNw77eu8voKVxmgA=
+github.com/tus/tusd/v2 v2.10.0 h1:2yOGmkrDl9RQmRIt/00DR2WvYWOoiEu3CoygILb+WRw=
+github.com/tus/tusd/v2 v2.10.0/go.mod h1:T/OuJHIAC2NHpkEUyQyyaoWyDNRDcQVpJzWl8tX5GY4=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/valyala/fasttemplate v1.2.2 h1:lxLXG0uE3Qnshl9QyaK6XJxMXlQZELvChBOCmQD0Loo=
