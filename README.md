@@ -48,6 +48,17 @@ Follow the documentation to setup VideoCMS: [https://videocms-docs.vercel.app/](
 make docker-build
 ```
 
+## Development
+
+Initialize the frontend and documentation submodules, then start the complete development stack:
+
+```bash
+git submodule update --init --recursive
+make dev
+```
+
+Nuxt is available at `http://127.0.0.1:3000` and proxies `/api` and the backend-owned media routes to the hot-reloading Go server on port `3001`. Stopping either process shuts down the other one cleanly.
+
 ## Docker Images
 
 Published images are available from:
