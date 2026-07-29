@@ -19,9 +19,7 @@ func (h *Handlers) GetPublicWebPage(c echo.Context) error {
 
 	var webPage models.WebPage
 	if res := h.Deps.DB.
-		Where(&models.WebPage{
-			Path: validatus.Path,
-		}).
+		Where("path = ? AND published = ?", validatus.Path, true).
 		First(&webPage); res.Error != nil {
 		if errors.Is(res.Error, gorm.ErrRecordNotFound) {
 			return c.String(http.StatusNotFound, "Page not found")
@@ -30,5 +28,11 @@ func (h *Handlers) GetPublicWebPage(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	return c.String(http.StatusOK, webPage.Html)
+	rendered, err := RenderWebPageContent(webPage.Format, webPage.Content)
+	if err != nil {
+		c.Logger().Error("Failed to render webpage", err)
+		return c.NoContent(http.StatusInternalServerError)
+	}
+
+	return c.String(http.StatusOK, rendered)
 }

@@ -8,10 +8,12 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/imroc/req/v3 v3.59.0
 	github.com/labstack/echo/v4 v4.15.4
+	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/thatisuday/commando v1.0.4
 	github.com/tus/tusd/v2 v2.10.0
 	github.com/xyproto/randomstring v1.2.0
+	github.com/yuin/goldmark v1.8.5
 	golang.org/x/net v0.57.0
 	golang.org/x/term v0.45.0
 	golang.org/x/time v0.15.0
@@ -24,6 +26,7 @@ require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/air-verse/air v1.67.3 // indirect
 	github.com/andybalholm/brotli v1.2.2 // indirect
+	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/bep/godartsass/v2 v2.5.0 // indirect
 	github.com/bep/golibsass v1.2.0 // indirect
 	github.com/bits-and-blooms/bitset v1.24.5 // indirect
@@ -36,6 +39,7 @@ require (
 	github.com/gohugoio/hashstructure v0.6.0 // indirect
 	github.com/gohugoio/hugo v0.164.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
+	github.com/gorilla/css v1.0.1 // indirect
 	github.com/icholy/digest v1.2.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/klauspost/compress v1.19.1 // indirect
