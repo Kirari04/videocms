@@ -74,6 +74,8 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 
 	protectedApi.GET("/pages", handlers.ListWebPage, middlewareFactory.IsAdmin())
 	protectedApi.POST("/page", handlers.CreateWebPage, middlewareFactory.IsAdmin())
+	protectedApi.POST("/page/preview", handlers.PreviewWebPage, middlewareFactory.IsAdmin())
+	protectedApi.GET("/page/:id", handlers.GetWebPage, middlewareFactory.IsAdmin())
 	protectedApi.PUT("/page", handlers.UpdateWebPage, middlewareFactory.IsAdmin())
 	protectedApi.DELETE("/page", handlers.DeleteWebPage, middlewareFactory.IsAdmin())
 
