@@ -220,19 +220,48 @@ func BuildServer(env config.Config, middlewareFactory *middlewares.Factory) *ech
 	}))
 
 	// cors configuration
-	app.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{env.CorsAllowOrigins},
-		AllowMethods:     []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-		AllowHeaders:     append([]string{env.CorsAllowHeaders}, tusCorsHeaders()...),
-		ExposeHeaders:    tusCorsExposeHeaders(),
-		AllowCredentials: *env.CorsAllowCredentials,
-		MaxAge:           7200,
-	}))
+	app.Use(middleware.CORSWithConfig(serverCORSConfig(env)))
 
 	// Logging
 	app.Use(middleware.RequestLogger())
 
 	return app
+}
+
+func serverCORSConfig(env config.Config) middleware.CORSConfig {
+	return middleware.CORSConfig{
+		AllowOrigins:     parseCORSAllowOrigins(env.CorsAllowOrigins),
+		AllowMethods:     []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
+		AllowHeaders:     append([]string{env.CorsAllowHeaders}, tusCorsHeaders()...),
+		ExposeHeaders:    tusCorsExposeHeaders(),
+		AllowCredentials: *env.CorsAllowCredentials,
+		MaxAge:           7200,
+	}
+}
+
+func parseCORSAllowOrigins(value string) []string {
+	origins := make([]string, 0)
+	seen := make(map[string]struct{})
+
+	for _, entry := range strings.Split(value, ",") {
+		origin := strings.TrimSpace(entry)
+		if origin == "" {
+			continue
+		}
+		if _, exists := seen[origin]; exists {
+			continue
+		}
+		seen[origin] = struct{}{}
+		origins = append(origins, origin)
+	}
+
+	if len(origins) == 0 {
+		// Echo treats an empty AllowOrigins slice as "*". Keep empty or
+		// separator-only configuration fail-closed instead of allowing all.
+		return []string{""}
+	}
+
+	return origins
 }
 
 func tusCorsHeaders() []string {
