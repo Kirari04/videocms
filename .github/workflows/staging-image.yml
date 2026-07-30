@@ -6,50 +6,160 @@ on:
       - staging
   workflow_dispatch:
 
+concurrency:
+  group: staging-image
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: write
 
+env:
+  GHCR_IMAGE: ghcr.io/kirari04/videocms
+  DOCKERHUB_IMAGE: kirari04/videocms
+
 jobs:
-  publish:
-    name: publish-staging-image
-    runs-on: ubuntu-latest
+  build:
+    name: build-staging-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        id: buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Restore Docker cache mounts
+        id: cache-mounts
+        uses: actions/cache@v5
+        with:
+          path: .buildkit-cache
+          key: buildkit-mounts-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Dockerfile', 'go.sum', 'videocms-frontend/bun.lock') }}
+          restore-keys: |
+            buildkit-mounts-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Inject Docker cache mounts
+        uses: reproducible-containers/buildkit-cache-dance@5422eac04292c961a382e0f584ea0f03ad9da723 # v3.3.0
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          cache-dir: .buildkit-cache
+          dockerfile: Dockerfile
+          skip-extraction: ${{ steps.cache-mounts.outputs.cache-hit }}
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push staging image by digest
+        id: image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.GHCR_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: |
+            type=gha,scope=videocms-linux-${{ matrix.arch }}
+            type=registry,ref=${{ env.GHCR_IMAGE }}:buildcache-staging-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ env.GHCR_IMAGE }}:buildcache-staging-${{ matrix.arch }},mode=max
+          sbom: true
+          build-args: |
+            VERSION=staging-${{ github.sha }}
+            CHANNEL=staging
+            DOCKER_IMAGE_TAG=${{ env.DOCKERHUB_IMAGE }}:staging
+
+      - name: Record image digest
+        env:
+          DIGEST: ${{ steps.image.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest="${DIGEST#sha256:}"
+          if [ -z "$digest" ] || [ "$digest" = "$DIGEST" ]; then
+            echo "Invalid image digest: $DIGEST"
+            exit 1
+          fi
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/$digest"
+
+      - name: Upload image digest
+        uses: actions/upload-artifact@v6
+        with:
+          name: staging-digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: publish-staging-image
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download image digests
+        uses: actions/download-artifact@v7
+        with:
+          pattern: staging-digest-*
+          path: /tmp/digests
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push staging image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ghcr.io/kirari04/videocms:staging
-            kirari04/videocms:staging
-          build-args: |
-            VERSION=staging-${{ github.sha }}
-            CHANNEL=staging
-            DOCKER_IMAGE_TAG=kirari04/videocms:staging
+      - name: Create staging manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sources=()
+          for digest_path in /tmp/digests/*; do
+            if [ -f "$digest_path" ]; then
+              sources+=("${GHCR_IMAGE}@sha256:$(basename "$digest_path")")
+            fi
+          done
+
+          if [ "${#sources[@]}" -ne 2 ]; then
+            echo "Expected two platform digests, found ${#sources[@]}"
+            exit 1
+          fi
+
+          docker buildx imagetools create \
+            --tag "${GHCR_IMAGE}:staging" \
+            "${sources[@]}"
+
+          docker buildx imagetools create \
+            --tag "${DOCKERHUB_IMAGE}:staging" \
+            "${GHCR_IMAGE}:staging"
+
+      - name: Verify published manifests
+        run: |
+          docker buildx imagetools inspect "${GHCR_IMAGE}:staging"
+          docker buildx imagetools inspect "${DOCKERHUB_IMAGE}:staging"
