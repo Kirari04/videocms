@@ -1,10 +1,17 @@
 package main
 
 import (
+	"html/template"
 	"os"
 	"strings"
 	"testing"
 )
+
+func TestMediaTemplatesParse(t *testing.T) {
+	if _, err := template.ParseGlob("views/*.html"); err != nil {
+		t.Fatalf("template.ParseGlob() error = %v", err)
+	}
+}
 
 func TestPlayerTemplatesDoNotRenderQueryJWT(t *testing.T) {
 	for _, path := range []string{"views/player.html", "views/player_v2.html", "views/player.old.html"} {
@@ -45,6 +52,38 @@ func TestPlayerV2TemplateUsesViewportConstrainedAspectRatio(t *testing.T) {
 	} {
 		if !strings.Contains(content, expected) {
 			t.Fatalf("player_v2.html missing viewport sizing marker %q", expected)
+		}
+	}
+}
+
+func TestPlayerTemplatesOpenDownloadOptionsPage(t *testing.T) {
+	for _, path := range []string{"views/player.html", "views/player_v2.html"} {
+		content := string(readTemplateFile(t, path))
+		for _, expected := range []string{
+			"DOWNLOAD_PAGE_URL",
+			"`/v/${UUID}/download`",
+		} {
+			if !strings.Contains(content, expected) {
+				t.Fatalf("%s missing download page marker %q", path, expected)
+			}
+		}
+	}
+}
+
+func TestDownloadTemplateContainsSelectionRules(t *testing.T) {
+	content := string(readTemplateFile(t, "views/download.html"))
+	for _, expected := range []string{
+		`name="quality"`,
+		`name="container"`,
+		`value="mkv"`,
+		`value="mp4"`,
+		`name="audio"`,
+		`name="subtitle"`,
+		"MP4 requires exactly one audio track",
+		"Download manifest",
+	} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("download.html missing selection marker %q", expected)
 		}
 	}
 }

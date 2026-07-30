@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>{{.Title}}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #09090b;
+            --surface: #111115;
+            --surface-raised: #18181d;
+            --surface-hover: #202027;
+            --border: #2b2b33;
+            --border-strong: #3c3c47;
+            --text: #f4f4f5;
+            --muted: #a1a1aa;
+            --accent: #818cf8;
+            --accent-strong: #6366f1;
+            --accent-soft: rgba(99, 102, 241, 0.14);
+            --danger: #fca5a5;
+            --radius: 10px;
+            --focus: 0 0 0 3px rgba(129, 140, 248, 0.32);
+            font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            background: var(--bg);
+        }
+
+        body {
+            min-width: 0;
+            min-height: 100vh;
+            margin: 0;
+            color: var(--text);
+            background:
+                radial-gradient(circle at 50% -20%, rgba(99, 102, 241, 0.13), transparent 38rem),
+                var(--bg);
+            font-family: inherit;
+            line-height: 1.5;
+        }
+
+        button,
+        input {
+            font: inherit;
+        }
+
+        button,
+        a,
+        label {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        a {
+            color: inherit;
+        }
+
+        .shell {
+            width: min(1120px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 24px 0 48px;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .brand {
+            color: var(--muted);
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .back-link {
+            display: inline-flex;
+            min-height: 40px;
+            align-items: center;
+            gap: 8px;
+            border-radius: 8px;
+            color: #d4d4d8;
+            font-size: 0.875rem;
+            font-weight: 500;
+            text-decoration: none;
+        }
+
+        .back-link:hover {
+            color: #fff;
+        }
+
+        .back-link:focus-visible,
+        button:focus-visible,
+        input:focus-visible + .choice {
+            outline: none;
+            box-shadow: var(--focus);
+        }
+
+        .video-context {
+            display: grid;
+            grid-template-columns: 176px minmax(0, 1fr);
+            align-items: center;
+            gap: 24px;
+            margin-bottom: 30px;
+        }
+
+        .poster {
+            aspect-ratio: 16 / 9;
+            width: 100%;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface);
+        }
+
+        .poster img {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: cover;
+        }
+
+        .video-copy {
+            min-width: 0;
+        }
+
+        .video-copy h1 {
+            max-width: 22ch;
+            margin: 0;
+            overflow-wrap: anywhere;
+            color: #fff;
+            font-size: clamp(1.55rem, 3vw, 2.25rem);
+            line-height: 1.15;
+            letter-spacing: -0.03em;
+            text-wrap: balance;
+        }
+
+        .video-copy p {
+            max-width: 62ch;
+            margin: 10px 0 0;
+            color: var(--muted);
+            font-size: 0.925rem;
+            text-wrap: pretty;
+        }
+
+        .video-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 14px;
+            margin-top: 14px;
+            color: #d4d4d8;
+            font-size: 0.8rem;
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 304px;
+            align-items: start;
+            gap: 28px;
+        }
+
+        .options {
+            min-width: 0;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface);
+        }
+
+        .step {
+            padding: 24px;
+        }
+
+        .step + .step {
+            border-top: 1px solid var(--border);
+        }
+
+        .step-heading {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 17px;
+        }
+
+        .step-number {
+            display: inline-flex;
+            width: 26px;
+            height: 26px;
+            flex: 0 0 26px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: var(--accent-soft);
+            color: #c7d2fe;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .step-heading h2 {
+            margin: 1px 0 0;
+            font-size: 1rem;
+            line-height: 1.4;
+        }
+
+        .step-heading p {
+            margin: 3px 0 0;
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+
+        .choice-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+        }
+
+        .choice-input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .choice {
+            display: flex;
+            min-height: 70px;
+            cursor: pointer;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            background: var(--surface-raised);
+            padding: 13px 14px;
+            transition: border-color 160ms ease, background-color 160ms ease;
+        }
+
+        .choice:hover {
+            border-color: var(--border-strong);
+            background: var(--surface-hover);
+        }
+
+        .choice-input:checked + .choice {
+            border-color: var(--accent);
+            background: var(--accent-soft);
+        }
+
+        .choice-input:disabled + .choice {
+            cursor: not-allowed;
+            opacity: 0.48;
+        }
+
+        .choice-main {
+            min-width: 0;
+        }
+
+        .choice-title {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .choice-detail {
+            display: block;
+            margin-top: 2px;
+            color: var(--muted);
+            font-size: 0.75rem;
+        }
+
+        .choice-mark {
+            width: 16px;
+            height: 16px;
+            flex: 0 0 16px;
+            border: 1px solid #52525b;
+            border-radius: 50%;
+            box-shadow: inset 0 0 0 4px var(--surface-raised);
+            background: transparent;
+        }
+
+        .choice-input:checked + .choice .choice-mark {
+            border-color: var(--accent);
+            background: var(--accent);
+        }
+
+        .track-block + .track-block {
+            margin-top: 22px;
+        }
+
+        .track-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .track-header h3 {
+            margin: 0;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .track-actions {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .text-button {
+            min-height: 32px;
+            border: 0;
+            border-radius: 7px;
+            background: transparent;
+            padding: 0 8px;
+            color: #c7d2fe;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .text-button:hover {
+            background: var(--accent-soft);
+        }
+
+        .track-list {
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            background: var(--surface-raised);
+        }
+
+        .track-row {
+            display: grid;
+            grid-template-columns: 20px minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 11px;
+            min-height: 48px;
+            padding: 9px 12px;
+            cursor: pointer;
+        }
+
+        .track-row + .track-row {
+            border-top: 1px solid var(--border);
+        }
+
+        .track-row:hover {
+            background: var(--surface-hover);
+        }
+
+        .track-row input {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            accent-color: var(--accent-strong);
+        }
+
+        .track-name {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 0.84rem;
+            font-weight: 500;
+        }
+
+        .track-meta {
+            color: var(--muted);
+            font-size: 0.72rem;
+            text-align: right;
+        }
+
+        .empty {
+            margin: 0;
+            border: 1px dashed var(--border-strong);
+            border-radius: 9px;
+            padding: 13px;
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+
+        .format-note {
+            margin: 12px 0 0;
+            color: var(--muted);
+            font-size: 0.78rem;
+        }
+
+        .summary {
+            position: sticky;
+            top: 24px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface);
+            padding: 20px;
+        }
+
+        .summary h2 {
+            margin: 0;
+            font-size: 0.95rem;
+        }
+
+        .manifest {
+            margin: 17px 0 18px;
+            border-top: 1px solid var(--border);
+        }
+
+        .manifest-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 18px;
+            border-bottom: 1px solid var(--border);
+            padding: 10px 0;
+            font-size: 0.8rem;
+        }
+
+        .manifest-row span:first-child {
+            color: var(--muted);
+        }
+
+        .manifest-row strong {
+            min-width: 0;
+            overflow: hidden;
+            color: #fff;
+            font-weight: 600;
+            text-align: right;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .download-button {
+            display: inline-flex;
+            width: 100%;
+            min-height: 44px;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border: 0;
+            border-radius: 9px;
+            background: var(--accent-strong);
+            padding: 0 16px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 700;
+            transition: background-color 160ms ease, transform 160ms ease;
+        }
+
+        .download-button:hover {
+            background: #5558e8;
+        }
+
+        .download-button:active {
+            transform: translateY(1px);
+        }
+
+        .download-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
+        .summary-note {
+            margin: 12px 0 0;
+            color: var(--muted);
+            font-size: 0.72rem;
+            line-height: 1.5;
+            text-align: center;
+        }
+
+        .form-error {
+            min-height: 20px;
+            margin: 10px 0 0;
+            color: var(--danger);
+            font-size: 0.75rem;
+            text-align: center;
+        }
+
+        .not-ready {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface);
+            padding: 28px;
+        }
+
+        .not-ready h2 {
+            margin: 0 0 7px;
+            font-size: 1.05rem;
+        }
+
+        .not-ready p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.875rem;
+        }
+
+        [hidden] {
+            display: none !important;
+        }
+
+        @media (max-width: 820px) {
+            .workspace {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .summary {
+                position: static;
+            }
+        }
+
+        @media (max-width: 560px) {
+            .shell {
+                width: min(100% - 24px, 1120px);
+                padding-top: 16px;
+            }
+
+            .topbar {
+                margin-bottom: 22px;
+            }
+
+            .video-context {
+                grid-template-columns: 96px minmax(0, 1fr);
+                gap: 14px;
+                margin-bottom: 22px;
+            }
+
+            .video-copy h1 {
+                font-size: 1.35rem;
+            }
+
+            .video-copy p {
+                display: none;
+            }
+
+            .video-meta {
+                margin-top: 8px;
+            }
+
+            .step {
+                padding: 18px 16px;
+            }
+
+            .choice-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .track-meta {
+                max-width: 78px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                scroll-behavior: auto !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <nav class="topbar" aria-label="Download navigation">
+            <a class="back-link" href="/v/{{.UUID}}">
+                <span aria-hidden="true">←</span>
+                Back to player
+            </a>
+            <a class="brand" href="/">{{.AppName}}</a>
+        </nav>
+
+        <header class="video-context">
+            <div class="poster">
+                <img src="{{.Thumbnail}}" alt="" />
+            </div>
+            <div class="video-copy">
+                <h1>{{.VideoTitle}}</h1>
+                <p>Choose the version and tracks you want. The server will assemble them without re-encoding the video.</p>
+                <div class="video-meta">
+                    {{if .Duration}}<span>{{.Duration}}</span>{{end}}
+                    <span>Original tracks preserved</span>
+                </div>
+            </div>
+        </header>
+
+        {{if .CanDownload}}
+        <form
+            id="download-form"
+            class="workspace"
+            method="GET"
+            data-download-base="{{.DownloadBase}}"
+        >
+            <input type="hidden" name="selection" value="custom" />
+            <div class="options">
+                <section class="step" aria-labelledby="quality-heading">
+                    <div class="step-heading">
+                        <span class="step-number" aria-hidden="true">1</span>
+                        <div>
+                            <h2 id="quality-heading">Choose video quality</h2>
+                            <p>The selected stream determines the picture resolution.</p>
+                        </div>
+                    </div>
+                    <div class="choice-grid">
+                        {{range $index, $quality := .Qualities}}
+                        <label>
+                            <input
+                                class="choice-input"
+                                type="radio"
+                                name="quality"
+                                value="{{$quality.Name}}"
+                                data-detail="{{$quality.Dimensions}}"
+                                aria-label="{{$quality.Name}}, {{$quality.Dimensions}}"
+                                {{if eq $index 0}}checked{{end}}
+                                required
+                            />
+                            <span class="choice">
+                                <span class="choice-main">
+                                    <span class="choice-title">{{$quality.Name}}</span>
+                                    <span class="choice-detail">{{$quality.Dimensions}}</span>
+                                </span>
+                                <span class="choice-mark" aria-hidden="true"></span>
+                            </span>
+                        </label>
+                        {{end}}
+                    </div>
+                </section>
+
+                <section class="step" aria-labelledby="container-heading">
+                    <div class="step-heading">
+                        <span class="step-number" aria-hidden="true">2</span>
+                        <div>
+                            <h2 id="container-heading">Choose container</h2>
+                            <p>MKV keeps multiple tracks. MP4 is simpler and more widely compatible.</p>
+                        </div>
+                    </div>
+                    <div class="choice-grid">
+                        <label>
+                            <input
+                                class="choice-input"
+                                type="radio"
+                                name="container"
+                                value="mkv"
+                                aria-label="MKV, multiple audio and subtitle tracks"
+                                checked
+                            />
+                            <span class="choice">
+                                <span class="choice-main">
+                                    <span class="choice-title">MKV</span>
+                                    <span class="choice-detail">Multiple audio and subtitle tracks</span>
+                                </span>
+                                <span class="choice-mark" aria-hidden="true"></span>
+                            </span>
+                        </label>
+                        <label>
+                            <input
+                                class="choice-input"
+                                type="radio"
+                                name="container"
+                                value="mp4"
+                                aria-label="MP4, one audio track and no subtitles"
+                                {{if not .CanUseMP4}}disabled{{end}}
+                            />
+                            <span class="choice">
+                                <span class="choice-main">
+                                    <span class="choice-title">MP4</span>
+                                    <span class="choice-detail">
+                                        {{if .CanUseMP4}}One audio track, no subtitles{{else}}No ready audio track{{end}}
+                                    </span>
+                                </span>
+                                <span class="choice-mark" aria-hidden="true"></span>
+                            </span>
+                        </label>
+                    </div>
+                </section>
+
+                <section class="step" aria-labelledby="tracks-heading">
+                    <div class="step-heading">
+                        <span class="step-number" aria-hidden="true">3</span>
+                        <div>
+                            <h2 id="tracks-heading">Choose tracks</h2>
+                            <p id="tracks-help">MKV can include any combination of ready audio and subtitle tracks.</p>
+                        </div>
+                    </div>
+
+                    <div data-mode="mkv">
+                        <div class="track-block">
+                            <div class="track-header">
+                                <h3>Audio</h3>
+                                {{if .Audios}}
+                                <div class="track-actions" aria-label="Audio selection controls">
+                                    <button class="text-button" type="button" data-select="audio" data-value="all">All</button>
+                                    <button class="text-button" type="button" data-select="audio" data-value="none">None</button>
+                                </div>
+                                {{end}}
+                            </div>
+                            {{if .Audios}}
+                            <div class="track-list">
+                                {{range .Audios}}
+                                <label class="track-row">
+                                    <input
+                                        type="checkbox"
+                                        name="audio"
+                                        value="{{.UUID}}"
+                                        data-track="audio-mkv"
+                                        aria-label="{{.Name}}, {{.Lang}}, {{.Type}}"
+                                        checked
+                                    />
+                                    <span class="track-name">{{.Name}}</span>
+                                    <span class="track-meta">{{.Lang}} · {{.Type}}</span>
+                                </label>
+                                {{end}}
+                            </div>
+                            {{else}}
+                            <p class="empty">No audio tracks are ready. The MKV will contain video only.</p>
+                            {{end}}
+                        </div>
+
+                        <div class="track-block">
+                            <div class="track-header">
+                                <h3>Subtitles</h3>
+                                {{if .Subtitles}}
+                                <div class="track-actions" aria-label="Subtitle selection controls">
+                                    <button class="text-button" type="button" data-select="subtitle" data-value="all">All</button>
+                                    <button class="text-button" type="button" data-select="subtitle" data-value="none">None</button>
+                                </div>
+                                {{end}}
+                            </div>
+                            {{if .Subtitles}}
+                            <div class="track-list">
+                                {{range .Subtitles}}
+                                <label class="track-row">
+                                    <input
+                                        type="checkbox"
+                                        name="subtitle"
+                                        value="{{.UUID}}"
+                                        data-track="subtitle-mkv"
+                                        aria-label="{{.Name}}, {{.Lang}}, {{.Type}}"
+                                        checked
+                                    />
+                                    <span class="track-name">{{.Name}}</span>
+                                    <span class="track-meta">{{.Lang}} · {{.Type}}</span>
+                                </label>
+                                {{end}}
+                            </div>
+                            {{else}}
+                            <p class="empty">No subtitle tracks are ready for this video.</p>
+                            {{end}}
+                        </div>
+                    </div>
+
+                    <div data-mode="mp4" hidden>
+                        {{if .Audios}}
+                        <div class="track-block">
+                            <div class="track-header">
+                                <h3>Audio</h3>
+                            </div>
+                            <div class="track-list">
+                                {{range $index, $audio := .Audios}}
+                                <label class="track-row">
+                                    <input
+                                        type="radio"
+                                        name="audio"
+                                        value="{{$audio.UUID}}"
+                                        data-track="audio-mp4"
+                                        aria-label="{{$audio.Name}}, {{$audio.Lang}}, {{$audio.Type}}"
+                                        {{if eq $index 0}}checked{{end}}
+                                        disabled
+                                    />
+                                    <span class="track-name">{{$audio.Name}}</span>
+                                    <span class="track-meta">{{$audio.Lang}} · {{$audio.Type}}</span>
+                                </label>
+                                {{end}}
+                            </div>
+                            <p class="format-note">MP4 requires exactly one audio track and does not include selectable subtitles.</p>
+                        </div>
+                        {{end}}
+                    </div>
+                </section>
+            </div>
+
+            <aside class="summary" aria-labelledby="summary-heading">
+                <h2 id="summary-heading">Download manifest</h2>
+                <div class="manifest" aria-live="polite">
+                    <div class="manifest-row">
+                        <span>Quality</span>
+                        <strong data-summary="quality">—</strong>
+                    </div>
+                    <div class="manifest-row">
+                        <span>Container</span>
+                        <strong data-summary="container">MKV</strong>
+                    </div>
+                    <div class="manifest-row">
+                        <span>Audio</span>
+                        <strong data-summary="audio">—</strong>
+                    </div>
+                    <div class="manifest-row">
+                        <span>Subtitles</span>
+                        <strong data-summary="subtitle">—</strong>
+                    </div>
+                </div>
+                <button class="download-button" type="submit" data-download-button>
+                    Prepare download
+                </button>
+                <p class="summary-note">Preparation time depends on the video length and selected track count.</p>
+                <p class="form-error" role="alert" data-form-error></p>
+            </aside>
+        </form>
+        {{else}}
+        <section class="not-ready">
+            <h2>No download quality is ready yet</h2>
+            <p>Return to the player and try again after the first video quality finishes encoding.</p>
+        </section>
+        {{end}}
+    </main>
+
+    {{if .CanDownload}}
+    <script>
+        (() => {
+            const form = document.getElementById("download-form");
+            const modeSections = Array.from(document.querySelectorAll("[data-mode]"));
+            const containerInputs = Array.from(document.querySelectorAll('input[name="container"]'));
+            const summary = {
+                quality: document.querySelector('[data-summary="quality"]'),
+                container: document.querySelector('[data-summary="container"]'),
+                audio: document.querySelector('[data-summary="audio"]'),
+                subtitle: document.querySelector('[data-summary="subtitle"]'),
+            };
+            const error = document.querySelector("[data-form-error]");
+            const submitButton = document.querySelector("[data-download-button]");
+            const tracksHelp = document.getElementById("tracks-help");
+
+            const activeContainer = () =>
+                document.querySelector('input[name="container"]:checked')?.value || "mkv";
+
+            const setTrackMode = () => {
+                const container = activeContainer();
+                modeSections.forEach((section) => {
+                    const active = section.dataset.mode === container;
+                    section.hidden = !active;
+                    section.querySelectorAll("input").forEach((input) => {
+                        input.disabled = !active;
+                    });
+                });
+                tracksHelp.textContent = container === "mp4"
+                    ? "MP4 requires one audio track. Subtitle selection is available with MKV."
+                    : "MKV can include any combination of ready audio and subtitle tracks.";
+                error.textContent = "";
+                updateSummary();
+            };
+
+            const selectedTrackCount = (selector) =>
+                document.querySelectorAll(`${selector}:checked:not(:disabled)`).length;
+
+            const countLabel = (count, singular) => `${count} ${count === 1 ? singular : singular + "s"}`;
+
+            const updateSummary = () => {
+                const quality = document.querySelector('input[name="quality"]:checked');
+                const container = activeContainer();
+                const audioCount = selectedTrackCount('input[name="audio"]');
+                const subtitleCount = selectedTrackCount('input[name="subtitle"]');
+
+                summary.quality.textContent = quality
+                    ? `${quality.value} · ${quality.dataset.detail}`
+                    : "—";
+                summary.container.textContent = container.toUpperCase();
+                summary.audio.textContent = countLabel(audioCount, "track");
+                summary.subtitle.textContent = container === "mp4"
+                    ? "Not included"
+                    : countLabel(subtitleCount, "track");
+            };
+
+            document.querySelectorAll("input").forEach((input) => {
+                input.addEventListener("change", () => {
+                    if (input.name === "container") {
+                        setTrackMode();
+                        return;
+                    }
+                    error.textContent = "";
+                    updateSummary();
+                });
+            });
+
+            document.querySelectorAll("[data-select]").forEach((button) => {
+                button.addEventListener("click", () => {
+                    const name = button.dataset.select;
+                    const checked = button.dataset.value === "all";
+                    document.querySelectorAll(`input[data-track="${name}-mkv"]`).forEach((input) => {
+                        input.checked = checked;
+                    });
+                    updateSummary();
+                });
+            });
+
+            form.addEventListener("submit", (event) => {
+                const quality = document.querySelector('input[name="quality"]:checked');
+                const container = activeContainer();
+                const audioCount = selectedTrackCount('input[name="audio"]');
+
+                if (!quality) {
+                    event.preventDefault();
+                    error.textContent = "Choose a video quality.";
+                    return;
+                }
+                if (container === "mp4" && audioCount !== 1) {
+                    event.preventDefault();
+                    error.textContent = "Choose exactly one audio track for MP4.";
+                    return;
+                }
+
+                form.action = `${form.dataset.downloadBase}/${encodeURIComponent(quality.value)}/download/video.${container}`;
+                submitButton.disabled = true;
+                submitButton.textContent = "Preparing…";
+                error.textContent = "";
+                window.setTimeout(() => {
+                    submitButton.disabled = false;
+                    submitButton.textContent = "Prepare download";
+                }, 1400);
+            });
+
+            setTrackMode();
+        })();
+    </script>
+    {{end}}
+</body>
+</html>

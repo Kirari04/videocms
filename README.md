@@ -13,7 +13,7 @@ A self-hosted Content Management System for your videos. 🎞️
 - **⚡ HLS Multi-Quality:** Videos are converted into multiple qualities to ensure smooth playback for different connection speeds.
 - **🔊 Multi-Audio:** The player supports multiple audio tracks that are not stored inside the video, saving storage space.
 - **🚀 Fast Chunked Upload:** Allows the server to be behind a proxy without requiring high maximum post limits.
-- **📦 Dynamic MKV Download:** The server dynamically assembles subtitles, audio tracks, and video tracks during download without re-encoding.
+- **📦 Configurable Downloads:** Viewers can choose a ready quality and download MP4 with one audio track, or MKV with selectable audio and subtitle tracks. The server assembles the result without re-encoding.
 
 ## Documentation 📚
 
