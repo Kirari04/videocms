@@ -110,6 +110,9 @@ func LoadSnapshot(db *gorm.DB, base config.Config) (app.Snapshot, error) {
 
 	env.MaxParallelDownloads = getEnvDb_int64(&setting.MaxParallelDownloads, 1)
 	env.RemoteDownloadTimeout = getEnvDb_int64(&setting.RemoteDownloadTimeout, 3600) // 1 hour
+	env.MaxParallelDownloadPreparations = getEnvDb_int64(&setting.MaxParallelDownloadPreparations, 1)
+	env.MaxQueuedDownloadPreparations = getEnvDb_int64(&setting.MaxQueuedDownloadPreparations, 20)
+	env.DownloadPreparationRetentionHours = getEnvDb_int64(&setting.DownloadPreparationRetentionHours, 6)
 
 	// validate config before saving
 	validate := validator.New(validator.WithRequiredStructEnabled())

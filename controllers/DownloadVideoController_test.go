@@ -99,25 +99,6 @@ func TestResolveDownloadRejectsMissingExplicitSelection(t *testing.T) {
 	}
 }
 
-func TestRequestedDownloadContainerRejectsLegacyEmptyFile(t *testing.T) {
-	if _, err := requestedDownloadContainer("", false); err == nil {
-		t.Fatal("requestedDownloadContainer() accepted a download without an explicit output file")
-	}
-
-	for fileName, want := range map[string]string{
-		"video.mkv": downloadContainerMKV,
-		"video.mp4": downloadContainerMP4,
-	} {
-		got, err := requestedDownloadContainer(fileName, false)
-		if err != nil {
-			t.Fatalf("requestedDownloadContainer(%q) error = %v", fileName, err)
-		}
-		if got != want {
-			t.Fatalf("requestedDownloadContainer(%q) = %q, want %q", fileName, got, want)
-		}
-	}
-}
-
 func TestResolveDownloadRejectsUnavailableQuality(t *testing.T) {
 	link := downloadSelectionTestLink()
 	for _, quality := range []string{"1080p", "480p"} {

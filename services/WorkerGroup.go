@@ -3,6 +3,7 @@ package services
 import (
 	"ch/kirari04/videocms/app"
 	"ch/kirari04/videocms/config"
+	downloadsvc "ch/kirari04/videocms/download"
 	"ch/kirari04/videocms/logic"
 	"context"
 	"sync"
@@ -20,6 +21,11 @@ type WorkerGroup struct {
 	activeDownloadsMu     sync.Mutex
 	activeDownloadCancels map[uint]context.CancelFunc
 
+	activePreparationsMu sync.Mutex
+	activePreparations   map[uint]activeDownloadPreparation
+	downloadAssembler    downloadsvc.Assembler
+	preparationTimeout   func(float64) time.Duration
+
 	resourcesInterval time.Duration
 	netSent           uint64
 	netRecv           uint64
@@ -35,6 +41,9 @@ func NewWorkerGroup(deps *app.Deps, logicSvc *logic.Service) *WorkerGroup {
 		deps:                  deps,
 		logic:                 logicSvc,
 		activeDownloadCancels: map[uint]context.CancelFunc{},
+		activePreparations:    map[uint]activeDownloadPreparation{},
+		downloadAssembler:     downloadsvc.FFmpegAssembler{},
+		preparationTimeout:    downloadPreparationTimeout,
 		resourcesInterval:     time.Second * 10,
 	}
 }
@@ -55,6 +64,8 @@ func (w *WorkerGroup) Start(ctx context.Context) {
 	}
 
 	go w.Downloader(ctx)
+	go w.DownloadPreparer(ctx)
+	go w.DownloadPreparationCleanup(ctx)
 	go w.EncoderCleanup(ctx)
 	go w.Deleter(ctx)
 	go w.AuditCleanup(ctx)

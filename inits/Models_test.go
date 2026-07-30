@@ -40,6 +40,27 @@ func TestMigrateModelsPreservesLegacyWebPages(t *testing.T) {
 	}).Error; err != nil {
 		t.Fatalf("create legacy webpage: %v", err)
 	}
+	if err := db.Exec(`
+		CREATE TABLE traffic_logs (
+			id integer PRIMARY KEY AUTOINCREMENT,
+			created_at datetime,
+			updated_at datetime,
+			deleted_at datetime,
+			user_id integer,
+			file_id integer,
+			quality_id integer,
+			audio_id integer,
+			bytes integer
+		)
+	`).Error; err != nil {
+		t.Fatalf("create legacy traffic table: %v", err)
+	}
+	if err := db.Exec(`
+		INSERT INTO traffic_logs (created_at, user_id, file_id, quality_id, audio_id, bytes)
+		VALUES (CURRENT_TIMESTAMP, 1, 2, 3, 4, 512)
+	`).Error; err != nil {
+		t.Fatalf("create legacy traffic row: %v", err)
+	}
 	if err := MigrateModels(db); err != nil {
 		t.Fatalf("MigrateModels() error = %v", err)
 	}
@@ -56,5 +77,13 @@ func TestMigrateModelsPreservesLegacyWebPages(t *testing.T) {
 	}
 	if !page.Published {
 		t.Fatal("expected legacy webpage to remain published")
+	}
+
+	var traffic models.TrafficLog
+	if err := db.First(&traffic).Error; err != nil {
+		t.Fatalf("load migrated traffic: %v", err)
+	}
+	if traffic.Source != models.TrafficSourcePlayer || traffic.Bytes != 512 {
+		t.Fatalf("migrated traffic = %#v, want player source with 512 bytes", traffic)
 	}
 }
