@@ -376,7 +376,7 @@
         const FOLDER = "{{.Folder}}";
         const THUMB = "{{ .Thumbnail }}";
         const DOWNLOAD_ENABLED = "{{ .DownloadEnabled }}" === "true";
-        const DOWNLOAD_PAGE_URL = `/v/${UUID}/download`;
+        const DOWNLOAD_PAGE_URL = new URL(`/v/${UUID}/download`, window.location.origin).href;
         const CONTINUE_WATCHING_ENABLED = "{{ .ContinueWatchingPopupEnabled }}" === "true";
         const StreamIsReady = ("{{.StreamIsReady}}" === "true");
         

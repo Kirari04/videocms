@@ -70,6 +70,14 @@ func TestPlayerTemplatesOpenDownloadOptionsPage(t *testing.T) {
 	}
 }
 
+func TestPlayerV2UsesAbsoluteDownloadURLForVidstack(t *testing.T) {
+	content := string(readTemplateFile(t, "views/player_v2.html"))
+	expected := "new URL(`/v/${UUID}/download`, window.location.origin).href"
+	if !strings.Contains(content, expected) {
+		t.Fatalf("player_v2.html must pass Vidstack an absolute download URL")
+	}
+}
+
 func TestDownloadTemplateContainsSelectionRules(t *testing.T) {
 	content := string(readTemplateFile(t, "views/download.html"))
 	for _, expected := range []string{
@@ -81,6 +89,8 @@ func TestDownloadTemplateContainsSelectionRules(t *testing.T) {
 		`name="subtitle"`,
 		"MP4 requires exactly one audio track",
 		"Download manifest",
+		`class="brand-logo"`,
+		`src="/logo.png"`,
 	} {
 		if !strings.Contains(content, expected) {
 			t.Fatalf("download.html missing selection marker %q", expected)
