@@ -1,16 +1,628 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-captcha-state="pending">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Security Check</title>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>Security check - {{.AppName}}</title>
     <style>
-        body { background-color: #000; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { text-align: center; background: #1a1a1a; padding: 2rem; border-radius: 8px; }
-        .error { color: #ff6b6b; margin-bottom: 1rem; }
-        button { background-color: #333; color: white; border: 1px solid #555; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-top: 15px; }
-        button:hover { background-color: #444; }
+        :root {
+            color-scheme: dark;
+            --bg: #09090b;
+            --surface: #111115;
+            --surface-raised: #18181d;
+            --surface-hover: #202027;
+            --border: #2b2b33;
+            --border-strong: #3c3c47;
+            --text: #f4f4f5;
+            --muted: #a1a1aa;
+            --accent: #818cf8;
+            --accent-strong: #6366f1;
+            --accent-soft: rgba(99, 102, 241, 0.14);
+            --danger: #fca5a5;
+            --danger-soft: rgba(248, 113, 113, 0.1);
+            --radius: 12px;
+            --focus: 0 0 0 3px rgba(129, 140, 248, 0.32);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            min-width: 320px;
+            background: var(--bg);
+        }
+
+        body {
+            min-height: 100vh;
+            min-height: 100dvh;
+            margin: 0;
+            color: var(--text);
+            background:
+                radial-gradient(circle at 50% -18%, rgba(99, 102, 241, 0.13), transparent 36rem),
+                var(--bg);
+            font-family: inherit;
+            line-height: 1.5;
+        }
+
+        button {
+            font: inherit;
+        }
+
+        button,
+        a {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .shell {
+            display: flex;
+            width: min(720px, calc(100% - 32px));
+            min-height: 100vh;
+            min-height: 100dvh;
+            margin: 0 auto;
+            flex-direction: column;
+        }
+
+        .topbar {
+            display: flex;
+            min-height: 72px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border-radius: 8px;
+            color: var(--muted);
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: color 160ms ease;
+        }
+
+        .brand-logo {
+            width: 24px;
+            height: 24px;
+            flex: 0 0 auto;
+            object-fit: contain;
+        }
+
+        .brand:hover {
+            color: #fff;
+        }
+
+        .brand:focus-visible,
+        .continue-button:focus-visible {
+            outline: none;
+            box-shadow: var(--focus);
+        }
+
+        .content {
+            display: flex;
+            width: min(100%, 470px);
+            margin: auto;
+            flex: 1;
+            flex-direction: column;
+            justify-content: center;
+            padding: 28px 0 64px;
+        }
+
+        .intro {
+            margin-bottom: 24px;
+            text-align: center;
+        }
+
+        .security-mark {
+            display: inline-flex;
+            width: 52px;
+            height: 52px;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(129, 140, 248, 0.32);
+            border-radius: 12px;
+            background: var(--accent-soft);
+            color: #c7d2fe;
+        }
+
+        .security-mark svg {
+            width: 25px;
+            height: 25px;
+        }
+
+        .intro h1 {
+            margin: 16px 0 0;
+            color: #fff;
+            font-size: 2rem;
+            line-height: 1.15;
+            letter-spacing: -0.03em;
+            text-wrap: balance;
+        }
+
+        .intro p {
+            max-width: 44ch;
+            margin: 10px auto 0;
+            color: var(--muted);
+            font-size: 0.925rem;
+            text-wrap: pretty;
+        }
+
+        .panel {
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface);
+        }
+
+        .access-path {
+            display: grid;
+            margin: 0;
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--border);
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            list-style: none;
+        }
+
+        .path-step {
+            position: relative;
+            display: flex;
+            min-width: 0;
+            align-items: center;
+            flex-direction: column;
+            gap: 7px;
+            color: #71717a;
+            font-size: 0.68rem;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .path-step:not(:last-child)::after {
+            position: absolute;
+            z-index: 0;
+            top: 12px;
+            right: calc(-50% + 15px);
+            left: calc(50% + 15px);
+            height: 1px;
+            background: var(--border-strong);
+            content: "";
+            transition: background-color 180ms ease;
+        }
+
+        .step-node {
+            position: relative;
+            z-index: 1;
+            display: inline-flex;
+            width: 24px;
+            height: 24px;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-strong);
+            border-radius: 50%;
+            background: var(--surface);
+            color: var(--muted);
+            font-size: 0.68rem;
+            font-variant-numeric: tabular-nums;
+            transition: border-color 180ms ease, background-color 180ms ease, color 180ms ease;
+        }
+
+        .step-node svg {
+            width: 13px;
+            height: 13px;
+        }
+
+        .path-step.is-complete {
+            color: #d4d4d8;
+        }
+
+        .path-step.is-complete .step-node {
+            border-color: rgba(129, 140, 248, 0.45);
+            background: var(--accent-soft);
+            color: #c7d2fe;
+        }
+
+        .path-step.is-complete::after {
+            background: rgba(129, 140, 248, 0.45);
+        }
+
+        .path-step.is-current {
+            color: var(--text);
+        }
+
+        .path-step.is-current .step-node {
+            border-color: var(--accent-strong);
+            background: var(--accent-strong);
+            color: #fff;
+        }
+
+        .panel-body {
+            padding: 24px;
+        }
+
+        .panel-heading h2 {
+            margin: 0;
+            font-size: 1rem;
+            line-height: 1.4;
+        }
+
+        .panel-heading p {
+            margin: 5px 0 0;
+            color: var(--muted);
+            font-size: 0.82rem;
+            text-wrap: pretty;
+        }
+
+        .error {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin: 18px 0 0;
+            border: 1px solid rgba(248, 113, 113, 0.3);
+            border-radius: 9px;
+            background: var(--danger-soft);
+            padding: 11px 12px;
+            color: var(--danger);
+            font-size: 0.78rem;
+        }
+
+        .error svg {
+            width: 17px;
+            height: 17px;
+            flex: 0 0 auto;
+            margin-top: 1px;
+        }
+
+        .challenge-shell {
+            display: flex;
+            min-height: 100px;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            margin-top: 18px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface-raised);
+            padding: 12px;
+        }
+
+        .challenge-frame {
+            max-width: 100%;
+        }
+
+        .provider-turnstile {
+            width: 100%;
+        }
+
+        .verification-status {
+            min-height: 20px;
+            margin: 10px 0 0;
+            color: var(--muted);
+            font-size: 0.75rem;
+            text-align: center;
+        }
+
+        html[data-captcha-state="error"] .verification-status {
+            color: var(--danger);
+        }
+
+        .continue-button {
+            position: relative;
+            display: inline-flex;
+            width: 100%;
+            min-height: 46px;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            margin-top: 14px;
+            border: 0;
+            border-radius: 9px;
+            background: var(--accent-strong);
+            padding: 0 16px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 700;
+            transition: background-color 160ms ease, transform 160ms ease, opacity 160ms ease;
+        }
+
+        .continue-button:hover:not(:disabled) {
+            background: #5558e8;
+        }
+
+        .continue-button:active:not(:disabled) {
+            transform: translateY(1px);
+        }
+
+        .continue-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        html[data-captcha-state="submitting"] .continue-button:disabled {
+            cursor: wait;
+            opacity: 1;
+        }
+
+        .button-state {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1),
+                        transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .button-idle svg {
+            width: 17px;
+            height: 17px;
+        }
+
+        .button-loading {
+            position: absolute;
+            opacity: 0;
+            transform: translateY(6px);
+        }
+
+        html[data-captcha-state="submitting"] .button-idle {
+            opacity: 0;
+            transform: translateY(-6px);
+        }
+
+        html[data-captcha-state="submitting"] .button-loading {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .button-spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.38);
+            border-top-color: #fff;
+            border-radius: 50%;
+        }
+
+        html[data-captcha-state="submitting"] .button-spinner {
+            animation: button-spin 700ms linear infinite;
+        }
+
+        @keyframes button-spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .privacy-note {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin: 22px 0 0;
+            border-top: 1px solid var(--border);
+            padding-top: 18px;
+            color: var(--muted);
+            font-size: 0.75rem;
+        }
+
+        .privacy-note svg {
+            width: 16px;
+            height: 16px;
+            flex: 0 0 auto;
+            margin-top: 1px;
+            color: #d4d4d8;
+        }
+
+        .noscript-message {
+            margin: 14px 0 0;
+            color: var(--danger);
+            font-size: 0.78rem;
+            text-align: center;
+        }
+
+        @media (max-width: 480px) {
+            .shell {
+                width: min(100% - 24px, 720px);
+            }
+
+            .topbar {
+                min-height: 64px;
+            }
+
+            .content {
+                padding: 20px 0 44px;
+            }
+
+            .intro {
+                margin-bottom: 20px;
+            }
+
+            .intro h1 {
+                font-size: 1.75rem;
+            }
+
+            .panel-body {
+                padding: 20px;
+            }
+
+            .access-path {
+                padding: 16px 12px;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .challenge-shell {
+                min-height: 88px;
+                justify-content: flex-start;
+            }
+
+            .challenge-frame:not(.provider-turnstile) {
+                width: 304px;
+                flex: 0 0 304px;
+                margin-right: -37px;
+                margin-bottom: -9px;
+                transform: scale(0.88);
+                transform-origin: left center;
+            }
+        }
+
+        @media (max-width: 340px) {
+            .panel-body {
+                padding: 16px;
+            }
+
+            .challenge-frame:not(.provider-turnstile) {
+                margin-right: -61px;
+                margin-bottom: -15px;
+                transform: scale(0.8);
+            }
+
+            .path-step {
+                font-size: 0.64rem;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                scroll-behavior: auto !important;
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
     </style>
+    <script>
+        (() => {
+            let autoContinueTimer = null;
+            let submitTimer = null;
+            let submitting = false;
+
+            const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+            const whenReady = (callback) => {
+                if (document.readyState === "loading") {
+                    document.addEventListener("DOMContentLoaded", callback, { once: true });
+                    return;
+                }
+                callback();
+            };
+
+            const updateState = (state, message) => {
+                const apply = () => {
+                    document.documentElement.dataset.captchaState = state;
+
+                    const button = document.querySelector("[data-continue-button]");
+                    const status = document.querySelector("[data-verification-status]");
+                    const verificationStep = document.querySelector('[data-step="verification"]');
+                    const destinationStep = document.querySelector('[data-step="destination"]');
+
+                    if (button) {
+                        button.disabled = state !== "verified";
+                        if (state !== "submitting") {
+                            button.removeAttribute("aria-busy");
+                            button.removeAttribute("aria-label");
+                        }
+                    }
+                    if (status) {
+                        status.textContent = message;
+                    }
+
+                    if (verificationStep && destinationStep) {
+                        const verified = state === "verified" || state === "submitting";
+                        verificationStep.classList.toggle("is-current", !verified);
+                        verificationStep.classList.toggle("is-complete", verified);
+                        destinationStep.classList.toggle("is-current", verified);
+
+                        if (verified) {
+                            verificationStep.removeAttribute("aria-current");
+                            destinationStep.setAttribute("aria-current", "step");
+                        } else {
+                            verificationStep.setAttribute("aria-current", "step");
+                            destinationStep.removeAttribute("aria-current");
+                        }
+                    }
+                };
+
+                whenReady(apply);
+            };
+
+            const cancelContinuation = () => {
+                window.clearTimeout(autoContinueTimer);
+                window.clearTimeout(submitTimer);
+                autoContinueTimer = null;
+                submitTimer = null;
+                submitting = false;
+            };
+
+            const beginContinuation = () => {
+                whenReady(() => {
+                    if (submitting || document.documentElement.dataset.captchaState !== "verified") {
+                        return;
+                    }
+
+                    const form = document.querySelector("[data-captcha-form]");
+                    const button = document.querySelector("[data-continue-button]");
+                    if (!form || !button) {
+                        return;
+                    }
+
+                    window.clearTimeout(autoContinueTimer);
+                    autoContinueTimer = null;
+                    submitting = true;
+                    updateState("submitting", "Verification complete. Continuing automatically…");
+                    button.disabled = true;
+                    button.setAttribute("aria-busy", "true");
+                    button.setAttribute("aria-label", "Continuing automatically");
+
+                    submitTimer = window.setTimeout(() => {
+                        HTMLFormElement.prototype.submit.call(form);
+                    }, reducedMotion ? 150 : 520);
+                });
+            };
+
+            window.captchaCompleted = () => {
+                cancelContinuation();
+                updateState("verified", "Verification complete. Continuing automatically…");
+                autoContinueTimer = window.setTimeout(beginContinuation, reducedMotion ? 0 : 180);
+            };
+
+            window.captchaExpired = () => {
+                cancelContinuation();
+                updateState("expired", "Verification expired. Complete the check again.");
+            };
+
+            window.captchaError = () => {
+                cancelContinuation();
+                updateState("error", "The verification service could not load. Check your connection and try again.");
+                return true;
+            };
+
+            document.addEventListener("DOMContentLoaded", () => {
+                const form = document.querySelector("[data-captcha-form]");
+                const button = document.querySelector("[data-continue-button]");
+                const status = document.querySelector("[data-verification-status]");
+
+                if (!form || !button) {
+                    return;
+                }
+
+                form.addEventListener("submit", (event) => {
+                    event.preventDefault();
+
+                    if (document.documentElement.dataset.captchaState !== "verified") {
+                        if (status) {
+                            status.textContent = "Complete the security check before continuing.";
+                        }
+                        return;
+                    }
+
+                    beginContinuation();
+                });
+            });
+        })();
+    </script>
     {{if eq .CaptchaType "recaptcha"}}
     <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     {{else if eq .CaptchaType "hcaptcha"}}
@@ -20,28 +632,133 @@
     {{end}}
 </head>
 <body>
-    <div class="container">
-        <h2>Security Check</h2>
-        <p>Please complete the captcha to continue.</p>
-        {{if .Error}}
-        <div class="error">{{.Error}}</div>
-        {{end}}
-        <form action="/captcha/verify" method="POST">
-            <input type="hidden" name="uuid" value="{{.UUID}}">
-            {{if .ReturnTo}}<input type="hidden" name="return" value="{{.ReturnTo}}">{{end}}
-            
-            <div style="display: flex; justify-content: center;">
-                {{if eq .CaptchaType "recaptcha"}}
-                <div class="g-recaptcha" data-sitekey="{{.CaptchaKey}}"></div>
-                {{else if eq .CaptchaType "hcaptcha"}}
-                <div class="h-captcha" data-sitekey="{{.CaptchaKey}}"></div>
-                {{else if eq .CaptchaType "turnstile"}}
-                <div class="cf-turnstile" data-sitekey="{{.CaptchaKey}}"></div>
-                {{end}}
-            </div>
-            
-            <button type="submit">Verify</button>
-        </form>
+    <div class="shell">
+        <nav class="topbar" aria-label="Security check navigation">
+            <a class="brand" href="/">
+                <img class="brand-logo" src="/logo.png" alt="" />
+                <span>{{.AppName}}</span>
+            </a>
+        </nav>
+
+        <main class="content">
+            <header class="intro">
+                <div class="security-mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3 5.5 5.8v5.5c0 4.2 2.7 7.8 6.5 9.2 3.8-1.4 6.5-5 6.5-9.2V5.8L12 3Z" />
+                        <path d="m9.4 12 1.7 1.7 3.7-4" />
+                    </svg>
+                </div>
+                <h1>Security check</h1>
+                <p>
+                    {{if eq .ReturnTo "download"}}
+                    Verify this request to continue to the download page.
+                    {{else}}
+                    Verify this request to continue to the video.
+                    {{end}}
+                </p>
+            </header>
+
+            <section class="panel" aria-labelledby="verification-heading">
+                <ol class="access-path" aria-label="Access progress">
+                    <li class="path-step is-complete">
+                        <span class="step-node" aria-hidden="true">
+                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="m3.2 8.2 3 3 6.6-6.5" />
+                            </svg>
+                        </span>
+                        <span>Link opened</span>
+                    </li>
+                    <li class="path-step is-current" data-step="verification" aria-current="step">
+                        <span class="step-node" aria-hidden="true">2</span>
+                        <span>Security check</span>
+                    </li>
+                    <li class="path-step" data-step="destination">
+                        <span class="step-node" aria-hidden="true">3</span>
+                        <span>{{if eq .ReturnTo "download"}}Download{{else}}Video{{end}}</span>
+                    </li>
+                </ol>
+
+                <div class="panel-body">
+                    <div class="panel-heading">
+                        <h2 id="verification-heading">Confirm you’re human</h2>
+                        <p>Complete the verification below. This usually takes only a moment.</p>
+                    </div>
+
+                    {{if .Error}}
+                    <div class="error" role="alert">
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="10" cy="10" r="7.5" />
+                            <path d="M10 6.2v4.4M10 13.8h.01" />
+                        </svg>
+                        <span>{{.Error}}</span>
+                    </div>
+                    {{end}}
+
+                    <form action="/captcha/verify" method="POST" data-captcha-form>
+                        <input type="hidden" name="uuid" value="{{.UUID}}" />
+                        {{if .ReturnTo}}<input type="hidden" name="return" value="{{.ReturnTo}}" />{{end}}
+
+                        <div class="challenge-shell">
+                            {{if eq .CaptchaType "recaptcha"}}
+                            <div
+                                class="challenge-frame g-recaptcha"
+                                data-sitekey="{{.CaptchaKey}}"
+                                data-theme="dark"
+                                data-callback="captchaCompleted"
+                                data-expired-callback="captchaExpired"
+                                data-error-callback="captchaError"></div>
+                            {{else if eq .CaptchaType "hcaptcha"}}
+                            <div
+                                class="challenge-frame h-captcha"
+                                data-sitekey="{{.CaptchaKey}}"
+                                data-theme="dark"
+                                data-callback="captchaCompleted"
+                                data-expired-callback="captchaExpired"
+                                data-error-callback="captchaError"></div>
+                            {{else if eq .CaptchaType "turnstile"}}
+                            <div
+                                class="challenge-frame provider-turnstile cf-turnstile"
+                                data-sitekey="{{.CaptchaKey}}"
+                                data-theme="dark"
+                                data-size="flexible"
+                                data-callback="captchaCompleted"
+                                data-expired-callback="captchaExpired"
+                                data-error-callback="captchaError"></div>
+                            {{end}}
+                        </div>
+
+                        <p class="verification-status" data-verification-status aria-live="polite">
+                            {{if .Error}}Complete the check again to continue.{{else}}Waiting for verification.{{end}}
+                        </p>
+
+                        <button class="continue-button" type="submit" data-continue-button disabled>
+                            <span class="button-state button-idle">
+                                <span>Continue</span>
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M4 10h11M11 6l4 4-4 4" />
+                                </svg>
+                            </span>
+                            <span class="button-state button-loading" aria-hidden="true">
+                                <span class="button-spinner"></span>
+                                <span>Continuing</span>
+                            </span>
+                        </button>
+                    </form>
+
+                    <noscript>
+                        <p class="noscript-message">JavaScript is required to complete this security check.</p>
+                    </noscript>
+
+                    <p class="privacy-note">
+                        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="3.5" y="7.5" width="11" height="8" rx="2" />
+                            <path d="M6 7.5V5.8a3 3 0 0 1 6 0v1.7" />
+                        </svg>
+                        <span>This check protects shared media from automated traffic. No account is required.</span>
+                    </p>
+                </div>
+            </section>
+        </main>
     </div>
 </body>
 </html>
