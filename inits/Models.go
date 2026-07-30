@@ -75,8 +75,15 @@ func MigrateModels(gormDB *gorm.DB) error {
 		&models.EncodingLog{},
 		&models.RemoteDownload{},
 		&models.RemoteDownloadLog{},
+		&models.DownloadJob{},
 	); err != nil {
 		return err
+	}
+
+	if err := gormDB.Model(&models.TrafficLog{}).
+		Where("source IS NULL OR source = ''").
+		Update("source", models.TrafficSourcePlayer).Error; err != nil {
+		return fmt.Errorf("failed to backfill traffic source: %w", err)
 	}
 
 	if !hadWebPageFormat {

@@ -23,6 +23,14 @@ func (s *Service) Qualities() []models.AvailableQuality {
 }
 
 func (s *Service) TrackTraffic(userID, fileID, qualityID, audioID uint, bytes uint64) {
+	s.trackTraffic(userID, fileID, qualityID, audioID, models.TrafficSourcePlayer, bytes)
+}
+
+func (s *Service) TrackDownloadTraffic(userID, fileID, qualityID uint, bytes uint64) {
+	s.trackTraffic(userID, fileID, qualityID, 0, models.TrafficSourceDownload, bytes)
+}
+
+func (s *Service) trackTraffic(userID, fileID, qualityID, audioID uint, source string, bytes uint64) {
 	if bytes == 0 {
 		return
 	}
@@ -31,6 +39,7 @@ func (s *Service) TrackTraffic(userID, fileID, qualityID, audioID uint, bytes ui
 		FileID:    fileID,
 		QualityID: qualityID,
 		AudioID:   audioID,
+		Source:    source,
 		Bytes:     bytes,
 	})
 }

@@ -132,6 +132,10 @@ type Config struct {
 
 	MaxParallelDownloads  int64
 	RemoteDownloadTimeout int64
+
+	MaxParallelDownloadPreparations   int64
+	MaxQueuedDownloadPreparations     int64
+	DownloadPreparationRetentionHours int64
 }
 
 type PublicConfig struct {

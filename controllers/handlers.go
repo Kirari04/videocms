@@ -7,6 +7,7 @@ import (
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/services"
 	"ch/kirari04/videocms/services/tusupload"
+	"sync"
 )
 
 type Handlers struct {
@@ -15,6 +16,8 @@ type Handlers struct {
 	Logic   *logic.Service
 	Workers *services.WorkerGroup
 	TUS     *tusupload.Service
+
+	downloadJobCreateMu sync.Mutex
 }
 
 func NewHandlers(deps *app.Deps, authSvc *auth.Service, logicSvc *logic.Service, workerGroup *services.WorkerGroup, tusSvc *tusupload.Service) *Handlers {

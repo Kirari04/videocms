@@ -1,11 +1,17 @@
 package models
 
+const (
+	TrafficSourcePlayer   = "player"
+	TrafficSourceDownload = "download"
+)
+
 type TrafficLog struct {
 	Model
-	UserID    uint `gorm:"index"`
-	FileID    uint `gorm:"index"`
-	QualityID uint `gorm:"index"`
-	AudioID   uint `gorm:"index"`
+	UserID    uint   `gorm:"index"`
+	FileID    uint   `gorm:"index"`
+	QualityID uint   `gorm:"index"`
+	AudioID   uint   `gorm:"index"`
+	Source    string `gorm:"size:16;not null;default:player;index"`
 	Bytes     uint64
 }
 
