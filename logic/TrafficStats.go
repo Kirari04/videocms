@@ -12,17 +12,22 @@ type TrafficStatPoint struct {
 }
 
 type TrafficStatsData struct {
-	Traffic []TrafficStatPoint
+	Traffic         []TrafficStatPoint `json:"Traffic"`
+	PlayerTraffic   []TrafficStatPoint `json:"PlayerTraffic,omitempty"`
+	DownloadTraffic []TrafficStatPoint `json:"DownloadTraffic,omitempty"`
 }
 
 type aggregatedTrafficResult struct {
-	Ts    int64   `gorm:"column:ts"`
-	Bytes float64 `gorm:"column:bytes"`
+	Ts     int64   `gorm:"column:ts"`
+	Source string  `gorm:"column:source"`
+	Bytes  float64 `gorm:"column:bytes"`
 }
 
 func (s *Service) GetTrafficStats(from time.Time, to time.Time, points int, userID uint, fileID uint, qualityID uint) (TrafficStatsData, error) {
 	result := TrafficStatsData{
-		Traffic: make([]TrafficStatPoint, 0),
+		Traffic:         make([]TrafficStatPoint, 0),
+		PlayerTraffic:   make([]TrafficStatPoint, 0),
+		DownloadTraffic: make([]TrafficStatPoint, 0),
 	}
 
 	duration := to.Sub(from)
@@ -42,6 +47,7 @@ func (s *Service) GetTrafficStats(from time.Time, to time.Time, points int, user
 	query := s.Deps.DB.Model(&models.TrafficLog{}).
 		Select(`
 			(CAST(strftime('%s', created_at) AS INTEGER) / ? ) * ? as ts,
+			source,
 			CAST(SUM(bytes) AS INTEGER) as bytes
 		`, stepSeconds, stepSeconds).
 		Where("CAST(strftime('%s', created_at) AS INTEGER) >= ? AND CAST(strftime('%s', created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
@@ -56,16 +62,23 @@ func (s *Service) GetTrafficStats(from time.Time, to time.Time, points int, user
 		query = query.Where("quality_id = ?", qualityID)
 	}
 
-	if err := query.Group("ts").
-		Order("ts asc").
+	if err := query.Group("ts, source").
+		Order("ts asc, source asc").
 		Scan(&aggregations).Error; err != nil {
 		return result, err
 	}
 
-	// Convert aggregations to map for O(1) lookup
-	aggMap := make(map[int64]uint64)
+	totalMap := make(map[int64]uint64)
+	playerMap := make(map[int64]uint64)
+	downloadMap := make(map[int64]uint64)
 	for _, agg := range aggregations {
-		aggMap[agg.Ts] = uint64(agg.Bytes)
+		bytes := uint64(agg.Bytes)
+		totalMap[agg.Ts] += bytes
+		if agg.Source == models.TrafficSourceDownload {
+			downloadMap[agg.Ts] += bytes
+		} else {
+			playerMap[agg.Ts] += bytes
+		}
 	}
 
 	// Iterate through all buckets to fill gaps with zeros
@@ -78,11 +91,9 @@ func (s *Service) GetTrafficStats(from time.Time, to time.Time, points int, user
 	for ts := startTs; ts <= endTs; ts += stepSeconds {
 		pointTs := ts * 1000 // Convert to Milliseconds for ApexCharts
 
-		if val, ok := aggMap[ts]; ok {
-			result.Traffic = append(result.Traffic, TrafficStatPoint{pointTs, val})
-		} else {
-			result.Traffic = append(result.Traffic, TrafficStatPoint{pointTs, 0})
-		}
+		result.Traffic = append(result.Traffic, TrafficStatPoint{pointTs, totalMap[ts]})
+		result.PlayerTraffic = append(result.PlayerTraffic, TrafficStatPoint{pointTs, playerMap[ts]})
+		result.DownloadTraffic = append(result.DownloadTraffic, TrafficStatPoint{pointTs, downloadMap[ts]})
 	}
 
 	return result, nil

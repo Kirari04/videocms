@@ -95,4 +95,8 @@ type Setting struct {
 
 	MaxParallelDownloads  string `validate:"required,number,min=1"`
 	RemoteDownloadTimeout string `validate:"required,number,min=1"`
+
+	MaxParallelDownloadPreparations   string `validate:"required,number,min=1,max=8"`
+	MaxQueuedDownloadPreparations     string `validate:"required,number,min=1,max=500"`
+	DownloadPreparationRetentionHours string `validate:"required,number,min=1,max=168"`
 }

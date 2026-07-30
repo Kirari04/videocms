@@ -122,11 +122,11 @@ func TestDownloadVideoHonorsDownloadEnabledBeforeDatabaseLookup(t *testing.T) {
 	h := mediaTestHandlers(t, t.TempDir(), false)
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/videos/qualitys/"+testLinkUUID+"/720p/download/video.mkv", nil)
+	req := httptest.NewRequest(http.MethodGet, "/videos/qualitys/"+testLinkUUID+"/720p/1/stream/video.mp4", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.SetParamNames("UUID", "QUALITY")
-	c.SetParamValues(testLinkUUID, "720p")
+	c.SetParamNames("UUID", "QUALITY", "STREAM")
+	c.SetParamValues(testLinkUUID, "720p", "1")
 
 	if err := h.DownloadVideoController(c); err != nil {
 		t.Fatalf("DownloadVideoController() error = %v", err)
