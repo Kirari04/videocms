@@ -9,6 +9,7 @@ import (
 type CaptchaViewData struct {
 	CaptchaType string
 	CaptchaKey  string
+	AppName     string
 	UUID        string
 	ReturnTo    string
 	Error       string
@@ -22,6 +23,7 @@ func (h *Handlers) GetCaptchaChallenge(c echo.Context) error {
 
 	data := CaptchaViewData{
 		CaptchaType: h.Config().CaptchaType,
+		AppName:     h.Config().AppName,
 		UUID:        uuid,
 		ReturnTo:    safeCaptchaReturn(c.QueryParam("return")),
 	}
@@ -49,6 +51,7 @@ func (h *Handlers) VerifyCaptchaChallenge(c echo.Context) error {
 	if err != nil || !valid {
 		data := CaptchaViewData{
 			CaptchaType: h.Config().CaptchaType,
+			AppName:     h.Config().AppName,
 			UUID:        uuid,
 			ReturnTo:    returnTo,
 			Error:       "Captcha verification failed. Please try again.",
