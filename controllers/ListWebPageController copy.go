@@ -10,7 +10,7 @@ import (
 
 func (h *Handlers) ListWebPage(c echo.Context) error {
 	var webPages []models.WebPage
-	if res := h.Deps.DB.Find(&webPages); res.Error != nil {
+	if res := h.Deps.DB.Order("updated_at DESC").Find(&webPages); res.Error != nil {
 		log.Println("Failed to list webpages", res.Error)
 		return c.NoContent(http.StatusInternalServerError)
 	}

@@ -17,11 +17,13 @@ func (h *Handlers) ListPublicWebPage(c echo.Context) error {
 	var webPages []listPublicWebPageRes
 	if res := h.Deps.DB.
 		Model(&models.WebPage{}).
+		Where("published = ?", true).
 		Select(
 			"path",
 			"title",
 			"list_in_footer",
 		).
+		Order("title ASC").
 		Find(&webPages); res.Error != nil {
 		c.Logger().Error("Failed to list webpages", res.Error)
 		return c.NoContent(http.StatusInternalServerError)
