@@ -50,6 +50,7 @@ COPY cmd ./cmd
 COPY config ./config
 COPY configdb ./configdb
 COPY controllers ./controllers
+COPY download ./download
 COPY helpers ./helpers
 COPY inits ./inits
 COPY logic ./logic
