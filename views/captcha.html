@@ -28,6 +28,7 @@
         {{end}}
         <form action="/captcha/verify" method="POST">
             <input type="hidden" name="uuid" value="{{.UUID}}">
+            {{if .ReturnTo}}<input type="hidden" name="return" value="{{.ReturnTo}}">{{end}}
             
             <div style="display: flex; justify-content: center;">
                 {{if eq .CaptchaType "recaptcha"}}
