@@ -376,6 +376,7 @@
         const FOLDER = "{{.Folder}}";
         const THUMB = "{{ .Thumbnail }}";
         const DOWNLOAD_ENABLED = "{{ .DownloadEnabled }}" === "true";
+        const DOWNLOAD_PAGE_URL = `/v/${UUID}/download`;
         const CONTINUE_WATCHING_ENABLED = "{{ .ContinueWatchingPopupEnabled }}" === "true";
         const StreamIsReady = ("{{.StreamIsReady}}" === "true");
         
@@ -570,13 +571,27 @@
             const layout = document.querySelector('media-video-layout');
             if (!layout || Qualitys.length === 0) return;
 
-            // Use the built-in 'download' prop
-            // We provide the highest available quality (the last one)
-            const highestQuality = Qualitys[Qualitys.length - 1];
             layout.download = {
-                url: window.origin + highestQuality.url,
-                filename: (player.title || 'video') + '.mkv'
+                url: DOWNLOAD_PAGE_URL,
+                filename: 'download-options'
             };
+
+            const prepareDownloadLink = () => {
+                const link = document.querySelector('.vds-download-button');
+                if (!link) return false;
+                link.href = DOWNLOAD_PAGE_URL;
+                link.removeAttribute('download');
+                link.target = '_blank';
+                link.rel = 'noopener';
+                return true;
+            };
+
+            if (!prepareDownloadLink()) {
+                const observer = new MutationObserver(() => {
+                    if (prepareDownloadLink()) observer.disconnect();
+                });
+                observer.observe(layout, { childList: true, subtree: true });
+            }
         }
 
         // --- Position Tracking & Continue Watching ---
