@@ -57,7 +57,6 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 		middleware.BodyLimit(fmt.Sprintf("%dk", cfg.MaxUploadFilesize/1024+1024)))
 
 	protectedApi.GET("/account", handlers.GetAccount)
-	protectedApi.GET("/account/settings", handlers.GetUserSettingsController)
 	protectedApi.PUT("/account/settings", handlers.UpdateUserSettingsController)
 	protectedApi.GET("/account/traffic", handlers.GetTrafficStats)
 	protectedApi.GET("/account/traffic/top", handlers.GetTopTrafficStats)
@@ -74,6 +73,8 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 
 	protectedApi.GET("/pages", handlers.ListWebPage, middlewareFactory.IsAdmin())
 	protectedApi.POST("/page", handlers.CreateWebPage, middlewareFactory.IsAdmin())
+	protectedApi.POST("/page/preview", handlers.PreviewWebPage, middlewareFactory.IsAdmin())
+	protectedApi.GET("/page/:id", handlers.GetWebPage, middlewareFactory.IsAdmin())
 	protectedApi.PUT("/page", handlers.UpdateWebPage, middlewareFactory.IsAdmin())
 	protectedApi.DELETE("/page", handlers.DeleteWebPage, middlewareFactory.IsAdmin())
 
@@ -87,6 +88,7 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	protectedApi.GET("/stats/storage/top", handlers.GetAdminTopStorageStats, middlewareFactory.IsAdmin())
 	protectedApi.GET("/settings", handlers.GetSettings, middlewareFactory.IsAdmin())
 	protectedApi.PUT("/settings", handlers.UpdateSettings, middlewareFactory.IsAdmin())
+	protectedApi.POST("/settings/test-pgs-server", handlers.TestPgsServerConnection, middlewareFactory.IsAdmin())
 
 	protectedApi.GET("/users", handlers.GetUsers, middlewareFactory.IsAdmin())
 	protectedApi.POST("/users", handlers.CreateUser, middlewareFactory.IsAdmin())

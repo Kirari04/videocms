@@ -9,7 +9,9 @@ import (
 type CaptchaViewData struct {
 	CaptchaType string
 	CaptchaKey  string
+	AppName     string
 	UUID        string
+	ReturnTo    string
 	Error       string
 }
 
@@ -21,7 +23,9 @@ func (h *Handlers) GetCaptchaChallenge(c echo.Context) error {
 
 	data := CaptchaViewData{
 		CaptchaType: h.Config().CaptchaType,
+		AppName:     h.Config().AppName,
 		UUID:        uuid,
+		ReturnTo:    safeCaptchaReturn(c.QueryParam("return")),
 	}
 
 	switch h.Config().CaptchaType {
@@ -41,12 +45,15 @@ func (h *Handlers) VerifyCaptchaChallenge(c echo.Context) error {
 	if uuid == "" {
 		return c.Redirect(http.StatusSeeOther, "/")
 	}
+	returnTo := safeCaptchaReturn(c.FormValue("return"))
 
 	valid, err := h.Auth.CaptchaValid(c)
 	if err != nil || !valid {
 		data := CaptchaViewData{
 			CaptchaType: h.Config().CaptchaType,
+			AppName:     h.Config().AppName,
 			UUID:        uuid,
+			ReturnTo:    returnTo,
 			Error:       "Captcha verification failed. Please try again.",
 		}
 		switch h.Config().CaptchaType {
@@ -75,5 +82,16 @@ func (h *Handlers) VerifyCaptchaChallenge(c echo.Context) error {
 	cookie.HttpOnly = true
 	c.SetCookie(cookie)
 
-	return c.Redirect(http.StatusSeeOther, "/v/"+uuid)
+	redirectPath := "/v/" + uuid
+	if returnTo == "download" {
+		redirectPath += "/download"
+	}
+	return c.Redirect(http.StatusSeeOther, redirectPath)
+}
+
+func safeCaptchaReturn(returnTo string) string {
+	if returnTo == "download" {
+		return returnTo
+	}
+	return ""
 }

@@ -33,13 +33,6 @@ func (h *Handlers) UpdateUserSettingsController(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	user.Settings.EnablePlayerCaptcha = *validater.EnablePlayerCaptcha
-
-	if res := h.Deps.DB.Save(&user); res.Error != nil {
-		log.Println("Failed to update user settings", res.Error)
-		return c.NoContent(http.StatusInternalServerError)
-	}
-
 	// if new password is set, update it
 	if validater.NewPassword != nil {
 		// hash the new password

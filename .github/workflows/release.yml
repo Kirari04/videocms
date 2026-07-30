@@ -6,20 +6,29 @@ on:
       - master
   workflow_dispatch:
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 permissions:
   contents: write
   packages: write
 
+env:
+  GHCR_IMAGE: ghcr.io/kirari04/videocms
+  DOCKERHUB_IMAGE: kirari04/videocms
+
 jobs:
-  release:
-    name: release
-    runs-on: ubuntu-latest
+  version:
+    name: resolve-version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          submodules: recursive
 
       - name: Resolve release version
         id: version
@@ -57,16 +66,18 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Resolved release version: $version"
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.5'
-          cache: true
+  verify-go:
+    name: verify-go
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Set up Go
+        uses: actions/setup-go@v6
         with:
-          bun-version: '1.2.18'
+          go-version: '1.26.x'
+          cache: true
 
       - name: Verify Go project
         run: |
@@ -74,6 +85,28 @@ jobs:
           go test ./...
           go vet ./...
           go build -o /tmp/videocms ./main.go
+
+  verify-frontend:
+    name: verify-frontend
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.2.18'
+
+      - name: Restore Bun dependency cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: bun-frontend-${{ runner.os }}-${{ hashFiles('videocms-frontend/bun.lock') }}
+          restore-keys: |
+            bun-frontend-${{ runner.os }}-
 
       - name: Verify frontend generation
         working-directory: videocms-frontend
@@ -89,85 +122,248 @@ jobs:
           EOF
           bun run generate
 
+  verify-docs:
+    name: verify-docs
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.2.18'
+
+      - name: Restore Bun dependency cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: bun-docs-${{ runner.os }}-${{ hashFiles('videocms-docs/bun.lockb') }}
+          restore-keys: |
+            bun-docs-${{ runner.os }}-
+
       - name: Verify docs build
         working-directory: videocms-docs
         run: |
           bun install --frozen-lockfile
           bun run docs:build
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+  build:
+    name: build-release-${{ matrix.arch }}
+    needs:
+      - version
+      - verify-go
+      - verify-frontend
+      - verify-docs
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        id: buildx
+        uses: docker/setup-buildx-action@v4
 
-      - name: Build release binaries
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
+      - name: Restore Docker cache mounts
+        id: cache-mounts
+        uses: actions/cache@v5
+        with:
+          path: .buildkit-cache
+          key: buildkit-mounts-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Dockerfile', 'go.sum', 'videocms-frontend/bun.lock') }}
+          restore-keys: |
+            buildkit-mounts-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Inject Docker cache mounts
+        uses: reproducible-containers/buildkit-cache-dance@5422eac04292c961a382e0f584ea0f03ad9da723 # v3.3.0
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          cache-dir: .buildkit-cache
+          dockerfile: Dockerfile
+          skip-extraction: ${{ steps.cache-mounts.outputs.cache-hit }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build release binary
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          target: binary
+          platforms: ${{ matrix.platform }}
+          outputs: type=local,dest=dist
+          cache-from: |
+            type=gha,scope=videocms-linux-${{ matrix.arch }}
+            type=registry,ref=${{ env.GHCR_IMAGE }}:buildcache-release-${{ matrix.arch }}
+            type=registry,ref=${{ env.GHCR_IMAGE }}:buildcache-staging-${{ matrix.arch }}
+          build-args: |
+            VERSION=${{ needs.version.outputs.version }}
+            CHANNEL=beta
+            DOCKER_IMAGE_TAG=${{ env.DOCKERHUB_IMAGE }}:beta
+
+      - name: Prepare release binary
         shell: bash
         run: |
           set -euo pipefail
+          test -f dist/videocms
+          mv dist/videocms "dist/videocms_linux_${{ matrix.arch }}"
+          chmod +x "dist/videocms_linux_${{ matrix.arch }}"
 
-          mkdir -p dist/linux-amd64 dist/linux-arm64
+      - name: Upload release binary
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-binary-${{ matrix.arch }}
+          path: dist/videocms_linux_${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 1
 
-          docker buildx build \
-            --platform linux/amd64 \
-            --target binary \
-            --output type=local,dest=dist/linux-amd64 \
-            --build-arg VERSION="$VERSION" \
-            --build-arg CHANNEL=beta \
-            --build-arg DOCKER_IMAGE_TAG=kirari04/videocms:beta \
-            .
+      - name: Build and push release image by digest
+        id: image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.GHCR_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: |
+            type=gha,scope=videocms-linux-${{ matrix.arch }}
+            type=registry,ref=${{ env.GHCR_IMAGE }}:buildcache-release-${{ matrix.arch }}
+            type=registry,ref=${{ env.GHCR_IMAGE }}:buildcache-staging-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ env.GHCR_IMAGE }}:buildcache-release-${{ matrix.arch }},mode=max
+          sbom: true
+          build-args: |
+            VERSION=${{ needs.version.outputs.version }}
+            CHANNEL=beta
+            DOCKER_IMAGE_TAG=${{ env.DOCKERHUB_IMAGE }}:beta
 
-          docker buildx build \
-            --platform linux/arm64 \
-            --target binary \
-            --output type=local,dest=dist/linux-arm64 \
-            --build-arg VERSION="$VERSION" \
-            --build-arg CHANNEL=beta \
-            --build-arg DOCKER_IMAGE_TAG=kirari04/videocms:beta \
-            .
+      - name: Record image digest
+        env:
+          DIGEST: ${{ steps.image.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest="${DIGEST#sha256:}"
+          if [ -z "$digest" ] || [ "$digest" = "$DIGEST" ]; then
+            echo "Invalid image digest: $DIGEST"
+            exit 1
+          fi
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/$digest"
 
-          mv dist/linux-amd64/videocms dist/videocms_linux_amd64
-          mv dist/linux-arm64/videocms dist/videocms_linux_arm64
+      - name: Upload image digest
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: publish-release
+    needs:
+      - version
+      - build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download image digests
+        uses: actions/download-artifact@v7
+        with:
+          pattern: release-digest-*
+          path: /tmp/digests
+          merge-multiple: true
+
+      - name: Download release binaries
+        uses: actions/download-artifact@v7
+        with:
+          pattern: release-binary-*
+          path: dist
+          merge-multiple: true
+
+      - name: Write checksums
+        run: |
           chmod +x dist/videocms_linux_amd64 dist/videocms_linux_arm64
           (cd dist && sha256sum videocms_linux_amd64 videocms_linux_arm64 > checksums.txt)
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push release images
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ghcr.io/kirari04/videocms:beta
-            ghcr.io/kirari04/videocms:latest
-            ghcr.io/kirari04/videocms:${{ steps.version.outputs.version }}
-            kirari04/videocms:beta
-            kirari04/videocms:latest
-            kirari04/videocms:${{ steps.version.outputs.version }}
-          build-args: |
-            VERSION=${{ steps.version.outputs.version }}
-            CHANNEL=beta
-            DOCKER_IMAGE_TAG=kirari04/videocms:beta
+      - name: Create release manifests
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sources=()
+          for digest_path in /tmp/digests/*; do
+            if [ -f "$digest_path" ]; then
+              sources+=("${GHCR_IMAGE}@sha256:$(basename "$digest_path")")
+            fi
+          done
+
+          if [ "${#sources[@]}" -ne 2 ]; then
+            echo "Expected two platform digests, found ${#sources[@]}"
+            exit 1
+          fi
+
+          docker buildx imagetools create \
+            --tag "${GHCR_IMAGE}:beta" \
+            --tag "${GHCR_IMAGE}:latest" \
+            --tag "${GHCR_IMAGE}:${VERSION}" \
+            "${sources[@]}"
+
+          docker buildx imagetools create \
+            --tag "${DOCKERHUB_IMAGE}:beta" \
+            --tag "${DOCKERHUB_IMAGE}:latest" \
+            --tag "${DOCKERHUB_IMAGE}:${VERSION}" \
+            "${GHCR_IMAGE}:${VERSION}"
+
+      - name: Verify published manifests
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          docker buildx imagetools inspect "${GHCR_IMAGE}:${VERSION}"
+          docker buildx imagetools inspect "${DOCKERHUB_IMAGE}:${VERSION}"
 
       - name: Create tag
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
@@ -177,15 +373,14 @@ jobs:
 
           if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
             echo "Tag $VERSION already exists."
-            exit 0
+          else
+            git tag "$VERSION"
+            git push origin "$VERSION"
           fi
-
-          git tag "$VERSION"
-          git push origin "$VERSION"
 
       - name: Write release notes
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
@@ -197,12 +392,12 @@ jobs:
             echo
             echo "Docker images:"
             echo
-            echo "- ghcr.io/kirari04/videocms:${VERSION}"
-            echo "- ghcr.io/kirari04/videocms:beta"
-            echo "- ghcr.io/kirari04/videocms:latest"
-            echo "- kirari04/videocms:${VERSION}"
-            echo "- kirari04/videocms:beta"
-            echo "- kirari04/videocms:latest"
+            echo "- ${GHCR_IMAGE}:${VERSION}"
+            echo "- ${GHCR_IMAGE}:beta"
+            echo "- ${GHCR_IMAGE}:latest"
+            echo "- ${DOCKERHUB_IMAGE}:${VERSION}"
+            echo "- ${DOCKERHUB_IMAGE}:beta"
+            echo "- ${DOCKERHUB_IMAGE}:latest"
             echo
             if [ -n "$previous_tag" ]; then
               echo "Changes since ${previous_tag}:"
@@ -216,15 +411,15 @@ jobs:
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
 
           if gh release view "$VERSION" >/dev/null 2>&1; then
-            gh release edit "$VERSION" --title "$VERSION" --notes-file release-notes.md --latest
+            gh release edit "$VERSION" --title "$VERSION" --notes-file release-notes.md --latest --target "$GITHUB_SHA"
           else
-            gh release create "$VERSION" --title "$VERSION" --notes-file release-notes.md --latest
+            gh release create "$VERSION" --title "$VERSION" --notes-file release-notes.md --latest --verify-tag --target "$GITHUB_SHA"
           fi
 
           gh release upload "$VERSION" \

@@ -6,6 +6,7 @@ import (
 	"ch/kirari04/videocms/models"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 )
@@ -22,8 +23,10 @@ func (h *Handlers) UpdateSettings(c echo.Context) error {
 	if res := h.Deps.DB.First(&previousSetting, validation.ID); res.Error != nil {
 		return c.String(http.StatusBadRequest, "Setting not found by id")
 	}
-	remoteDownloadsWereEnabled := previousSetting.RemoteDownloadEnabled != "false"
-	remoteDownloadsNowDisabled := validation.RemoteDownloadEnabled == "false"
+	remoteDownloadsWereEnabled := settingFlagEnabled(previousSetting.RemoteDownloadEnabled, true)
+	remoteDownloadsNowDisabled := !settingFlagEnabled(validation.RemoteDownloadEnabled, true)
+	downloadsWereEnabled := settingFlagEnabled(previousSetting.DownloadEnabled, true)
+	downloadsNowDisabled := !settingFlagEnabled(validation.DownloadEnabled, true)
 
 	var setting models.Setting
 	setting.ID = validation.ID
@@ -101,6 +104,9 @@ func (h *Handlers) UpdateSettings(c echo.Context) error {
 	setting.PlayerV2Enabled = validation.PlayerV2Enabled
 	setting.MaxParallelDownloads = validation.MaxParallelDownloads
 	setting.RemoteDownloadTimeout = validation.RemoteDownloadTimeout
+	setting.MaxParallelDownloadPreparations = validation.MaxParallelDownloadPreparations
+	setting.MaxQueuedDownloadPreparations = validation.MaxQueuedDownloadPreparations
+	setting.DownloadPreparationRetentionHours = validation.DownloadPreparationRetentionHours
 
 	if res := h.Deps.DB.Save(&setting); res.Error != nil {
 		log.Println("Failed to save settings", res.Error)
@@ -112,8 +118,22 @@ func (h *Handlers) UpdateSettings(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	h.Deps.Snapshots.Replace(snapshot)
-	if remoteDownloadsWereEnabled && remoteDownloadsNowDisabled {
+	if h.Workers != nil && remoteDownloadsWereEnabled && remoteDownloadsNowDisabled {
 		h.Workers.CancelAllRemoteDownloads("Remote downloads disabled by administrator")
 	}
+	if h.Workers != nil && downloadsWereEnabled && downloadsNowDisabled {
+		h.Workers.CancelAllDownloadPreparations("Downloads disabled by administrator")
+	}
 	return c.String(http.StatusOK, "ok")
+}
+
+func settingFlagEnabled(value string, fallback bool) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true", "1":
+		return true
+	case "false", "0":
+		return false
+	default:
+		return fallback
+	}
 }

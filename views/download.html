@@ -1,0 +1,1488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>{{.Title}}</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #09090b;
+            --surface: #111115;
+            --surface-raised: #18181d;
+            --surface-hover: #202027;
+            --border: #2b2b33;
+            --border-strong: #3c3c47;
+            --text: #f4f4f5;
+            --muted: #a1a1aa;
+            --accent: #818cf8;
+            --accent-strong: #6366f1;
+            --accent-soft: rgba(99, 102, 241, 0.14);
+            --danger: #fca5a5;
+            --radius: 10px;
+            --focus: 0 0 0 3px rgba(129, 140, 248, 0.32);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            background: var(--bg);
+        }
+
+        body {
+            min-width: 0;
+            min-height: 100vh;
+            margin: 0;
+            color: var(--text);
+            background:
+                radial-gradient(circle at 50% -20%, rgba(99, 102, 241, 0.13), transparent 38rem),
+                var(--bg);
+            font-family: inherit;
+            line-height: 1.5;
+        }
+
+        button,
+        input {
+            font: inherit;
+        }
+
+        button,
+        a,
+        label {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        a {
+            color: inherit;
+        }
+
+        .shell {
+            width: min(1120px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 24px 0 48px;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border-radius: 8px;
+            color: var(--muted);
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: color 160ms ease;
+        }
+
+        .brand-logo {
+            width: 24px;
+            height: 24px;
+            flex: 0 0 auto;
+            object-fit: contain;
+        }
+
+        .brand:hover {
+            color: #fff;
+        }
+
+        .back-link {
+            display: inline-flex;
+            min-height: 40px;
+            align-items: center;
+            gap: 8px;
+            border-radius: 8px;
+            color: #d4d4d8;
+            font-size: 0.875rem;
+            font-weight: 500;
+            text-decoration: none;
+        }
+
+        .back-link:hover {
+            color: #fff;
+        }
+
+        .brand:focus-visible,
+        .back-link:focus-visible,
+        button:focus-visible,
+        input:focus-visible + .choice {
+            outline: none;
+            box-shadow: var(--focus);
+        }
+
+        .video-context {
+            display: grid;
+            grid-template-columns: 176px minmax(0, 1fr);
+            align-items: center;
+            gap: 24px;
+            margin-bottom: 30px;
+        }
+
+        .poster {
+            aspect-ratio: 16 / 9;
+            width: 100%;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface);
+        }
+
+        .poster img {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: cover;
+        }
+
+        .video-copy {
+            min-width: 0;
+        }
+
+        .video-copy h1 {
+            max-width: 22ch;
+            margin: 0;
+            overflow-wrap: anywhere;
+            color: #fff;
+            font-size: clamp(1.55rem, 3vw, 2.25rem);
+            line-height: 1.15;
+            letter-spacing: -0.03em;
+            text-wrap: balance;
+        }
+
+        .video-copy p {
+            max-width: 62ch;
+            margin: 10px 0 0;
+            color: var(--muted);
+            font-size: 0.925rem;
+            text-wrap: pretty;
+        }
+
+        .video-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 14px;
+            margin-top: 14px;
+            color: #d4d4d8;
+            font-size: 0.8rem;
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 304px;
+            align-items: start;
+            gap: 28px;
+        }
+
+        .options {
+            min-width: 0;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface);
+        }
+
+        .step {
+            padding: 24px;
+        }
+
+        .step + .step {
+            border-top: 1px solid var(--border);
+        }
+
+        .step-heading {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 17px;
+        }
+
+        .step-number {
+            display: inline-flex;
+            width: 26px;
+            height: 26px;
+            flex: 0 0 26px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: var(--accent-soft);
+            color: #c7d2fe;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .step-heading h2 {
+            margin: 1px 0 0;
+            font-size: 1rem;
+            line-height: 1.4;
+        }
+
+        .step-heading p {
+            margin: 3px 0 0;
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+
+        .choice-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+        }
+
+        .choice-input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .choice {
+            display: flex;
+            min-height: 70px;
+            cursor: pointer;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            background: var(--surface-raised);
+            padding: 13px 14px;
+            transition: border-color 160ms ease, background-color 160ms ease;
+        }
+
+        .choice:hover {
+            border-color: var(--border-strong);
+            background: var(--surface-hover);
+        }
+
+        .choice-input:checked + .choice {
+            border-color: var(--accent);
+            background: var(--accent-soft);
+        }
+
+        .choice-input:disabled + .choice {
+            cursor: not-allowed;
+            opacity: 0.48;
+        }
+
+        .choice-main {
+            min-width: 0;
+        }
+
+        .choice-title {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .choice-detail {
+            display: block;
+            margin-top: 2px;
+            color: var(--muted);
+            font-size: 0.75rem;
+        }
+
+        .choice-mark {
+            width: 16px;
+            height: 16px;
+            flex: 0 0 16px;
+            border: 1px solid #52525b;
+            border-radius: 50%;
+            box-shadow: inset 0 0 0 4px var(--surface-raised);
+            background: transparent;
+        }
+
+        .choice-input:checked + .choice .choice-mark {
+            border-color: var(--accent);
+            background: var(--accent);
+        }
+
+        .track-block + .track-block {
+            margin-top: 22px;
+        }
+
+        .track-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .track-header h3 {
+            margin: 0;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .track-actions {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .text-button {
+            min-height: 32px;
+            border: 0;
+            border-radius: 7px;
+            background: transparent;
+            padding: 0 8px;
+            color: #c7d2fe;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .text-button:hover {
+            background: var(--accent-soft);
+        }
+
+        .track-list {
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            background: var(--surface-raised);
+        }
+
+        .track-row {
+            display: grid;
+            grid-template-columns: 20px minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 11px;
+            min-height: 48px;
+            padding: 9px 12px;
+            cursor: pointer;
+        }
+
+        .track-row + .track-row {
+            border-top: 1px solid var(--border);
+        }
+
+        .track-row:hover {
+            background: var(--surface-hover);
+        }
+
+        .track-row input {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            accent-color: var(--accent-strong);
+        }
+
+        .track-name {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 0.84rem;
+            font-weight: 500;
+        }
+
+        .track-meta {
+            color: var(--muted);
+            font-size: 0.72rem;
+            text-align: right;
+        }
+
+        .empty {
+            margin: 0;
+            border: 1px dashed var(--border-strong);
+            border-radius: 9px;
+            padding: 13px;
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+
+        .format-note {
+            margin: 12px 0 0;
+            color: var(--muted);
+            font-size: 0.78rem;
+        }
+
+        .summary {
+            position: sticky;
+            top: 24px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface);
+            padding: 20px;
+        }
+
+        .summary h2 {
+            margin: 0;
+            font-size: 0.95rem;
+        }
+
+        .manifest {
+            margin: 17px 0 18px;
+            border-top: 1px solid var(--border);
+        }
+
+        .manifest-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 18px;
+            border-bottom: 1px solid var(--border);
+            padding: 10px 0;
+            font-size: 0.8rem;
+        }
+
+        .manifest-row span:first-child {
+            color: var(--muted);
+        }
+
+        .manifest-row strong {
+            min-width: 0;
+            overflow: hidden;
+            color: #fff;
+            font-weight: 600;
+            text-align: right;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .download-button {
+            display: inline-flex;
+            width: 100%;
+            min-height: 44px;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border: 0;
+            border-radius: 9px;
+            background: var(--accent-strong);
+            padding: 0 16px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 700;
+            transition: background-color 160ms ease, transform 160ms ease;
+        }
+
+        .download-button:hover {
+            background: #5558e8;
+        }
+
+        .download-button:active {
+            transform: translateY(1px);
+        }
+
+        .download-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
+        .summary-note {
+            margin: 12px 0 0;
+            color: var(--muted);
+            font-size: 0.72rem;
+            line-height: 1.5;
+            text-align: center;
+        }
+
+        .form-error {
+            min-height: 20px;
+            margin: 10px 0 0;
+            color: var(--danger);
+            font-size: 0.75rem;
+            text-align: center;
+        }
+
+        .workspace.job-active {
+            grid-template-columns: minmax(0, 620px);
+            justify-content: center;
+        }
+
+        .workspace.job-active .options,
+        .workspace.job-active [data-config-action] {
+            display: none;
+        }
+
+        .workspace.job-active .summary {
+            position: static;
+            width: 100%;
+            padding: 24px;
+        }
+
+        .job-state {
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+        }
+
+        .job-state-heading {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .job-state-heading h3 {
+            margin: 0;
+            font-size: 1rem;
+        }
+
+        .job-percent {
+            color: #c7d2fe;
+            font-size: 0.875rem;
+            font-variant-numeric: tabular-nums;
+            font-weight: 700;
+        }
+
+        .job-message {
+            min-height: 42px;
+            margin: 7px 0 0;
+            color: var(--muted);
+            font-size: 0.82rem;
+            text-wrap: pretty;
+        }
+
+        .progress-track {
+            position: relative;
+            height: 8px;
+            overflow: hidden;
+            margin-top: 17px;
+            border-radius: 999px;
+            background: var(--surface-hover);
+        }
+
+        .progress-value {
+            width: 0;
+            height: 100%;
+            border-radius: inherit;
+            background: var(--accent);
+            transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .progress-track[data-indeterminate="true"] .progress-value {
+            width: 34%;
+            animation: queue-progress 1.4s ease-in-out infinite alternate;
+        }
+
+        @keyframes queue-progress {
+            from { transform: translateX(-35%); }
+            to { transform: translateX(230%); }
+        }
+
+        .job-details {
+            margin: 18px 0 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .job-detail {
+            display: flex;
+            min-height: 39px;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 18px;
+            border-bottom: 1px solid var(--border);
+            padding: 9px 0;
+            font-size: 0.78rem;
+        }
+
+        .job-detail dt {
+            color: var(--muted);
+        }
+
+        .job-detail dd {
+            max-width: 62%;
+            margin: 0;
+            overflow: hidden;
+            color: var(--text);
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+            text-align: right;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .job-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 18px;
+        }
+
+        .secondary-button {
+            display: inline-flex;
+            width: 100%;
+            min-height: 42px;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-strong);
+            border-radius: 9px;
+            background: transparent;
+            padding: 0 15px;
+            color: var(--text);
+            cursor: pointer;
+            font-size: 0.84rem;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .secondary-button:hover {
+            background: var(--surface-hover);
+        }
+
+        .connection-state {
+            min-height: 18px;
+            margin: 12px 0 0;
+            color: var(--danger);
+            font-size: 0.72rem;
+            text-align: center;
+        }
+
+        .not-ready {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface);
+            padding: 28px;
+        }
+
+        .not-ready h2 {
+            margin: 0 0 7px;
+            font-size: 1.05rem;
+        }
+
+        .not-ready p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.875rem;
+        }
+
+        [hidden] {
+            display: none !important;
+        }
+
+        @media (max-width: 820px) {
+            .workspace {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .summary {
+                position: static;
+            }
+        }
+
+        @media (max-width: 560px) {
+            .shell {
+                width: min(100% - 24px, 1120px);
+                padding-top: 16px;
+            }
+
+            .topbar {
+                margin-bottom: 22px;
+            }
+
+            .video-context {
+                grid-template-columns: 96px minmax(0, 1fr);
+                gap: 14px;
+                margin-bottom: 22px;
+            }
+
+            .video-copy h1 {
+                font-size: 1.35rem;
+            }
+
+            .video-copy p {
+                display: none;
+            }
+
+            .video-meta {
+                margin-top: 8px;
+            }
+
+            .step {
+                padding: 18px 16px;
+            }
+
+            .choice-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .track-meta {
+                max-width: 78px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                scroll-behavior: auto !important;
+                transition-duration: 0.01ms !important;
+            }
+
+            .progress-track[data-indeterminate="true"] .progress-value {
+                width: 100%;
+                animation: none;
+                opacity: 0.45;
+                transform: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <nav class="topbar" aria-label="Download navigation">
+            <a class="back-link" href="/v/{{.UUID}}">
+                <span aria-hidden="true">←</span>
+                Back to player
+            </a>
+            <a class="brand" href="/">
+                <img class="brand-logo" src="/logo.png" alt="" />
+                <span>{{.AppName}}</span>
+            </a>
+        </nav>
+
+        <header class="video-context">
+            <div class="poster">
+                <img src="{{.Thumbnail}}" alt="" />
+            </div>
+            <div class="video-copy">
+                <h1>{{.VideoTitle}}</h1>
+                <p>Choose the version and tracks you want. The server will assemble them without re-encoding the video.</p>
+                <div class="video-meta">
+                    {{if .Duration}}<span>{{.Duration}}</span>{{end}}
+                    <span>Original tracks preserved</span>
+                </div>
+            </div>
+        </header>
+
+        {{if .CanDownload}}
+        <form
+            id="download-form"
+            class="workspace"
+            data-job-base="{{.DownloadBase}}/download-jobs"
+        >
+            <input type="hidden" name="selection" value="custom" />
+            <div class="options">
+                <section class="step" aria-labelledby="quality-heading">
+                    <div class="step-heading">
+                        <span class="step-number" aria-hidden="true">1</span>
+                        <div>
+                            <h2 id="quality-heading">Choose video quality</h2>
+                            <p>The selected stream determines the picture resolution.</p>
+                        </div>
+                    </div>
+                    <div class="choice-grid">
+                        {{range $index, $quality := .Qualities}}
+                        <label>
+                            <input
+                                class="choice-input"
+                                type="radio"
+                                name="quality"
+                                value="{{$quality.Name}}"
+                                data-detail="{{$quality.Dimensions}}"
+                                aria-label="{{$quality.Name}}, {{$quality.Dimensions}}"
+                                {{if eq $index 0}}checked{{end}}
+                                required
+                            />
+                            <span class="choice">
+                                <span class="choice-main">
+                                    <span class="choice-title">{{$quality.Name}}</span>
+                                    <span class="choice-detail">{{$quality.Dimensions}}</span>
+                                </span>
+                                <span class="choice-mark" aria-hidden="true"></span>
+                            </span>
+                        </label>
+                        {{end}}
+                    </div>
+                </section>
+
+                <section class="step" aria-labelledby="container-heading">
+                    <div class="step-heading">
+                        <span class="step-number" aria-hidden="true">2</span>
+                        <div>
+                            <h2 id="container-heading">Choose container</h2>
+                            <p>MKV keeps multiple tracks. MP4 is simpler and more widely compatible.</p>
+                        </div>
+                    </div>
+                    <div class="choice-grid">
+                        <label>
+                            <input
+                                class="choice-input"
+                                type="radio"
+                                name="container"
+                                value="mkv"
+                                aria-label="MKV, multiple audio and subtitle tracks"
+                                checked
+                            />
+                            <span class="choice">
+                                <span class="choice-main">
+                                    <span class="choice-title">MKV</span>
+                                    <span class="choice-detail">Multiple audio and subtitle tracks</span>
+                                </span>
+                                <span class="choice-mark" aria-hidden="true"></span>
+                            </span>
+                        </label>
+                        <label>
+                            <input
+                                class="choice-input"
+                                type="radio"
+                                name="container"
+                                value="mp4"
+                                aria-label="MP4, one audio track and no subtitles"
+                                {{if not .CanUseMP4}}disabled{{end}}
+                            />
+                            <span class="choice">
+                                <span class="choice-main">
+                                    <span class="choice-title">MP4</span>
+                                    <span class="choice-detail">
+                                        {{if .CanUseMP4}}One audio track, no subtitles{{else}}No ready audio track{{end}}
+                                    </span>
+                                </span>
+                                <span class="choice-mark" aria-hidden="true"></span>
+                            </span>
+                        </label>
+                    </div>
+                </section>
+
+                <section class="step" aria-labelledby="tracks-heading">
+                    <div class="step-heading">
+                        <span class="step-number" aria-hidden="true">3</span>
+                        <div>
+                            <h2 id="tracks-heading">Choose tracks</h2>
+                            <p id="tracks-help">MKV can include any combination of ready audio and subtitle tracks.</p>
+                        </div>
+                    </div>
+
+                    <div data-mode="mkv">
+                        <div class="track-block">
+                            <div class="track-header">
+                                <h3>Audio</h3>
+                                {{if .Audios}}
+                                <div class="track-actions" aria-label="Audio selection controls">
+                                    <button class="text-button" type="button" data-select="audio" data-value="all">All</button>
+                                    <button class="text-button" type="button" data-select="audio" data-value="none">None</button>
+                                </div>
+                                {{end}}
+                            </div>
+                            {{if .Audios}}
+                            <div class="track-list">
+                                {{range .Audios}}
+                                <label class="track-row">
+                                    <input
+                                        type="checkbox"
+                                        name="audio"
+                                        value="{{.UUID}}"
+                                        data-track="audio-mkv"
+                                        aria-label="{{.Name}}, {{.Lang}}, {{.Type}}"
+                                        checked
+                                    />
+                                    <span class="track-name">{{.Name}}</span>
+                                    <span class="track-meta">{{.Lang}} · {{.Type}}</span>
+                                </label>
+                                {{end}}
+                            </div>
+                            {{else}}
+                            <p class="empty">No audio tracks are ready. The MKV will contain video only.</p>
+                            {{end}}
+                        </div>
+
+                        <div class="track-block">
+                            <div class="track-header">
+                                <h3>Subtitles</h3>
+                                {{if .Subtitles}}
+                                <div class="track-actions" aria-label="Subtitle selection controls">
+                                    <button class="text-button" type="button" data-select="subtitle" data-value="all">All</button>
+                                    <button class="text-button" type="button" data-select="subtitle" data-value="none">None</button>
+                                </div>
+                                {{end}}
+                            </div>
+                            {{if .Subtitles}}
+                            <div class="track-list">
+                                {{range .Subtitles}}
+                                <label class="track-row">
+                                    <input
+                                        type="checkbox"
+                                        name="subtitle"
+                                        value="{{.UUID}}"
+                                        data-track="subtitle-mkv"
+                                        aria-label="{{.Name}}, {{.Lang}}, {{.Type}}"
+                                        checked
+                                    />
+                                    <span class="track-name">{{.Name}}</span>
+                                    <span class="track-meta">{{.Lang}} · {{.Type}}</span>
+                                </label>
+                                {{end}}
+                            </div>
+                            {{else}}
+                            <p class="empty">No subtitle tracks are ready for this video.</p>
+                            {{end}}
+                        </div>
+                    </div>
+
+                    <div data-mode="mp4" hidden>
+                        {{if .Audios}}
+                        <div class="track-block">
+                            <div class="track-header">
+                                <h3>Audio</h3>
+                            </div>
+                            <div class="track-list">
+                                {{range $index, $audio := .Audios}}
+                                <label class="track-row">
+                                    <input
+                                        type="radio"
+                                        name="audio"
+                                        value="{{$audio.UUID}}"
+                                        data-track="audio-mp4"
+                                        aria-label="{{$audio.Name}}, {{$audio.Lang}}, {{$audio.Type}}"
+                                        {{if eq $index 0}}checked{{end}}
+                                        disabled
+                                    />
+                                    <span class="track-name">{{$audio.Name}}</span>
+                                    <span class="track-meta">{{$audio.Lang}} · {{$audio.Type}}</span>
+                                </label>
+                                {{end}}
+                            </div>
+                            <p class="format-note">MP4 requires exactly one audio track and does not include selectable subtitles.</p>
+                        </div>
+                        {{end}}
+                    </div>
+                </section>
+            </div>
+
+            <aside class="summary" aria-labelledby="summary-heading">
+                <h2 id="summary-heading">Download manifest</h2>
+                <div class="manifest" aria-live="polite">
+                    <div class="manifest-row">
+                        <span>Quality</span>
+                        <strong data-summary="quality">—</strong>
+                    </div>
+                    <div class="manifest-row">
+                        <span>Container</span>
+                        <strong data-summary="container">MKV</strong>
+                    </div>
+                    <div class="manifest-row">
+                        <span>Audio</span>
+                        <strong data-summary="audio">—</strong>
+                    </div>
+                    <div class="manifest-row">
+                        <span>Subtitles</span>
+                        <strong data-summary="subtitle">—</strong>
+                    </div>
+                </div>
+                <button class="download-button" type="submit" data-download-button data-config-action>
+                    Prepare download
+                </button>
+                <div data-config-action>
+                    <p class="summary-note">Preparation continues in the background if you leave this page.</p>
+                    <p class="form-error" role="alert" data-form-error></p>
+                    <button class="secondary-button" type="button" data-queue-retry hidden>
+                        Retry
+                    </button>
+                </div>
+
+                <section class="job-state" data-job-state hidden aria-labelledby="job-state-title">
+                    <div class="job-state-heading">
+                        <h3 id="job-state-title" data-job-title>Adding to queue</h3>
+                        <span class="job-percent" data-job-percent>0%</span>
+                    </div>
+                    <p class="job-message" data-job-message aria-live="polite">
+                        Saving your download configuration.
+                    </p>
+                    <div
+                        class="progress-track"
+                        data-job-progress
+                        role="progressbar"
+                        aria-label="Download preparation"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-valuenow="0">
+                        <div class="progress-value" data-job-progress-value></div>
+                    </div>
+                    <dl class="job-details">
+                        <div class="job-detail" data-job-detail="queue" hidden>
+                            <dt>Queue position</dt>
+                            <dd data-job-queue>—</dd>
+                        </div>
+                        <div class="job-detail" data-job-detail="estimate" hidden>
+                            <dt>Estimated time</dt>
+                            <dd data-job-estimate>Estimating…</dd>
+                        </div>
+                        <div class="job-detail" data-job-detail="file" hidden>
+                            <dt>Prepared file</dt>
+                            <dd data-job-file>—</dd>
+                        </div>
+                        <div class="job-detail" data-job-detail="expires" hidden>
+                            <dt>Available until</dt>
+                            <dd data-job-expires>—</dd>
+                        </div>
+                    </dl>
+                    <div class="job-actions">
+                        <a class="download-button" data-job-download hidden>Download file</a>
+                        <button class="secondary-button" type="button" data-job-retry hidden>Prepare again</button>
+                        <button class="secondary-button" type="button" data-job-edit hidden>Edit selection</button>
+                        <button class="secondary-button" type="button" data-job-reload hidden>Reload page</button>
+                    </div>
+                    <p class="connection-state" data-connection-state aria-live="polite"></p>
+                </section>
+            </aside>
+        </form>
+        {{else}}
+        <section class="not-ready">
+            <h2>No download quality is ready yet</h2>
+            <p>Return to the player and try again after the first video quality finishes encoding.</p>
+        </section>
+        {{end}}
+    </main>
+
+    {{if .CanDownload}}
+    <script>
+        (() => {
+            const form = document.getElementById("download-form");
+            const modeSections = Array.from(document.querySelectorAll("[data-mode]"));
+            const summary = {
+                quality: document.querySelector('[data-summary="quality"]'),
+                container: document.querySelector('[data-summary="container"]'),
+                audio: document.querySelector('[data-summary="audio"]'),
+                subtitle: document.querySelector('[data-summary="subtitle"]'),
+            };
+            const error = document.querySelector("[data-form-error]");
+            const submitButton = document.querySelector("[data-download-button]");
+            const tracksHelp = document.getElementById("tracks-help");
+            const jobState = document.querySelector("[data-job-state]");
+            const jobTitle = document.querySelector("[data-job-title]");
+            const jobMessage = document.querySelector("[data-job-message]");
+            const jobPercent = document.querySelector("[data-job-percent]");
+            const progressTrack = document.querySelector("[data-job-progress]");
+            const progressValue = document.querySelector("[data-job-progress-value]");
+            const queueDetail = document.querySelector('[data-job-detail="queue"]');
+            const estimateDetail = document.querySelector('[data-job-detail="estimate"]');
+            const fileDetail = document.querySelector('[data-job-detail="file"]');
+            const expiresDetail = document.querySelector('[data-job-detail="expires"]');
+            const queueValue = document.querySelector("[data-job-queue]");
+            const estimateValue = document.querySelector("[data-job-estimate]");
+            const fileValue = document.querySelector("[data-job-file]");
+            const expiresValue = document.querySelector("[data-job-expires]");
+            const downloadLink = document.querySelector("[data-job-download]");
+            const retryButton = document.querySelector("[data-job-retry]");
+            const editButton = document.querySelector("[data-job-edit]");
+            const reloadButton = document.querySelector("[data-job-reload]");
+            const connectionState = document.querySelector("[data-connection-state]");
+            const queueRetryButton = document.querySelector("[data-queue-retry]");
+
+            let currentJobId = null;
+            let pollTimer = null;
+            let queueRetryTimer = null;
+            let networkBackoff = 2;
+            let autoStartedJobId = null;
+            let latestJob = null;
+
+            const activeContainer = () =>
+                document.querySelector('input[name="container"]:checked')?.value || "mkv";
+
+            const setTrackMode = () => {
+                const container = activeContainer();
+                modeSections.forEach((section) => {
+                    const active = section.dataset.mode === container;
+                    section.hidden = !active;
+                    section.querySelectorAll("input").forEach((input) => {
+                        input.disabled = !active;
+                    });
+                });
+                tracksHelp.textContent = container === "mp4"
+                    ? "MP4 requires one audio track. Subtitle selection is available with MKV."
+                    : "MKV can include any combination of ready audio and subtitle tracks.";
+                error.textContent = "";
+                updateSummary();
+            };
+
+            const selectedValues = (selector) =>
+                Array.from(document.querySelectorAll(`${selector}:checked:not(:disabled)`)).map((input) => input.value);
+
+            const selectedTrackCount = (selector) =>
+                document.querySelectorAll(`${selector}:checked:not(:disabled)`).length;
+
+            const countLabel = (count, singular) => `${count} ${count === 1 ? singular : singular + "s"}`;
+
+            const updateSummary = () => {
+                const quality = document.querySelector('input[name="quality"]:checked');
+                const container = activeContainer();
+                const audioCount = selectedTrackCount('input[name="audio"]');
+                const subtitleCount = selectedTrackCount('input[name="subtitle"]');
+
+                summary.quality.textContent = quality
+                    ? `${quality.value} · ${quality.dataset.detail}`
+                    : "—";
+                summary.container.textContent = container.toUpperCase();
+                summary.audio.textContent = countLabel(audioCount, "track");
+                summary.subtitle.textContent = container === "mp4"
+                    ? "Not included"
+                    : countLabel(subtitleCount, "track");
+            };
+
+            document.querySelectorAll("input").forEach((input) => {
+                input.addEventListener("change", () => {
+                    if (input.name === "container") {
+                        setTrackMode();
+                        return;
+                    }
+                    error.textContent = "";
+                    updateSummary();
+                });
+            });
+
+            document.querySelectorAll("[data-select]").forEach((button) => {
+                button.addEventListener("click", () => {
+                    const name = button.dataset.select;
+                    const checked = button.dataset.value === "all";
+                    document.querySelectorAll(`input[data-track="${name}-mkv"]`).forEach((input) => {
+                        input.checked = checked;
+                    });
+                    updateSummary();
+                });
+            });
+
+            const setProgress = (progress, indeterminate = false) => {
+                const percent = Math.max(0, Math.min(100, Math.round(progress * 100)));
+                jobPercent.textContent = `${percent}%`;
+                progressValue.style.width = indeterminate ? "" : `${percent}%`;
+                progressTrack.dataset.indeterminate = indeterminate ? "true" : "false";
+                progressTrack.setAttribute("aria-valuenow", String(percent));
+                progressTrack.setAttribute(
+                    "aria-valuetext",
+                    indeterminate ? "Waiting in preparation queue" : `${percent}% prepared`,
+                );
+            };
+
+            const showDetail = (element, show) => {
+                element.hidden = !show;
+            };
+
+            const formatDuration = (seconds) => {
+                if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return "Estimating…";
+                if (seconds < 60) return "Less than a minute";
+                const minutes = Math.ceil(seconds / 60);
+                if (minutes < 60) return `About ${minutes} minute${minutes === 1 ? "" : "s"}`;
+                const hours = Math.floor(minutes / 60);
+                const remainder = minutes % 60;
+                return `About ${hours}h${remainder ? ` ${remainder}m` : ""}`;
+            };
+
+            const formatBytes = (bytes) => {
+                if (!Number.isFinite(bytes) || bytes <= 0) return "Unknown size";
+                const units = ["B", "KB", "MB", "GB", "TB"];
+                const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+                const value = bytes / Math.pow(1024, index);
+                return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
+            };
+
+            const setJobMode = (active) => {
+                form.classList.toggle("job-active", active);
+                jobState.hidden = !active;
+                submitButton.disabled = active;
+                if (active && window.matchMedia("(max-width: 820px)").matches) {
+                    jobState.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+            };
+
+            const setJobInURL = (jobId) => {
+                const url = new URL(window.location.href);
+                if (jobId) url.searchParams.set("job", jobId);
+                else url.searchParams.delete("job");
+                window.history.replaceState({}, "", url);
+            };
+
+            const clearPoll = () => {
+                if (pollTimer) window.clearTimeout(pollTimer);
+                pollTimer = null;
+            };
+
+            const clearQueueRetry = () => {
+                if (queueRetryTimer) window.clearInterval(queueRetryTimer);
+                queueRetryTimer = null;
+                queueRetryButton.hidden = true;
+            };
+
+            const offerQueueRetry = (seconds) => {
+                clearQueueRetry();
+                let remaining = Math.max(1, seconds || 30);
+                queueRetryButton.disabled = true;
+                queueRetryButton.hidden = false;
+                queueRetryButton.textContent = `Retry in ${remaining}s`;
+                queueRetryTimer = window.setInterval(() => {
+                    remaining -= 1;
+                    if (remaining > 0) {
+                        queueRetryButton.textContent = `Retry in ${remaining}s`;
+                        return;
+                    }
+                    window.clearInterval(queueRetryTimer);
+                    queueRetryTimer = null;
+                    queueRetryButton.disabled = false;
+                    queueRetryButton.textContent = "Try again";
+                }, 1000);
+            };
+
+            const schedulePoll = (seconds) => {
+                clearPoll();
+                const delay = document.hidden ? 15 : Math.max(1, seconds || 2);
+                pollTimer = window.setTimeout(fetchJob, delay * 1000);
+            };
+
+            const resetActions = () => {
+                downloadLink.hidden = true;
+                retryButton.hidden = true;
+                editButton.hidden = true;
+                reloadButton.hidden = true;
+            };
+
+            const applyManifestToForm = (manifest) => {
+                if (!manifest) return;
+                const quality = document.querySelector(`input[name="quality"][value="${CSS.escape(manifest.quality || "")}"]`);
+                const container = document.querySelector(`input[name="container"][value="${CSS.escape(manifest.container || "")}"]`);
+                if (quality) quality.checked = true;
+                if (container && !container.disabled) container.checked = true;
+                setTrackMode();
+
+                const audioIds = new Set((manifest.audioTracks || []).map((track) => track.uuid));
+                const subtitleIds = new Set((manifest.subtitleTracks || []).map((track) => track.uuid));
+                document.querySelectorAll('input[name="audio"]:not(:disabled)').forEach((input) => {
+                    input.checked = audioIds.has(input.value);
+                });
+                document.querySelectorAll('input[name="subtitle"]:not(:disabled)').forEach((input) => {
+                    input.checked = subtitleIds.has(input.value);
+                });
+                updateSummary();
+            };
+
+            const renderJob = (job) => {
+                latestJob = job;
+                networkBackoff = 2;
+                connectionState.textContent = "";
+                resetActions();
+                showDetail(queueDetail, false);
+                showDetail(estimateDetail, false);
+                showDetail(fileDetail, false);
+                showDetail(expiresDetail, false);
+
+                if (job.manifest) {
+                    applyManifestToForm(job.manifest);
+                    summary.quality.textContent = job.manifest.quality || "—";
+                    summary.container.textContent = (job.manifest.container || "").toUpperCase();
+                    summary.audio.textContent = countLabel(job.manifest.audioTracks?.length || 0, "track");
+                    summary.subtitle.textContent = job.manifest.container === "mp4"
+                        ? "Not included"
+                        : countLabel(job.manifest.subtitleTracks?.length || 0, "track");
+                }
+
+                if (job.status === "queued") {
+                    jobTitle.textContent = "Waiting in queue";
+                    jobMessage.textContent = "The server will start assembling your selected tracks when a preparation worker is free.";
+                    setProgress(0, true);
+                    showDetail(queueDetail, true);
+                    showDetail(estimateDetail, true);
+                    queueValue.textContent = job.queuePosition ? `${job.queuePosition}` : "Waiting";
+                    estimateValue.textContent = formatDuration(job.estimatedSecondsRemaining);
+                    schedulePoll(job.retryAfterSeconds);
+                    return;
+                }
+
+                if (job.status === "preparing") {
+                    jobTitle.textContent = "Assembling tracks";
+                    jobMessage.textContent = "The video is being packaged without re-encoding. You can leave this page and return later.";
+                    setProgress(job.progress || 0);
+                    showDetail(estimateDetail, true);
+                    estimateValue.textContent = formatDuration(job.estimatedSecondsRemaining);
+                    schedulePoll(job.retryAfterSeconds);
+                    return;
+                }
+
+                if (job.status === "ready") {
+                    jobTitle.textContent = "Your download is ready";
+                    jobMessage.textContent = "The browser should start the transfer automatically. Use the button below if it does not.";
+                    setProgress(1);
+                    showDetail(fileDetail, true);
+                    showDetail(expiresDetail, true);
+                    fileValue.textContent = `${job.file?.name || "Prepared video"} · ${formatBytes(job.file?.size)}`;
+                    expiresValue.textContent = job.expiresAt
+                        ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(job.expiresAt))
+                        : "Soon";
+                    downloadLink.href = job.file.downloadUrl;
+                    downloadLink.hidden = false;
+                    editButton.textContent = "Prepare another version";
+                    editButton.hidden = false;
+                    if (autoStartedJobId !== job.id) {
+                        autoStartedJobId = job.id;
+                        window.setTimeout(() => downloadLink.click(), 100);
+                    }
+                    return;
+                }
+
+                const expired = job.status === "expired";
+                const canceled = job.status === "canceled";
+                jobTitle.textContent = expired ? "Prepared file expired" : canceled ? "Preparation canceled" : "Preparation failed";
+                jobMessage.textContent = job.error?.message || (
+                    expired
+                        ? "The prepared file is no longer stored on this server."
+                        : "The server could not prepare this download."
+                );
+                setProgress(0);
+                retryButton.hidden = false;
+                editButton.textContent = "Edit selection";
+                editButton.hidden = false;
+            };
+
+            const fetchJSON = async (url, options = {}) => {
+                const response = await fetch(url, {
+                    credentials: "same-origin",
+                    ...options,
+                    headers: {
+                        "Content-Type": "application/json",
+                        ...(options.headers || {}),
+                    },
+                });
+                let body = null;
+                try {
+                    body = await response.json();
+                } catch (_) {
+                    body = null;
+                }
+                if (!response.ok) {
+                    const requestError = new Error(body?.error?.message || `Request failed (${response.status})`);
+                    requestError.status = response.status;
+                    requestError.code = body?.error?.code;
+                    requestError.retryAfter = Number(response.headers.get("Retry-After")) || null;
+                    throw requestError;
+                }
+                return body;
+            };
+
+            async function fetchJob() {
+                if (!currentJobId) return;
+                try {
+                    const job = await fetchJSON(`${form.dataset.jobBase}/${encodeURIComponent(currentJobId)}`);
+                    renderJob(job);
+                } catch (requestError) {
+                    if (requestError.status === 401 || requestError.status === 403) {
+                        clearPoll();
+                        jobTitle.textContent = "Download access expired";
+                        jobMessage.textContent = "Reload this page to renew access and continue following the same preparation job.";
+                        reloadButton.hidden = false;
+                        connectionState.textContent = "";
+                        return;
+                    }
+                    if (requestError.status === 404 || requestError.status === 410) {
+                        clearPoll();
+                        currentJobId = null;
+                        setJobInURL(null);
+                        jobTitle.textContent = "Preparation no longer available";
+                        jobMessage.textContent = "This job was cleaned up or the video was removed. Prepare the download again.";
+                        setProgress(0);
+                        retryButton.hidden = false;
+                        editButton.hidden = false;
+                        return;
+                    }
+                    connectionState.textContent = "Connection lost. Retrying…";
+                    schedulePoll(networkBackoff);
+                    networkBackoff = Math.min(networkBackoff * 2, 30);
+                }
+            }
+
+            const createJob = async () => {
+                const quality = document.querySelector('input[name="quality"]:checked');
+                const container = activeContainer();
+                const audioCount = selectedTrackCount('input[name="audio"]');
+
+                if (!quality) {
+                    error.textContent = "Choose a video quality.";
+                    return;
+                }
+                if (container === "mp4" && audioCount !== 1) {
+                    error.textContent = "Choose exactly one audio track for MP4.";
+                    return;
+                }
+
+                submitButton.disabled = true;
+                submitButton.textContent = "Adding to queue…";
+                error.textContent = "";
+                clearQueueRetry();
+                try {
+                    const job = await fetchJSON(form.dataset.jobBase, {
+                        method: "POST",
+                        body: JSON.stringify({
+                            quality: quality.value,
+                            container,
+                            audioUUIDs: selectedValues('input[name="audio"]'),
+                            subtitleUUIDs: selectedValues('input[name="subtitle"]'),
+                        }),
+                    });
+                    currentJobId = job.id;
+                    setJobInURL(job.id);
+                    setJobMode(true);
+                    renderJob(job);
+                } catch (requestError) {
+                    error.textContent = requestError.message;
+                    if (requestError.status === 429) {
+                        offerQueueRetry(requestError.retryAfter);
+                    }
+                } finally {
+                    submitButton.disabled = Boolean(currentJobId);
+                    submitButton.textContent = "Prepare download";
+                }
+            };
+
+            form.addEventListener("submit", (event) => {
+                event.preventDefault();
+                createJob();
+            });
+
+            retryButton.addEventListener("click", () => {
+                clearPoll();
+                clearQueueRetry();
+                currentJobId = null;
+                setJobInURL(null);
+                setJobMode(false);
+                createJob();
+            });
+
+            editButton.addEventListener("click", () => {
+                clearPoll();
+                clearQueueRetry();
+                currentJobId = null;
+                setJobInURL(null);
+                setJobMode(false);
+                error.textContent = "";
+            });
+
+            reloadButton.addEventListener("click", () => window.location.reload());
+            queueRetryButton.addEventListener("click", createJob);
+
+            document.addEventListener("visibilitychange", () => {
+                if (!document.hidden && currentJobId && latestJob && ["queued", "preparing"].includes(latestJob.status)) {
+                    fetchJob();
+                }
+            });
+
+            setTrackMode();
+            const restoredJobId = new URL(window.location.href).searchParams.get("job");
+            if (restoredJobId) {
+                currentJobId = restoredJobId;
+                setJobMode(true);
+                jobTitle.textContent = "Loading preparation";
+                jobMessage.textContent = "Checking the current state of your download.";
+                setProgress(0, true);
+                fetchJob();
+            }
+        })();
+    </script>
+    {{end}}
+</body>
+</html>

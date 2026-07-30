@@ -18,10 +18,15 @@ func (h *Handlers) UpdateWebPage(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
+	path, err := normalizeWebPagePath(validatus.Path)
+	if err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
+
 	var existing int64
 	if res := h.Deps.DB.Model(&models.WebPage{}).
 		Where("id != ?", validatus.WebPageID).
-		Where("path = ?", validatus.Path).
+		Where("path = ?", path).
 		Count(&existing); res.Error != nil {
 		log.Println("Failed to count webpage path", res.Error)
 		return c.NoContent(http.StatusInternalServerError)
@@ -39,9 +44,11 @@ func (h *Handlers) UpdateWebPage(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	webPage.Path = validatus.Path
+	webPage.Path = path
 	webPage.Title = validatus.Title
-	webPage.Html = validatus.Html
+	webPage.Content = validatus.Content
+	webPage.Format = validatus.Format
+	webPage.Published = *validatus.Published
 	webPage.ListInFooter = *validatus.ListInFooter
 
 	if res := h.Deps.DB.Save(&webPage); res.Error != nil {

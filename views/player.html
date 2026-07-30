@@ -543,6 +543,7 @@
         const WIDTH = parseFloat("{{ .Width }}");
         const RATIO = WIDTH / HEIGHT;
         const DOWNLOAD_ENABLED = "{{ .DownloadEnabled }}" === "true";
+        const DOWNLOAD_PAGE_URL = `/v/${UUID}/download`;
         const CONTINUE_WATCHING_POPUP_ENABLED = "{{ .ContinueWatchingPopupEnabled }}" === "true";
     </script>
     <script>
@@ -632,12 +633,12 @@
                 currentValue: "",
                 checkable: false,
                 items: DOWNLOAD_ENABLED ? [
-                    ...Qualitys.map((Quality, i) => ({
-                        name: `${Quality.label} - ${Quality.width}x${Quality.height}`,
+                    {
+                        name: "Choose quality, format, and tracks",
                         click: () => {
-                            downloadFile(Quality.url);
+                            openDownloadPage();
                         },
-                    })),
+                    },
                 ] : [
                     {
                         name: "Downloads are disabled",
@@ -916,8 +917,8 @@
             });
         }
 
-        function downloadFile(filePath) {
-            window.open(window.origin + filePath)
+        function openDownloadPage() {
+            window.open(DOWNLOAD_PAGE_URL, "_blank", "noopener");
         }
 
         function createVideoPlayer() {

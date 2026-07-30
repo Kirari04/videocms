@@ -11,7 +11,6 @@ type UserSettings struct {
 	WebhooksEnabled       bool
 	WebhooksMax           int
 	UploadSessionsMax     int64
-	EnablePlayerCaptcha   bool
 	MaxRemoteDownloads    int
 	RemoteDownloadEnabled *bool
 }
@@ -55,7 +54,6 @@ func (j UserSettings) Value() (driver.Value, error) {
 }
 
 type UserSettingsUpdateValidation struct {
-	EnablePlayerCaptcha *bool   `validate:"required,boolean"`
-	NewPassword         *string `validate:"omitempty,min=8,max=64"`
-	MaxRemoteDownloads  *int    `validate:"omitempty,min=0"`
+	NewPassword        *string `validate:"omitempty,min=8,max=64"`
+	MaxRemoteDownloads *int    `validate:"omitempty,min=0"`
 }

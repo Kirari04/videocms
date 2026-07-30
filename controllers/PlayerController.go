@@ -86,7 +86,7 @@ func (h *Handlers) PlayerController(c echo.Context) error {
 	for _, qualiItem := range dbLink.File.Qualitys {
 		if qualiItem.Type == "hls" && qualiItem.Ready {
 			jsonQualitys = append(jsonQualitys, map[string]string{
-				"url":    fmt.Sprintf("%s/%s/%s/download/video.mkv", h.Config().FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name),
+				"url":    fmt.Sprintf("%s/%s/%s/1/stream/video.mp4", h.Config().FolderVideoQualitysPub, dbLink.UUID, qualiItem.Name),
 				"label":  qualiItem.Name,
 				"height": strconv.Itoa(int(qualiItem.Height)),
 				"width":  strconv.Itoa(int(qualiItem.Width)),

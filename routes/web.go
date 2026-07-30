@@ -19,6 +19,8 @@ func Web(app *echo.Echo, handlers *controllers.Handlers, middlewareFactory *midd
 
 	app.GET("/v/:UUID", handlers.PlayerController,
 		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateWeb), cfg.RatelimitBurstWeb, time.Minute*5)))
+	app.GET("/v/:UUID/download", handlers.DownloadPageController,
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateWeb), cfg.RatelimitBurstWeb, time.Minute*5)))
 	app.GET("/v/:UUID/status", handlers.PlayerStatusController,
 		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateWeb), cfg.RatelimitBurstWeb, time.Minute*5)))
 
@@ -29,7 +31,9 @@ func Web(app *echo.Echo, handlers *controllers.Handlers, middlewareFactory *midd
 	videoData.GET("/:UUID/image/thumb/:FILE", handlers.GetThumbnailData)
 	videoData.GET("/:UUID/:SUBUUID/subtitle/:FILE", handlers.GetSubtitleData, middlewareFactory.MediaAuth())
 	videoData.GET("/:UUID/:AUDIOUUID/stream/master.m3u8", handlers.GetM3u8Data, middlewareFactory.MediaAuth())
-	videoData.GET("/:UUID/:QUALITY/download/video.mkv", handlers.DownloadVideoController, middlewareFactory.MediaAuth())
+	videoData.POST("/:UUID/download-jobs", handlers.CreateDownloadJob, middlewareFactory.MediaAuth())
+	videoData.GET("/:UUID/download-jobs/:JOBUUID", handlers.GetDownloadJob, middlewareFactory.MediaAuth())
+	videoData.GET("/:UUID/download-jobs/:JOBUUID/file", handlers.DownloadPreparedFile, middlewareFactory.MediaAuth())
 	videoData.GET("/:UUID/:QUALITY/:STREAM/stream/video.mp4", handlers.DownloadVideoController, middlewareFactory.MediaAuth())
 	videoData.GET("/:UUID/:QUALITY/:FILE", handlers.GetVideoData, middlewareFactory.MediaAuth())
 	videoData.GET("/:UUID/:AUDIOUUID/audio/:FILE", handlers.GetAudioData, middlewareFactory.MediaAuth())

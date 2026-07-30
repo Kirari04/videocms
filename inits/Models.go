@@ -13,6 +13,45 @@ func MigrateModels(gormDB *gorm.DB) error {
 	if gormDB == nil {
 		return errors.New("DB is nil while attempting to migrate")
 	}
+	hadWebPageTable := gormDB.Migrator().HasTable("web_pages")
+	hadWebPageContent, err := hasWebPageColumn(gormDB, "content")
+	if err != nil {
+		return err
+	}
+	hadWebPageFormat, err := hasWebPageColumn(gormDB, "format")
+	if err != nil {
+		return err
+	}
+	hadWebPagePublished, err := hasWebPageColumn(gormDB, "published")
+	if err != nil {
+		return err
+	}
+
+	if hadWebPageTable && !hadWebPageContent {
+		if err := gormDB.Exec("ALTER TABLE web_pages ADD COLUMN content text").Error; err != nil {
+			return fmt.Errorf("failed to add webpage content column: %w", err)
+		}
+		if err := gormDB.Exec(
+			"UPDATE web_pages SET content = html WHERE (content IS NULL OR content = '') AND html != ''",
+		).Error; err != nil {
+			return fmt.Errorf("failed to migrate webpage content: %w", err)
+		}
+	}
+	if hadWebPageTable && !hadWebPageFormat {
+		if err := gormDB.Exec(
+			"ALTER TABLE web_pages ADD COLUMN format text NOT NULL DEFAULT 'html'",
+		).Error; err != nil {
+			return fmt.Errorf("failed to add webpage format column: %w", err)
+		}
+	}
+	if hadWebPageTable && !hadWebPagePublished {
+		if err := gormDB.Exec(
+			"ALTER TABLE web_pages ADD COLUMN published numeric NOT NULL DEFAULT 1",
+		).Error; err != nil {
+			return fmt.Errorf("failed to add webpage published column: %w", err)
+		}
+	}
+
 	if err := gormDB.AutoMigrate(
 		&models.User{},
 		&models.Folder{},
@@ -36,8 +75,30 @@ func MigrateModels(gormDB *gorm.DB) error {
 		&models.EncodingLog{},
 		&models.RemoteDownload{},
 		&models.RemoteDownloadLog{},
+		&models.DownloadJob{},
 	); err != nil {
 		return err
+	}
+
+	if err := gormDB.Model(&models.TrafficLog{}).
+		Where("source IS NULL OR source = ''").
+		Update("source", models.TrafficSourcePlayer).Error; err != nil {
+		return fmt.Errorf("failed to backfill traffic source: %w", err)
+	}
+
+	if !hadWebPageFormat {
+		if err := gormDB.Model(&models.WebPage{}).
+			Where("format = ''").
+			Update("format", models.WebPageFormatHTML).Error; err != nil {
+			return fmt.Errorf("failed to migrate webpage formats: %w", err)
+		}
+	}
+	if !hadWebPagePublished {
+		if err := gormDB.Model(&models.WebPage{}).
+			Where("published = ?", false).
+			Update("published", true).Error; err != nil {
+			return fmt.Errorf("failed to migrate webpage visibility: %w", err)
+		}
 	}
 
 	// init default admin user
@@ -68,4 +129,19 @@ func MigrateModels(gormDB *gorm.DB) error {
 
 func boolPtr(value bool) *bool {
 	return &value
+}
+
+func hasWebPageColumn(gormDB *gorm.DB, column string) (bool, error) {
+	if !gormDB.Migrator().HasTable("web_pages") {
+		return false, nil
+	}
+
+	var count int64
+	if err := gormDB.Raw(
+		"SELECT COUNT(*) FROM pragma_table_info('web_pages') WHERE name = ?",
+		column,
+	).Scan(&count).Error; err != nil {
+		return false, fmt.Errorf("failed to inspect webpage schema: %w", err)
+	}
+	return count > 0, nil
 }

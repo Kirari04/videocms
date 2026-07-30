@@ -60,10 +60,16 @@ func (w *WorkerGroup) runDeleter() {
 	var skippingDeletion int
 	var successDeletion int
 	for _, todo := range todos {
+		w.CancelDownloadPreparationsForFile(todo.ID)
+		if w.HasActiveDownloadPreparationForFile(todo.ID) {
+			skippingDeletion++
+			continue
+		}
+
 		/**
-		* check if all files qualities, subs & audios are not currently encoding because else there might be
+		 * check if all files qualities, subs & audios are not currently encoding because else there might be
 		* parallel to the delete command an active ffmpeg conversion running
-		 */
+		*/
 		encoding := false
 		for _, quality := range todo.Qualitys {
 			if quality.Encoding {

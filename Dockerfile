@@ -2,7 +2,7 @@
 
 ARG ALPINE_VERSION=3.22
 ARG BUN_VERSION=1.2.18
-ARG GO_VERSION=1.25.5
+ARG GO_VERSION=1.26.0
 
 FROM --platform=$BUILDPLATFORM oven/bun:${BUN_VERSION} AS frontend_build
 
@@ -12,7 +12,8 @@ ARG CHANNEL=beta
 ARG DOCKER_IMAGE_TAG=kirari04/videocms:beta
 
 COPY videocms-frontend/package.json videocms-frontend/bun.lock ./
-RUN bun install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile
 
 COPY videocms-frontend/ .
 
@@ -37,24 +38,35 @@ ARG VERSION=v0.0.0-dev
 ARG CHANNEL=dev
 
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
-# Copy source code after dependencies so stale go.mod/go.sum is caught by CI.
-COPY . .
+# Keep frontend, documentation, and repository metadata out of the Go build
+# cache key. Add new top-level Go package directories here when introduced.
+COPY *.go ./
+COPY app ./app
+COPY auth ./auth
+COPY cmd ./cmd
+COPY config ./config
+COPY configdb ./configdb
+COPY controllers ./controllers
+COPY download ./download
+COPY helpers ./helpers
+COPY inits ./inits
+COPY logic ./logic
+COPY middlewares ./middlewares
+COPY models ./models
+COPY routes ./routes
+COPY services ./services
 
-RUN mkdir -p /out && \
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    mkdir -p /out && \
     CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build \
     -ldflags "-linkmode external -extldflags -static -X ch/kirari04/videocms/config.VERSION=${VERSION}" \
-    -a -installsuffix cgo \
     -o /out/videocms \
     ./main.go
-
-FROM go_build AS sbom
-
-RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /go/bin
-
-RUN /go/bin/syft packages . -o spdx-json=/out/sbom.spdx.json
 
 FROM scratch AS binary
 
@@ -78,7 +90,6 @@ LABEL org.opencontainers.image.title="VideoCMS" \
       ch.kirari04.videocms.channel="${CHANNEL}"
 
 COPY --from=go_build /out/videocms ./main.bin
-COPY --from=sbom /out/sbom.spdx.json /app/sbom.spdx.json
 
 COPY ./views ./views/
 COPY ./public ./public/

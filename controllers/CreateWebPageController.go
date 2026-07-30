@@ -3,7 +3,6 @@ package controllers
 import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/models"
-	"fmt"
 	"log"
 	"net/http"
 
@@ -17,9 +16,14 @@ func (h *Handlers) CreateWebPage(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
+	path, err := normalizeWebPagePath(validatus.Path)
+	if err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
+
 	var existing int64
 	if res := h.Deps.DB.Model(&models.WebPage{}).Where(&models.WebPage{
-		Path: validatus.Path,
+		Path: path,
 	}).Count(&existing); res.Error != nil {
 		c.Logger().Error("Failed to count webpage path", res.Error)
 		return c.NoContent(http.StatusInternalServerError)
@@ -28,14 +32,12 @@ func (h *Handlers) CreateWebPage(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Path already used")
 	}
 
-	if validatus.Path[len(validatus.Path)-1] != '/' {
-		validatus.Path = fmt.Sprintf("%s/", validatus.Path)
-	}
-
 	webPage := models.WebPage{
-		Path:         validatus.Path,
+		Path:         path,
 		Title:        validatus.Title,
-		Html:         validatus.Html,
+		Content:      validatus.Content,
+		Format:       validatus.Format,
+		Published:    *validatus.Published,
 		ListInFooter: *validatus.ListInFooter,
 	}
 	if res := h.Deps.DB.Create(&webPage); res.Error != nil {
