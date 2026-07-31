@@ -13,15 +13,21 @@ import (
 )
 
 func TestDeleteStoredFileUsesMediaStoreAndRemovesSource(t *testing.T) {
-	mediaRoot := t.TempDir()
-	localStore, err := storage.NewLocalStore(mediaRoot)
+	defaultStore, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewLocalStore() error = %v", err)
+	}
+	archiveStore, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewLocalStore() archive error = %v", err)
 	}
 	storageService, err := storage.NewService(
 		"local",
 		storage.LegacyMediaLayout{},
-		map[string]storage.Store{"local": localStore},
+		map[string]storage.Store{
+			"local":   defaultStore,
+			"archive": archiveStore,
+		},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -33,8 +39,11 @@ func TestDeleteStoredFileUsesMediaStoreAndRemovesSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Video() error = %v", err)
 	}
-	if _, err := localStore.Put(context.Background(), mediaKey, strings.NewReader("segment"), storage.PutOptions{}); err != nil {
+	if _, err := archiveStore.Put(context.Background(), mediaKey, strings.NewReader("segment"), storage.PutOptions{}); err != nil {
 		t.Fatalf("Put() error = %v", err)
+	}
+	if _, err := defaultStore.Put(context.Background(), mediaKey, strings.NewReader("keep"), storage.PutOptions{}); err != nil {
+		t.Fatalf("Put() default error = %v", err)
 	}
 
 	sourcePath := filepath.Join(t.TempDir(), "source.tmp")
@@ -42,13 +51,16 @@ func TestDeleteStoredFileUsesMediaStoreAndRemovesSource(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 	worker := &WorkerGroup{deps: &app.Deps{Storage: storageService}}
-	if err := worker.deleteStoredFile(models.File{UUID: fileUUID, Path: sourcePath}); err != nil {
+	if err := worker.deleteStoredFile(models.File{UUID: fileUUID, StorageID: "archive", Path: sourcePath}); err != nil {
 		t.Fatalf("deleteStoredFile() error = %v", err)
 	}
 	if _, err := os.Stat(sourcePath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("source still exists or stat failed unexpectedly: %v", err)
 	}
-	if _, err := localStore.Stat(context.Background(), mediaKey); !errors.Is(err, storage.ErrNotFound) {
+	if _, err := archiveStore.Stat(context.Background(), mediaKey); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("media object still exists or stat failed unexpectedly: %v", err)
+	}
+	if _, err := defaultStore.Stat(context.Background(), mediaKey); err != nil {
+		t.Fatalf("default-store object was removed: %v", err)
 	}
 }

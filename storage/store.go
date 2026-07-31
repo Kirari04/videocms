@@ -37,7 +37,10 @@ type PutOptions struct {
 
 // Store exposes only operations that have equivalent semantics on local disk
 // and object storage. Directory creation and renames intentionally do not form
-// part of this contract.
+// part of this contract. Open must support repeated seeks efficiently; remote
+// adapters should translate seeks into provider range requests rather than
+// downloading the entire object. Delete is idempotent. Walk visits only the
+// object at prefix or descendants below the prefix segment boundary.
 type Store interface {
 	Open(ctx context.Context, key Key) (*Object, error)
 	Put(ctx context.Context, key Key, src io.Reader, opts PutOptions) (ObjectInfo, error)

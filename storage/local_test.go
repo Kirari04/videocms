@@ -36,12 +36,30 @@ func TestLocalStoreConformance(t *testing.T) {
 		t.Fatalf("Seek() error = %v", err)
 	}
 	data, err := io.ReadAll(object.Body)
-	object.Body.Close()
 	if err != nil {
 		t.Fatalf("ReadAll() error = %v", err)
 	}
 	if string(data) != "data" {
 		t.Fatalf("read data = %q, want %q", data, "data")
+	}
+	if _, err := object.Body.Seek(0, io.SeekStart); err != nil {
+		t.Fatalf("second Seek() error = %v", err)
+	}
+	first := make([]byte, 7)
+	if _, err := io.ReadFull(object.Body, first); err != nil {
+		t.Fatalf("ReadFull() after second seek error = %v", err)
+	}
+	if string(first) != "segment" {
+		t.Fatalf("second read data = %q, want segment", first)
+	}
+	if offset, err := object.Body.Seek(0, io.SeekEnd); err != nil || offset != expectedSize {
+		t.Fatalf("SeekEnd() = %d, %v, want %d", offset, err, expectedSize)
+	}
+	object.Body.Close()
+
+	outsidePrefix := mustParseKey(t, "file-other/720p/out0.ts")
+	if _, err := store.Put(ctx, outsidePrefix, strings.NewReader("other"), PutOptions{}); err != nil {
+		t.Fatalf("Put() outside prefix error = %v", err)
 	}
 
 	prefix := mustParseKey(t, "file")
@@ -54,6 +72,11 @@ func TestLocalStoreConformance(t *testing.T) {
 	}
 	if len(walked) != 1 || walked[0] != key.String() {
 		t.Fatalf("Walk() = %v, want [%s]", walked, key.String())
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := store.Open(canceled, key); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Open() canceled error = %v, want context.Canceled", err)
 	}
 
 	if err := store.Delete(ctx, key); err != nil {
