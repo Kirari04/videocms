@@ -85,6 +85,11 @@ func MigrateModels(gormDB *gorm.DB) error {
 		Update("source", models.TrafficSourcePlayer).Error; err != nil {
 		return fmt.Errorf("failed to backfill traffic source: %w", err)
 	}
+	if err := gormDB.Model(&models.File{}).
+		Where("storage_id IS NULL OR storage_id = ''").
+		Update("storage_id", "local").Error; err != nil {
+		return fmt.Errorf("failed to backfill file storage IDs: %w", err)
+	}
 
 	if !hadWebPageFormat {
 		if err := gormDB.Model(&models.WebPage{}).

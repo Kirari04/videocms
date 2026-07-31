@@ -18,11 +18,11 @@ type mediaTraffic struct {
 	audioID   uint
 }
 
-func (h *Handlers) readMediaObject(c echo.Context, key storage.Key, maxBytes int64) ([]byte, error) {
+func (h *Handlers) readMediaObject(c echo.Context, storeID string, key storage.Key, maxBytes int64) ([]byte, error) {
 	if h == nil || h.Deps == nil || h.Deps.Storage == nil {
 		return nil, storage.ErrStoreNotConfigured
 	}
-	store, err := h.Deps.Storage.Default()
+	store, err := h.Deps.Storage.StoreOrDefault(storeID)
 	if err != nil {
 		return nil, err
 	}
@@ -48,12 +48,12 @@ func (h *Handlers) readMediaObject(c echo.Context, key storage.Key, maxBytes int
 	return data, nil
 }
 
-func (h *Handlers) serveMediaObject(c echo.Context, key storage.Key, notFoundMessage string, traffic mediaTraffic) error {
+func (h *Handlers) serveMediaObject(c echo.Context, storeID string, key storage.Key, notFoundMessage string, traffic mediaTraffic) error {
 	if h == nil || h.Deps == nil || h.Deps.Storage == nil {
 		c.Logger().Error("media storage is not configured")
 		return mediaStorageResponse(c, http.StatusInternalServerError, "")
 	}
-	store, err := h.Deps.Storage.Default()
+	store, err := h.Deps.Storage.StoreOrDefault(storeID)
 	if err != nil {
 		c.Logger().Error("failed to resolve media storage", err)
 		return mediaStorageResponse(c, http.StatusInternalServerError, "")

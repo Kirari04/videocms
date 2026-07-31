@@ -46,9 +46,15 @@ func (h *Handlers) CreateFile(c echo.Context) error {
 		c.Logger().Error("Failed to open destination file", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
-	defer dst.Close()
 	if _, err = io.Copy(dst, src); err != nil {
+		dst.Close()
+		os.Remove(filePath)
 		c.Logger().Errorf("Failed to save file: %v", err)
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	if err := dst.Close(); err != nil {
+		os.Remove(filePath)
+		c.Logger().Errorf("Failed to close uploaded file: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
 

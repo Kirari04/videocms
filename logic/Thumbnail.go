@@ -15,6 +15,10 @@ import (
 )
 
 func (s *Service) CreateThumbnail(imageCountAxis int, inputFile string, height int, outputFile string, fileUUID string, videoDuration float64, fps float64) (status int, err error) {
+	return s.CreateThumbnailInStore(imageCountAxis, inputFile, height, outputFile, fileUUID, "", videoDuration, fps)
+}
+
+func (s *Service) CreateThumbnailInStore(imageCountAxis int, inputFile string, height int, outputFile string, fileUUID string, storeID string, videoDuration float64, fps float64) (status int, err error) {
 	absInputFile, err := filepath.Abs(inputFile)
 	if err != nil {
 		return http.StatusBadRequest, err
@@ -107,7 +111,7 @@ func (s *Service) CreateThumbnail(imageCountAxis int, inputFile string, height i
 
 	}
 
-	store, layout, err := s.mediaStorage()
+	store, layout, err := s.mediaStorage(storeID)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}

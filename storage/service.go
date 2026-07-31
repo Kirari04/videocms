@@ -74,6 +74,16 @@ func (s *Service) Store(id string) (Store, error) {
 	return store, nil
 }
 
+// StoreOrDefault resolves a persisted store ID. Empty IDs are treated as the
+// active default for compatibility with records created before store IDs were
+// persisted.
+func (s *Service) StoreOrDefault(id string) (Store, error) {
+	if id == "" {
+		return s.Default()
+	}
+	return s.Store(id)
+}
+
 func (s *Service) Layout() MediaLayout {
 	if s == nil {
 		return nil

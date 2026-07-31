@@ -10,12 +10,10 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
@@ -73,12 +71,30 @@ func (h *Handlers) DownloadVideoController(c echo.Context) error {
 	if err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
 	}
+	cleanupInputs, err := downloadsvc.MaterializeSelection(c.Request().Context(), h.Deps.Storage, &dbLink.File, selection)
+	if err != nil {
+		c.Logger().Errorf("Failed to materialize download inputs: %v", err)
+		return c.String(http.StatusInternalServerError, "failed to prepare download inputs")
+	}
+	defer cleanupInputs()
 
-	tmpFilePath := filepath.Join(
-		h.Config().FolderVideoUploadsPriv,
-		fmt.Sprintf("%s-download.%s", uuid.NewString(), selection.Container),
+	if h.Deps.Storage == nil || h.Deps.Storage.Workspace() == nil {
+		return c.String(http.StatusInternalServerError, "download workspace is unavailable")
+	}
+	tmpOutput, cleanupOutput, err := h.Deps.Storage.Workspace().TempFile(
+		c.Request().Context(),
+		"stream-download",
+		"."+selection.Container,
 	)
-	defer os.Remove(tmpFilePath)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "failed to prepare download output")
+	}
+	tmpFilePath := tmpOutput.Name()
+	if err := tmpOutput.Close(); err != nil {
+		_ = cleanupOutput()
+		return c.String(http.StatusInternalServerError, "failed to prepare download output")
+	}
+	defer cleanupOutput()
 
 	cmdArgs := downloadFFmpegArgs(selection, tmpFilePath)
 	cmd := exec.CommandContext(c.Request().Context(), "ffmpeg", cmdArgs...)

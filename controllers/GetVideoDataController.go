@@ -45,7 +45,7 @@ func (h *Handlers) GetVideoData(c echo.Context) error {
 	if err != nil {
 		return c.String(http.StatusBadRequest, "bad media key")
 	}
-	return h.serveMediaObject(c, key, "Video doesn't exist", mediaTraffic{
+	return h.serveMediaObject(c, claims.StorageID, key, "Video doesn't exist", mediaTraffic{
 		userID:    claims.UserID,
 		fileID:    claims.FileID,
 		qualityID: qualityID,

@@ -16,6 +16,23 @@ type LocalStore struct {
 	root string
 }
 
+// LocalPath exposes a read-only path optimization to the storage service.
+// It is intentionally not part of Store because remote adapters cannot
+// provide this capability.
+func (s *LocalStore) LocalPath(ctx context.Context, key Key) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	objectPath, err := s.pathFor(key)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(objectPath); err != nil {
+		return "", normalizeLocalError(key, err)
+	}
+	return objectPath, nil
+}
+
 func NewLocalStore(root string) (*LocalStore, error) {
 	if strings.TrimSpace(root) == "" {
 		return nil, errors.New("local storage root is empty")

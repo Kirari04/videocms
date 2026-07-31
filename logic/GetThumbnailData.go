@@ -7,6 +7,13 @@ import (
 	"net/http"
 )
 
+type ThumbnailObject struct {
+	FileUUID string
+	StoreID  string
+	UserID   uint
+	FileID   uint
+}
+
 func (s *Service) GetThumbnailData(fileName string, UUID string) (status int, filePath *string, userID uint, fileID uint, err error) {
 	status, fileUUID, userID, fileID, err := s.ResolveThumbnailData(fileName, UUID)
 	if err != nil {
@@ -19,6 +26,14 @@ func (s *Service) GetThumbnailData(fileName string, UUID string) (status int, fi
 // ResolveThumbnailData authorizes a thumbnail name and returns its logical
 // file identity without exposing a storage-provider path.
 func (s *Service) ResolveThumbnailData(fileName string, UUID string) (status int, fileUUID string, userID uint, fileID uint, err error) {
+	status, object, err := s.ResolveThumbnailObject(fileName, UUID)
+	if err != nil {
+		return status, "", 0, 0, err
+	}
+	return status, object.FileUUID, object.UserID, object.FileID, nil
+}
+
+func (s *Service) ResolveThumbnailObject(fileName string, UUID string) (status int, object ThumbnailObject, err error) {
 	//translate link id to file id
 	var dbLink models.Link
 	if dbRes := s.Deps.DB.
@@ -28,12 +43,17 @@ func (s *Service) ResolveThumbnailData(fileName string, UUID string) (status int
 			UUID: UUID,
 		}).
 		First(&dbLink); dbRes.Error != nil {
-		return http.StatusNotFound, "", 0, 0, errors.New("thumbnail doesn't exist")
+		return http.StatusNotFound, ThumbnailObject{}, errors.New("thumbnail doesn't exist")
 	}
 
 	if !s.thumbnailFileAllowedForLink(fileName, dbLink) {
-		return http.StatusNotFound, "", 0, 0, errors.New("thumbnail doesn't exist")
+		return http.StatusNotFound, ThumbnailObject{}, errors.New("thumbnail doesn't exist")
 	}
 
-	return http.StatusOK, dbLink.File.UUID, dbLink.UserID, dbLink.FileID, nil
+	return http.StatusOK, ThumbnailObject{
+		FileUUID: dbLink.File.UUID,
+		StoreID:  dbLink.File.StorageID,
+		UserID:   dbLink.UserID,
+		FileID:   dbLink.FileID,
+	}, nil
 }

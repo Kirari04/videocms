@@ -101,7 +101,7 @@ func (h *Handlers) PlayerController(c echo.Context) error {
 		if subItem.Ready && h.Deps.Storage != nil && h.Deps.Storage.Layout() != nil {
 			key, keyErr := h.Deps.Storage.Layout().Subtitle(dbLink.File.UUID, subItem.UUID, subItem.OutputFile)
 			if keyErr == nil {
-				if subContent, err := h.readMediaObject(c, key, 16*1024*1024); err == nil {
+				if subContent, err := h.readMediaObject(c, dbLink.File.StorageID, key, 16*1024*1024); err == nil {
 					jsonSubtitles = append(jsonSubtitles, map[string]string{
 						"data": base64.StdEncoding.EncodeToString(subContent),
 						"type": subItem.Type,
@@ -437,6 +437,7 @@ func buildMediaClaims(dbLink *models.Link) auth.MediaClaims {
 	return auth.MediaClaims{
 		LinkUUID:      dbLink.UUID,
 		FileUUID:      dbLink.File.UUID,
+		StorageID:     dbLink.File.StorageID,
 		UserID:        dbLink.UserID,
 		FileID:        dbLink.FileID,
 		QualityIDs:    qualityIDs,

@@ -148,7 +148,7 @@ func (w *WorkerGroup) deleteStoredFile(file models.File) error {
 	}
 
 	if w.deps.Storage != nil && w.deps.Storage.Layout() != nil {
-		store, err := w.deps.Storage.Default()
+		store, err := w.deps.Storage.StoreOrDefault(file.StorageID)
 		if err != nil {
 			return err
 		}

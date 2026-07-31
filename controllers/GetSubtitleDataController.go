@@ -40,7 +40,7 @@ func (h *Handlers) GetSubtitleData(c echo.Context) error {
 	if err != nil {
 		return c.String(http.StatusBadRequest, "bad media key")
 	}
-	return h.serveMediaObject(c, key, "Subtitle file not found", mediaTraffic{
+	return h.serveMediaObject(c, claims.StorageID, key, "Subtitle file not found", mediaTraffic{
 		userID: claims.UserID,
 		fileID: claims.FileID,
 	})

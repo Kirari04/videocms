@@ -25,7 +25,9 @@ func TestParseKeyRejectsUnsafeValues(t *testing.T) {
 
 func TestLegacyMediaLayoutMatchesExistingTree(t *testing.T) {
 	layout := LegacyMediaLayout{}
+	source, sourceErr := layout.Source("file", "original.mp4")
 	video, videoErr := layout.Video("file", "720p", "out0.ts")
+	videoPrefix, videoPrefixErr := layout.VideoPrefix("file", "720p")
 	audio, audioErr := layout.Audio("file", "audio", "audio0.ts")
 	subtitle, subtitleErr := layout.Subtitle("file", "subtitle", "out.vtt")
 	thumbnail, thumbnailErr := layout.Thumbnail("file", "4x4.webp")
@@ -34,7 +36,9 @@ func TestLegacyMediaLayoutMatchesExistingTree(t *testing.T) {
 		key  Key
 		want string
 	}{
+		{name: "source", key: mustLayoutKey(t, source, sourceErr), want: "file/source/original.mp4"},
 		{name: "video", key: mustLayoutKey(t, video, videoErr), want: "file/720p/out0.ts"},
+		{name: "video prefix", key: mustLayoutKey(t, videoPrefix, videoPrefixErr), want: "file/720p"},
 		{name: "audio", key: mustLayoutKey(t, audio, audioErr), want: "file/audio/audio0.ts"},
 		{name: "subtitle", key: mustLayoutKey(t, subtitle, subtitleErr), want: "file/subtitle/out.vtt"},
 		{name: "thumbnail", key: mustLayoutKey(t, thumbnail, thumbnailErr), want: "file/4x4.webp"},

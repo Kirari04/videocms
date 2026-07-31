@@ -37,7 +37,7 @@ func (h *Handlers) GetAudioData(c echo.Context) error {
 	if err != nil {
 		return c.String(http.StatusBadRequest, "bad media key")
 	}
-	return h.serveMediaObject(c, key, "Audio doesn't exist", mediaTraffic{
+	return h.serveMediaObject(c, claims.StorageID, key, "Audio doesn't exist", mediaTraffic{
 		userID:  claims.UserID,
 		fileID:  claims.FileID,
 		audioID: audioID,

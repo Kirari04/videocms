@@ -50,6 +50,38 @@ func TestGetVideoDataUsesMediaClaims(t *testing.T) {
 	}
 }
 
+func TestGetVideoDataUsesClaimedNamedStore(t *testing.T) {
+	defaultRoot := t.TempDir()
+	archiveRoot := t.TempDir()
+	h := mediaTestHandlersWithStores(t, defaultRoot, map[string]string{
+		"local":   defaultRoot,
+		"archive": archiveRoot,
+	}, true)
+	mustWriteFile(t, filepath.Join(archiveRoot, "file-uuid", "720p", "out0.ts"), []byte("archive"))
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/videos/qualitys/"+testLinkUUID+"/720p/out0.ts", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("UUID", "QUALITY", "FILE")
+	c.SetParamValues(testLinkUUID, "720p", "out0.ts")
+	c.Set(middlewares.MediaClaimsContextKey, &auth.MediaClaims{
+		LinkUUID:   testLinkUUID,
+		FileUUID:   "file-uuid",
+		StorageID:  "archive",
+		UserID:     1,
+		FileID:     2,
+		QualityIDs: map[string]uint{"720p": 3},
+	})
+
+	if err := h.GetVideoData(c); err != nil {
+		t.Fatalf("GetVideoData() error = %v", err)
+	}
+	if rec.Code != http.StatusOK || rec.Body.String() != "archive" {
+		t.Fatalf("response = %d %q, want archive object", rec.Code, rec.Body.String())
+	}
+}
+
 func TestGetVideoDataSupportsRangesAndTracksDeliveredBytes(t *testing.T) {
 	h := mediaTestHandlers(t, t.TempDir(), true)
 	mediaPath := filepath.Join(h.Config().FolderVideoQualitysPriv, "file-uuid", "720p", "out0.ts")
@@ -177,6 +209,10 @@ func TestDownloadVideoHonorsDownloadEnabledBeforeDatabaseLookup(t *testing.T) {
 }
 
 func mediaTestHandlers(t *testing.T, root string, downloadEnabled bool) *Handlers {
+	return mediaTestHandlersWithStores(t, root, map[string]string{"local": root}, downloadEnabled)
+}
+
+func mediaTestHandlersWithStores(t *testing.T, root string, roots map[string]string, downloadEnabled bool) *Handlers {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{})
 	if err != nil {
@@ -185,14 +221,18 @@ func mediaTestHandlers(t *testing.T, root string, downloadEnabled bool) *Handler
 	if err := db.AutoMigrate(&models.TrafficLog{}); err != nil {
 		t.Fatalf("migrate test db: %v", err)
 	}
-	localStore, err := storage.NewLocalStore(root)
-	if err != nil {
-		t.Fatalf("create local store: %v", err)
+	stores := make(map[string]storage.Store, len(roots))
+	for id, storeRoot := range roots {
+		localStore, err := storage.NewLocalStore(storeRoot)
+		if err != nil {
+			t.Fatalf("create %s store: %v", id, err)
+		}
+		stores[id] = localStore
 	}
 	storageService, err := storage.NewService(
 		"local",
 		storage.LegacyMediaLayout{},
-		map[string]storage.Store{"local": localStore},
+		stores,
 	)
 	if err != nil {
 		t.Fatalf("create storage service: %v", err)

@@ -59,7 +59,7 @@ func (s *Service) UpdateLinkThumbnail(linkID uint, userID uint, isAdmin bool, in
 		return http.StatusBadRequest, errors.New("thumbnail must be a JPEG, PNG, or WebP image")
 	}
 
-	store, layout, err := s.mediaStorage()
+	store, layout, err := s.mediaStorage(dbLink.File.StorageID)
 	if err != nil {
 		log.Printf("Failed to resolve thumbnail storage: %v", err)
 		return http.StatusInternalServerError, echo.ErrInternalServerError
@@ -163,7 +163,7 @@ func (s *Service) ResetLinkThumbnail(linkID uint, userID uint, isAdmin bool) (st
 		return http.StatusOK, nil
 	}
 
-	store, layout, storageErr := s.mediaStorage()
+	store, layout, storageErr := s.mediaStorage(dbLink.File.StorageID)
 	if storageErr != nil {
 		log.Printf("Failed to resolve thumbnail storage: %v", storageErr)
 		return http.StatusInternalServerError, echo.ErrInternalServerError
@@ -202,7 +202,7 @@ func (s *Service) RemoveLinkThumbnailFile(link models.Link) {
 	if link.Thumbnail == "" {
 		return
 	}
-	store, layout, err := s.mediaStorage()
+	store, layout, err := s.mediaStorage(link.File.StorageID)
 	if err != nil {
 		log.Printf("Failed to resolve custom thumbnail storage for link %s: %v", link.UUID, err)
 		return

@@ -17,16 +17,16 @@ func (h *Handlers) GetThumbnailData(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	_, fileUUID, userID, fileID, err := h.Logic.ResolveThumbnailData(requestValidation.FILE, requestValidation.UUID)
+	_, object, err := h.Logic.ResolveThumbnailObject(requestValidation.FILE, requestValidation.UUID)
 	if err != nil {
 		return c.NoContent(http.StatusNotFound)
 	}
 	if h.Deps.Storage == nil || h.Deps.Storage.Layout() == nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
-	key, err := h.Deps.Storage.Layout().Thumbnail(fileUUID, requestValidation.FILE)
+	key, err := h.Deps.Storage.Layout().Thumbnail(object.FileUUID, requestValidation.FILE)
 	if err != nil {
 		return c.NoContent(http.StatusBadRequest)
 	}
-	return h.serveMediaObject(c, key, "", mediaTraffic{userID: userID, fileID: fileID})
+	return h.serveMediaObject(c, object.StoreID, key, "", mediaTraffic{userID: object.UserID, fileID: object.FileID})
 }
