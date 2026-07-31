@@ -56,6 +56,9 @@ func (h *Handlers) serveMediaObject(c echo.Context, storeID string, key storage.
 	store, err := h.Deps.Storage.StoreOrDefault(storeID)
 	if err != nil {
 		c.Logger().Error("failed to resolve media storage", err)
+		if errors.Is(err, storage.ErrStoreNotConfigured) {
+			return mediaStorageResponse(c, http.StatusServiceUnavailable, "Media storage is currently unavailable")
+		}
 		return mediaStorageResponse(c, http.StatusInternalServerError, "")
 	}
 	object, err := store.Open(c.Request().Context(), key)

@@ -16,6 +16,7 @@ type UserResponse struct {
 	Balance               float64
 	Storage               int64
 	Settings              models.UserSettings
+	StoragePoolID         *uint
 	MaxRemoteDownloads    int
 	RemoteDownloadEnabled bool
 	UsedStorage           int64 `json:"used_storage"`
@@ -31,6 +32,7 @@ func (s *Service) NewUserResponse(user models.User, usedStorage int64, fileCount
 		Balance:               user.Balance,
 		Storage:               user.Storage,
 		Settings:              user.Settings,
+		StoragePoolID:         user.StoragePoolID,
 		MaxRemoteDownloads:    user.Settings.EffectiveMaxRemoteDownloads(),
 		RemoteDownloadEnabled: user.Settings.EffectiveRemoteDownloadEnabled(),
 		UsedStorage:           usedStorage,
@@ -88,7 +90,7 @@ func (s *Service) GetUsers(page, limit int, search string) (int, interface{}, er
 	}, nil
 }
 
-func (s *Service) CreateUser(username, password, email string, admin bool, storage int64, balance float64, maxRemoteDownloads *int, remoteDownloadEnabled *bool) (int, *UserResponse, error) {
+func (s *Service) CreateUser(username, password, email string, admin bool, storageLimit int64, balance float64, maxRemoteDownloads *int, remoteDownloadEnabled *bool, storagePoolID *uint) (int, *UserResponse, error) {
 	// Check for existing username
 	var count int64
 	s.Deps.DB.Model(&models.User{}).Where("username = ?", username).Count(&count)
@@ -117,14 +119,19 @@ func (s *Service) CreateUser(username, password, email string, admin bool, stora
 	if remoteDownloadEnabled != nil {
 		effectiveRemoteDownloadEnabled = *remoteDownloadEnabled
 	}
+	normalizedStoragePoolID, err := s.normalizeUserStoragePoolID(storagePoolID)
+	if err != nil {
+		return http.StatusBadRequest, nil, err
+	}
 
 	user := models.User{
-		Username: username,
-		Hash:     hash,
-		Email:    email,
-		Admin:    admin,
-		Storage:  storage,
-		Balance:  balance,
+		Username:      username,
+		Hash:          hash,
+		Email:         email,
+		Admin:         admin,
+		Storage:       storageLimit,
+		Balance:       balance,
+		StoragePoolID: normalizedStoragePoolID,
 		Settings: models.UserSettings{
 			MaxRemoteDownloads:    effectiveMaxRemoteDownloads,
 			RemoteDownloadEnabled: &effectiveRemoteDownloadEnabled,
@@ -148,7 +155,7 @@ func (s *Service) GetUser(id uint64) (int, *UserResponse, error) {
 	return http.StatusOK, &response, nil
 }
 
-func (s *Service) UpdateUser(id uint64, username, email string, admin *bool, storage *int64, balance *float64, maxRemoteDownloads *int, remoteDownloadEnabled *bool) (int, *UserResponse, error) {
+func (s *Service) UpdateUser(id uint64, username, email string, admin *bool, storageLimit *int64, balance *float64, maxRemoteDownloads *int, remoteDownloadEnabled *bool, storagePoolID *uint) (int, *UserResponse, error) {
 	var user models.User
 	if result := s.Deps.DB.First(&user, id); result.Error != nil {
 		return http.StatusNotFound, nil, errors.New("user not found")
@@ -178,8 +185,8 @@ func (s *Service) UpdateUser(id uint64, username, email string, admin *bool, sto
 	if admin != nil {
 		user.Admin = *admin
 	}
-	if storage != nil {
-		user.Storage = *storage
+	if storageLimit != nil {
+		user.Storage = *storageLimit
 	}
 	if balance != nil {
 		user.Balance = *balance
@@ -190,6 +197,13 @@ func (s *Service) UpdateUser(id uint64, username, email string, admin *bool, sto
 	if remoteDownloadEnabled != nil {
 		user.Settings.RemoteDownloadEnabled = remoteDownloadEnabled
 	}
+	if storagePoolID != nil {
+		normalized, err := s.normalizeUserStoragePoolID(storagePoolID)
+		if err != nil {
+			return http.StatusBadRequest, nil, err
+		}
+		user.StoragePoolID = normalized
+	}
 
 	if result := s.Deps.DB.Save(&user); result.Error != nil {
 		return http.StatusInternalServerError, nil, errors.New("failed to update user")
@@ -198,6 +212,21 @@ func (s *Service) UpdateUser(id uint64, username, email string, admin *bool, sto
 	s.Deps.Cache.Delete(fmt.Sprintf("account-%d", id))
 	response := s.NewUserResponse(user, 0, 0)
 	return http.StatusOK, &response, nil
+}
+
+func (s *Service) normalizeUserStoragePoolID(storagePoolID *uint) (*uint, error) {
+	if storagePoolID == nil || *storagePoolID == 0 {
+		return nil, nil
+	}
+	var count int64
+	if err := s.Deps.DB.Model(&models.StoragePool{}).Where("id = ?", *storagePoolID).Count(&count).Error; err != nil {
+		return nil, errors.New("failed to validate storage pool")
+	}
+	if count == 0 {
+		return nil, errors.New("storage pool not found")
+	}
+	value := *storagePoolID
+	return &value, nil
 }
 
 func (s *Service) DeleteUser(id uint64) (int, error) {

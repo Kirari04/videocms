@@ -53,6 +53,9 @@ func MigrateModels(gormDB *gorm.DB) error {
 	}
 
 	if err := gormDB.AutoMigrate(
+		&models.StorageMount{},
+		&models.StoragePool{},
+		&models.StoragePoolMount{},
 		&models.User{},
 		&models.Folder{},
 		&models.File{},
@@ -89,6 +92,14 @@ func MigrateModels(gormDB *gorm.DB) error {
 		Where("storage_id IS NULL OR storage_id = ''").
 		Update("storage_id", "local").Error; err != nil {
 		return fmt.Errorf("failed to backfill file storage IDs: %w", err)
+	}
+	if err := gormDB.Unscoped().Model(&models.File{}).
+		Where("storage_state IS NULL OR storage_state = ''").
+		Update("storage_state", models.FileStorageAvailable).Error; err != nil {
+		return fmt.Errorf("failed to backfill file storage state: %w", err)
+	}
+	if err := ensureLocalStorageDefaults(gormDB); err != nil {
+		return err
 	}
 
 	if !hadWebPageFormat {
@@ -127,6 +138,41 @@ func MigrateModels(gormDB *gorm.DB) error {
 		}
 		if res := gormDB.Create(&user); res.Error != nil {
 			return fmt.Errorf("error while creating admin user: %w", res.Error)
+		}
+	}
+	return nil
+}
+
+func ensureLocalStorageDefaults(gormDB *gorm.DB) error {
+	localMount := models.StorageMount{
+		UUID:     models.StorageMountLocalUUID,
+		Name:     "Local storage",
+		Provider: models.StorageProviderLocal,
+		Mounted:  true,
+		System:   true,
+	}
+	if err := gormDB.Where("uuid = ?", localMount.UUID).FirstOrCreate(&localMount).Error; err != nil {
+		return fmt.Errorf("failed to initialize local storage mount: %w", err)
+	}
+	localPool := models.StoragePool{
+		UUID:   models.StoragePoolLocalUUID,
+		Name:   "Local uploads",
+		System: true,
+	}
+	if err := gormDB.Where("uuid = ?", localPool.UUID).FirstOrCreate(&localPool).Error; err != nil {
+		return fmt.Errorf("failed to initialize local storage pool: %w", err)
+	}
+	membership := models.StoragePoolMount{StoragePoolID: localPool.ID, StorageMountID: localMount.ID}
+	if err := gormDB.FirstOrCreate(&membership).Error; err != nil {
+		return fmt.Errorf("failed to initialize local storage pool membership: %w", err)
+	}
+	var defaultPoolCount int64
+	if err := gormDB.Model(&models.StoragePool{}).Where("is_default = ?", true).Count(&defaultPoolCount).Error; err != nil {
+		return fmt.Errorf("failed to inspect default storage pool: %w", err)
+	}
+	if defaultPoolCount == 0 {
+		if err := gormDB.Model(&localPool).Update("is_default", true).Error; err != nil {
+			return fmt.Errorf("failed to select local storage pool: %w", err)
 		}
 	}
 	return nil

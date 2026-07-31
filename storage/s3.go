@@ -347,6 +347,23 @@ func (s *S3Store) Close() error {
 	return nil
 }
 
+func (s *S3Store) Check(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	input := &s3.ListObjectsV2Input{
+		Bucket:  aws.String(s.bucket),
+		MaxKeys: aws.Int32(1),
+	}
+	if s.prefix != "" {
+		input.Prefix = aws.String(s.prefix + "/")
+	}
+	if _, err := s.client.ListObjectsV2(ctx, input); err != nil {
+		return fmt.Errorf("check S3 bucket access: %w", err)
+	}
+	return nil
+}
+
 func (s *S3Store) remoteKey(key Key) (string, error) {
 	validated, err := ParseKey(key.String())
 	if err != nil {
@@ -547,4 +564,5 @@ func fsClosedError() error {
 }
 
 var _ Store = (*S3Store)(nil)
+var _ HealthChecker = (*S3Store)(nil)
 var _ ReadSeekCloser = (*s3ReadSeekCloser)(nil)

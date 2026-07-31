@@ -24,6 +24,7 @@ const (
 	PlayerStateQueued          = "queued"
 	PlayerStateFailed          = "failed"
 	PlayerStateCaptchaRequired = "captcha_required"
+	PlayerStateUnavailable     = "storage_unavailable"
 	PlayerStateNotFound        = "not_found"
 )
 
@@ -62,6 +63,12 @@ func (h *Handlers) PlayerController(c echo.Context) error {
 	dbLink, err := h.loadPlayerLink(requestValidation.UUID)
 	if err != nil {
 		return c.Render(http.StatusNotFound, "404.html", echo.Map{})
+	}
+	if dbLink.File.StorageState == models.FileStorageUnavailable {
+		return c.Render(http.StatusServiceUnavailable, "error.html", echo.Map{
+			"Title": "Video unavailable",
+			"Error": "This video's storage is temporarily detached. Try again after an administrator reconnects it.",
+		})
 	}
 
 	if !h.playerCaptchaAllowed(c) {
@@ -272,6 +279,15 @@ func (h *Handlers) playerCaptchaAllowed(c echo.Context) bool {
 }
 
 func BuildPlayerStatus(dbLink *models.Link) PlayerStatusResponse {
+	if dbLink != nil && dbLink.File.StorageState == models.FileStorageUnavailable {
+		return PlayerStatusResponse{
+			UUID:    dbLink.UUID,
+			Ready:   false,
+			State:   PlayerStateUnavailable,
+			Message: "This video's storage is temporarily detached.",
+			Tasks:   []PlayerStatusTask{},
+		}
+	}
 	status := PlayerStatusResponse{
 		UUID:    dbLink.UUID,
 		Ready:   false,

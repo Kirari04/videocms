@@ -42,16 +42,17 @@ func InitRuntime() (*app.Deps, error) {
 	if err := inits.EnsureFolders(snapshot.Config); err != nil {
 		return nil, err
 	}
-	storageService, err := newStorageService(context.Background(), snapshot.Config)
+	storageService, storageCipher, err := newStorageService(context.Background(), snapshot.Config, db)
 	if err != nil {
 		return nil, err
 	}
 
 	return &app.Deps{
-		DB:          db,
-		Snapshots:   app.NewSnapshotStore(snapshot),
-		Cache:       cache.New(5*time.Minute, 10*time.Minute),
-		RequestGate: app.NewRequestGate(),
-		Storage:     storageService,
+		DB:            db,
+		Snapshots:     app.NewSnapshotStore(snapshot),
+		Cache:         cache.New(5*time.Minute, 10*time.Minute),
+		RequestGate:   app.NewRequestGate(),
+		Storage:       storageService,
+		StorageCipher: storageCipher,
 	}, nil
 }

@@ -58,6 +58,9 @@ func (h *Handlers) DownloadVideoController(c echo.Context) error {
 		First(&dbLink); dbRes.Error != nil {
 		return c.String(http.StatusBadRequest, "video doesn't exist")
 	}
+	if dbLink.File.StorageState == models.FileStorageUnavailable {
+		return c.String(http.StatusServiceUnavailable, "video storage is temporarily unavailable")
+	}
 
 	selection, err := resolveDownloadSelection(
 		&dbLink,

@@ -140,4 +140,25 @@ func TestMigrateModelsBackfillsLegacyFileStorageID(t *testing.T) {
 	if deleted.StorageID != "local" || !deleted.DeletedAt.Valid {
 		t.Fatalf("deleted file migration = %#v, want soft-deleted local record", deleted)
 	}
+	if deleted.StorageState != models.FileStorageAvailable || file.StorageState != models.FileStorageAvailable {
+		t.Fatalf("migrated storage states = %q/%q, want available", file.StorageState, deleted.StorageState)
+	}
+	var localMount models.StorageMount
+	if err := db.Where("uuid = ?", models.StorageMountLocalUUID).First(&localMount).Error; err != nil {
+		t.Fatalf("load local storage mount: %v", err)
+	}
+	if !localMount.Mounted || !localMount.System {
+		t.Fatalf("local storage mount = %#v", localMount)
+	}
+	var localPool models.StoragePool
+	if err := db.Where("uuid = ?", models.StoragePoolLocalUUID).First(&localPool).Error; err != nil {
+		t.Fatalf("load local storage pool: %v", err)
+	}
+	if !localPool.IsDefault || !localPool.System {
+		t.Fatalf("local storage pool = %#v", localPool)
+	}
+	var membership models.StoragePoolMount
+	if err := db.Where("storage_pool_id = ? AND storage_mount_id = ?", localPool.ID, localMount.ID).First(&membership).Error; err != nil {
+		t.Fatalf("load local storage pool membership: %v", err)
+	}
 }

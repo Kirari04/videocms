@@ -163,15 +163,29 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 	if s.Deps == nil || s.Deps.Storage == nil || s.Deps.Storage.Layout() == nil {
 		return http.StatusInternalServerError, nil, false, storage.ErrStoreNotConfigured
 	}
-	storeID := s.Deps.Storage.DefaultStoreID()
 	sourceFileName := "original." + strings.ToLower(fileExt)
 	sourceKey, err := s.Deps.Storage.Layout().Source(fileId, sourceFileName)
 	if err != nil {
 		return http.StatusInternalServerError, nil, false, err
 	}
 	storageCtx := context.Background()
-	if _, err := s.Deps.Storage.PublishFile(storageCtx, storeID, sourceKey, *fromFile, storage.PutOptions{}); err != nil {
-		log.Printf("Failed to publish source file: %v", err)
+	candidates, err := s.UploadStoreCandidates(userId)
+	if err != nil {
+		log.Printf("Failed to select upload storage: %v", err)
+		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
+	}
+	storeID := ""
+	var publishErr error
+	for _, candidate := range candidates {
+		if _, err := s.Deps.Storage.PublishFile(storageCtx, candidate, sourceKey, *fromFile, storage.PutOptions{}); err != nil {
+			publishErr = errors.Join(publishErr, fmt.Errorf("%s: %w", candidate, err))
+			continue
+		}
+		storeID = candidate
+		break
+	}
+	if storeID == "" {
+		log.Printf("Failed to publish source file to storage pool: %v", publishErr)
 		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
 	}
 	sourceOwnedByRecord := false
@@ -194,6 +208,7 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 			Hash:         FileHash,
 			Thumbnail:    thumbnailFileName,
 			StorageID:    storeID,
+			StorageState: models.FileStorageAvailable,
 			SourceKey:    sourceKey.String(),
 			Folder:       fmt.Sprintf("%s/%s", s.Config().FolderVideoQualitysPriv, fileId),
 			UserID:       userId,

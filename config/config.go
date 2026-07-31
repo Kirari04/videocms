@@ -78,21 +78,11 @@ type Config struct {
 	MaxUploadSessions  int64
 	MaxPostSize        int64
 
-	FolderVideoQualitysPub     string `validate:"required,min=1,max=255"`
-	FolderVideoQualitysPriv    string `validate:"required,min=1,max=255"`
-	FolderVideoUploadsPriv     string `validate:"required,min=1,max=255"`
-	StorageScratchDir          string `validate:"required,min=1,max=255"`
-	StorageDefaultStore        string `validate:"required,oneof=local s3"`
-	StorageS3Bucket            string
-	StorageS3Region            string
-	StorageS3Endpoint          string
-	StorageS3Prefix            string
-	StorageS3AccessKeyID       string
-	StorageS3SecretAccessKey   string
-	StorageS3SessionToken      string
-	StorageS3UsePathStyle      *bool `validate:"required"`
-	StorageS3UploadPartSize    int64 `validate:"min=5242880"`
-	StorageS3UploadConcurrency int   `validate:"min=1,max=64"`
+	FolderVideoQualitysPub  string `validate:"required,min=1,max=255"`
+	FolderVideoQualitysPriv string `validate:"required,min=1,max=255"`
+	FolderVideoUploadsPriv  string `validate:"required,min=1,max=255"`
+	StorageScratchDir       string `validate:"required,min=1,max=255"`
+	StorageEncryptionKey    string `json:"-"`
 
 	CorsAllowOrigins     string
 	CorsAllowHeaders     string
@@ -232,7 +222,6 @@ func (c Config) Clone() Config {
 	c.DownloadEnabled = cloneBool(c.DownloadEnabled)
 	c.RemoteDownloadEnabled = cloneBool(c.RemoteDownloadEnabled)
 	c.PlayerV2Enabled = cloneBool(c.PlayerV2Enabled)
-	c.StorageS3UsePathStyle = cloneBool(c.StorageS3UsePathStyle)
 	return c
 }
 
@@ -255,17 +244,7 @@ func LoadEnv() Config {
 	env.FolderVideoQualitysPub = getEnv("FolderVideoQualitysPub", "/videos/qualitys")
 	env.FolderVideoUploadsPriv = getEnv("FolderVideoUploadsPriv", "./videos/uploads")
 	env.StorageScratchDir = getEnv("StorageScratchDir", "./videos/scratch")
-	env.StorageDefaultStore = getEnv("StorageDefaultStore", "local")
-	env.StorageS3Bucket = getEnv("StorageS3Bucket", "")
-	env.StorageS3Region = getEnv("StorageS3Region", "us-east-1")
-	env.StorageS3Endpoint = getEnv("StorageS3Endpoint", "")
-	env.StorageS3Prefix = getEnv("StorageS3Prefix", "")
-	env.StorageS3AccessKeyID = getEnv("StorageS3AccessKeyID", "")
-	env.StorageS3SecretAccessKey = getEnv("StorageS3SecretAccessKey", "")
-	env.StorageS3SessionToken = getEnv("StorageS3SessionToken", "")
-	env.StorageS3UsePathStyle = getEnv_bool("StorageS3UsePathStyle", boolPtr(false))
-	env.StorageS3UploadPartSize = getEnv_int64("StorageS3UploadPartSize", 16*1024*1024)
-	env.StorageS3UploadConcurrency = getEnv_int("StorageS3UploadConcurrency", 4)
+	env.StorageEncryptionKey = getEnv("StorageEncryptionKey", "")
 	env.StatsDriveName = getEnv("StatsDriveName", "nvme0n1")
 
 	return env
