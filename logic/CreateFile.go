@@ -163,7 +163,7 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 				*fromFile,
 				1080,
 				thumbnailFileName,
-				fmt.Sprintf("%s/%s", s.Config().FolderVideoQualitysPriv, fileId),
+				fileId,
 				videoDuration,
 				avgFramerate,
 			); err != nil {

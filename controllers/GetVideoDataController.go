@@ -3,9 +3,7 @@ package controllers
 import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/middlewares"
-	"fmt"
 	"net/http"
-	"os"
 	"regexp"
 
 	"github.com/labstack/echo/v4"
@@ -40,14 +38,16 @@ func (h *Handlers) GetVideoData(c echo.Context) error {
 		return c.String(http.StatusNotFound, "Video doesn't exist")
 	}
 
-	filePath := fmt.Sprintf("%s/%s/%s/%s", h.Config().FolderVideoQualitysPriv, claims.FileUUID, requestValidation.QUALITY, requestValidation.FILE)
-	fileInfo, err := os.Stat(filePath)
-	if err == nil {
-		h.Logic.TrackTraffic(claims.UserID, claims.FileID, qualityID, 0, uint64(fileInfo.Size()))
+	if h.Deps.Storage == nil || h.Deps.Storage.Layout() == nil {
+		return c.NoContent(http.StatusInternalServerError)
 	}
-
-	if err := c.File(filePath); err != nil {
-		return c.String(http.StatusNotFound, "Video doesn't exist")
+	key, err := h.Deps.Storage.Layout().Video(claims.FileUUID, requestValidation.QUALITY, requestValidation.FILE)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "bad media key")
 	}
-	return nil
+	return h.serveMediaObject(c, key, "Video doesn't exist", mediaTraffic{
+		userID:    claims.UserID,
+		fileID:    claims.FileID,
+		qualityID: qualityID,
+	})
 }

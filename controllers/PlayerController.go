@@ -11,7 +11,6 @@ import (
 	"log"
 	"math"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -99,15 +98,17 @@ func (h *Handlers) PlayerController(c echo.Context) error {
 
 	// List subtitles
 	for _, subItem := range dbLink.File.Subtitles {
-		if subItem.Ready {
-			subPath := fmt.Sprintf("%s/%s/%s/%s", h.Config().FolderVideoQualitysPriv, dbLink.File.UUID, subItem.UUID, subItem.OutputFile)
-			if subContent, err := os.ReadFile(subPath); err == nil {
-				jsonSubtitles = append(jsonSubtitles, map[string]string{
-					"data": base64.StdEncoding.EncodeToString(subContent),
-					"type": subItem.Type,
-					"name": subItem.Name,
-					"lang": subItem.Lang,
-				})
+		if subItem.Ready && h.Deps.Storage != nil && h.Deps.Storage.Layout() != nil {
+			key, keyErr := h.Deps.Storage.Layout().Subtitle(dbLink.File.UUID, subItem.UUID, subItem.OutputFile)
+			if keyErr == nil {
+				if subContent, err := h.readMediaObject(c, key, 16*1024*1024); err == nil {
+					jsonSubtitles = append(jsonSubtitles, map[string]string{
+						"data": base64.StdEncoding.EncodeToString(subContent),
+						"type": subItem.Type,
+						"name": subItem.Name,
+						"lang": subItem.Lang,
+					})
+				}
 			}
 		}
 	}

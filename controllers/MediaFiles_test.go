@@ -7,6 +7,7 @@ import (
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/middlewares"
 	"ch/kirari04/videocms/models"
+	"ch/kirari04/videocms/storage"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -46,6 +47,45 @@ func TestGetVideoDataUsesMediaClaims(t *testing.T) {
 	}
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func TestGetVideoDataSupportsRangesAndTracksDeliveredBytes(t *testing.T) {
+	h := mediaTestHandlers(t, t.TempDir(), true)
+	mediaPath := filepath.Join(h.Config().FolderVideoQualitysPriv, "file-uuid", "720p", "out0.ts")
+	mustWriteFile(t, mediaPath, []byte("0123456789"))
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/videos/qualitys/"+testLinkUUID+"/720p/out0.ts", nil)
+	req.Header.Set("Range", "bytes=2-5")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("UUID", "QUALITY", "FILE")
+	c.SetParamValues(testLinkUUID, "720p", "out0.ts")
+	c.Set(middlewares.MediaClaimsContextKey, &auth.MediaClaims{
+		LinkUUID:   testLinkUUID,
+		FileUUID:   "file-uuid",
+		UserID:     1,
+		FileID:     2,
+		QualityIDs: map[string]uint{"720p": 3},
+	})
+
+	if err := h.GetVideoData(c); err != nil {
+		t.Fatalf("GetVideoData() error = %v", err)
+	}
+	if rec.Code != http.StatusPartialContent {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusPartialContent)
+	}
+	if rec.Body.String() != "2345" {
+		t.Fatalf("body = %q, want %q", rec.Body.String(), "2345")
+	}
+
+	var traffic models.TrafficLog
+	if err := h.Deps.DB.First(&traffic).Error; err != nil {
+		t.Fatalf("load traffic log: %v", err)
+	}
+	if traffic.Bytes != 4 || traffic.UserID != 1 || traffic.FileID != 2 || traffic.QualityID != 3 {
+		t.Fatalf("traffic log = %#v, want four delivered bytes for the selected quality", traffic)
 	}
 }
 
@@ -145,6 +185,19 @@ func mediaTestHandlers(t *testing.T, root string, downloadEnabled bool) *Handler
 	if err := db.AutoMigrate(&models.TrafficLog{}); err != nil {
 		t.Fatalf("migrate test db: %v", err)
 	}
+	localStore, err := storage.NewLocalStore(root)
+	if err != nil {
+		t.Fatalf("create local store: %v", err)
+	}
+	storageService, err := storage.NewService(
+		"local",
+		storage.LegacyMediaLayout{},
+		map[string]storage.Store{"local": localStore},
+	)
+	if err != nil {
+		t.Fatalf("create storage service: %v", err)
+	}
+	t.Cleanup(func() { _ = storageService.Close() })
 	deps := &app.Deps{
 		DB: db,
 		Snapshots: app.NewSnapshotStore(app.Snapshot{Config: config.Config{
@@ -153,6 +206,7 @@ func mediaTestHandlers(t *testing.T, root string, downloadEnabled bool) *Handler
 			DownloadEnabled:         &downloadEnabled,
 		}}),
 		RequestGate: app.NewRequestGate(),
+		Storage:     storageService,
 	}
 	logicSvc := logic.NewService(deps)
 	authSvc := auth.NewService(deps)
@@ -161,10 +215,15 @@ func mediaTestHandlers(t *testing.T, root string, downloadEnabled bool) *Handler
 
 func mustWriteEmptyFile(t *testing.T, path string) {
 	t.Helper()
+	mustWriteFile(t, path, nil)
+}
+
+func mustWriteFile(t *testing.T, path string, data []byte) {
+	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
-	if err := os.WriteFile(path, nil, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 }

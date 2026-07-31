@@ -2,10 +2,13 @@ package services
 
 import (
 	"ch/kirari04/videocms/models"
+	"ch/kirari04/videocms/storage"
 	"context"
 	"log"
 	"os"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 func (w *WorkerGroup) Deleter(ctx context.Context) {
@@ -100,60 +103,25 @@ func (w *WorkerGroup) runDeleter() {
 			continue
 		}
 
-		// delete related stuff
-		if res := w.deps.DB.
-			Unscoped().
-			Where(&models.Subtitle{
-				FileID: todo.ID,
-			}).
-			Delete(&models.Subtitle{}); res.Error != nil {
-			log.Printf("Failed to delete Subtitles from database: %v", res.Error)
+		if err := w.deleteStoredFile(todo); err != nil {
+			log.Printf("Failed to delete stored data for file %d: %v", todo.ID, err)
+			skippingDeletion++
 			continue
 		}
 
-		if res := w.deps.DB.
-			Unscoped().
-			Where(&models.Audio{
-				FileID: todo.ID,
-			}).
-			Delete(&models.Audio{}); res.Error != nil {
-			log.Printf("Failed to delete Audios from database: %v", res.Error)
-			continue
-		}
-
-		if res := w.deps.DB.
-			Unscoped().
-			Where(&models.Quality{
-				FileID: todo.ID,
-			}).
-			Delete(&models.Quality{}); res.Error != nil {
-			log.Printf("Failed to delete Qualities from database: %v", res.Error)
-			continue
-		}
-
-		/**
-		 * First delete the original file (it might still exists if some error happend or it didn't finished encoding yet)
-		 * Then we can delete the folder too
-		 */
-		if todo.Path != "" {
-			if stats, err := os.Stat(todo.Path); !os.IsNotExist(err) && !stats.IsDir() {
-				if err := os.Remove(todo.Path); err != nil {
-					log.Printf("Failed to delete original file: %v", err)
-				}
+		if err := w.deps.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Unscoped().Where("file_id = ?", todo.ID).Delete(&models.Subtitle{}).Error; err != nil {
+				return err
 			}
-		}
-
-		if stats, err := os.Stat(todo.Folder); !os.IsNotExist(err) && stats.IsDir() {
-			if err := os.RemoveAll(todo.Folder); err != nil {
-				log.Printf("Failed to delete folder of file: %v", err)
+			if err := tx.Unscoped().Where("file_id = ?", todo.ID).Delete(&models.Audio{}).Error; err != nil {
+				return err
 			}
-		}
-
-		// delete file from database
-		if res := w.deps.DB.
-			Unscoped().
-			Delete(&todo); res.Error != nil {
-			log.Printf("Failed to delete File from database: %v", res.Error)
+			if err := tx.Unscoped().Where("file_id = ?", todo.ID).Delete(&models.Quality{}).Error; err != nil {
+				return err
+			}
+			return tx.Unscoped().Delete(&todo).Error
+		}); err != nil {
+			log.Printf("Failed to delete file %d from database: %v", todo.ID, err)
 			continue
 		}
 		successDeletion++
@@ -163,5 +131,46 @@ func (w *WorkerGroup) runDeleter() {
 	}
 	if successDeletion > 0 {
 		log.Printf("Successfully deleted %d files", successDeletion)
+	}
+}
+
+func (w *WorkerGroup) deleteStoredFile(file models.File) error {
+	if file.Path != "" {
+		info, err := os.Stat(file.Path)
+		switch {
+		case err == nil && !info.IsDir():
+			if err := os.Remove(file.Path); err != nil {
+				return err
+			}
+		case err != nil && !os.IsNotExist(err):
+			return err
+		}
+	}
+
+	if w.deps.Storage != nil && w.deps.Storage.Layout() != nil {
+		store, err := w.deps.Storage.Default()
+		if err != nil {
+			return err
+		}
+		prefix, err := w.deps.Storage.Layout().FilePrefix(file.UUID)
+		if err != nil {
+			return err
+		}
+		return storage.DeletePrefix(context.Background(), store, prefix)
+	}
+
+	if file.Folder == "" {
+		return nil
+	}
+	info, err := os.Stat(file.Folder)
+	switch {
+	case os.IsNotExist(err):
+		return nil
+	case err != nil:
+		return err
+	case !info.IsDir():
+		return nil
+	default:
+		return os.RemoveAll(file.Folder)
 	}
 }
