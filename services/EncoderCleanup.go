@@ -109,8 +109,9 @@ func (w *WorkerGroup) runEncoderCleanup() {
 			newSize, err := w.storedFileSize(context.Background(), dbReadyFile)
 			if err != nil {
 				log.Printf("Failed to calculate stored size after cleanup: %v", err)
+			} else {
+				dbReadyFile.Size = newSize
 			}
-			dbReadyFile.Size = newSize
 			dbReadyFile.Path = ""
 			dbReadyFile.SourceKey = ""
 			w.deps.DB.Save(&dbReadyFile)

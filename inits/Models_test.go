@@ -112,6 +112,13 @@ func TestMigrateModelsBackfillsLegacyFileStorageID(t *testing.T) {
 	if err := db.Create(&legacyStoredFile{UUID: "legacy-file", Path: "/legacy/source.mp4"}).Error; err != nil {
 		t.Fatalf("create legacy file: %v", err)
 	}
+	deletedFile := legacyStoredFile{UUID: "deleted-legacy-file", Path: "/legacy/deleted.mp4"}
+	if err := db.Create(&deletedFile).Error; err != nil {
+		t.Fatalf("create deleted legacy file: %v", err)
+	}
+	if err := db.Delete(&deletedFile).Error; err != nil {
+		t.Fatalf("soft-delete legacy file: %v", err)
+	}
 	if err := MigrateModels(db); err != nil {
 		t.Fatalf("MigrateModels() error = %v", err)
 	}
@@ -125,5 +132,12 @@ func TestMigrateModelsBackfillsLegacyFileStorageID(t *testing.T) {
 	}
 	if file.SourceKey != "" || file.Path != "/legacy/source.mp4" {
 		t.Fatalf("legacy source fields changed unexpectedly: %#v", file)
+	}
+	var deleted models.File
+	if err := db.Unscoped().Where("uuid = ?", "deleted-legacy-file").First(&deleted).Error; err != nil {
+		t.Fatalf("load migrated deleted file: %v", err)
+	}
+	if deleted.StorageID != "local" || !deleted.DeletedAt.Valid {
+		t.Fatalf("deleted file migration = %#v, want soft-deleted local record", deleted)
 	}
 }
