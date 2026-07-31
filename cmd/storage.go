@@ -7,7 +7,9 @@ import (
 	"log"
 	"time"
 
+	"ch/kirari04/videocms/app"
 	"ch/kirari04/videocms/config"
+	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 	"ch/kirari04/videocms/storage"
 
@@ -90,55 +92,13 @@ func newStorageService(ctx context.Context, cfg config.Config, db *gorm.DB) (*st
 	return storageService, credentialCipher, nil
 }
 
-var errMountedStoragePrefixFound = errors.New("mounted storage prefix found")
-
 func reconnectMountedStorageFiles(ctx context.Context, db *gorm.DB, storageService *storage.Service, mount models.StorageMount) error {
-	var files []models.File
-	if err := db.Select("id", "uuid").
-		Where("storage_id = ? AND storage_state = ?", mount.UUID, models.FileStorageUnavailable).
-		Find(&files).Error; err != nil {
-		return err
+	service := logic.NewService(&app.Deps{DB: db, Storage: storageService})
+	result, err := service.ReconnectStorageMountFiles(ctx, mount.ID, true, mount.UUID)
+	if result.Relinked > 0 {
+		log.Printf("reconnected %d files to storage mount %s during startup", result.Relinked, mount.UUID)
 	}
-	if len(files) == 0 {
-		return nil
-	}
-	store, err := storageService.Store(mount.UUID)
-	if err != nil {
-		return err
-	}
-	matchedIDs := make([]uint, 0, len(files))
-	for _, file := range files {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		prefix, err := storageService.Layout().FilePrefix(file.UUID)
-		if err != nil {
-			return err
-		}
-		walkErr := store.Walk(ctx, prefix, func(storage.ObjectInfo) error {
-			return errMountedStoragePrefixFound
-		})
-		if errors.Is(walkErr, errMountedStoragePrefixFound) {
-			matchedIDs = append(matchedIDs, file.ID)
-			continue
-		}
-		if walkErr != nil {
-			return walkErr
-		}
-	}
-	if len(matchedIDs) == 0 {
-		return nil
-	}
-	for start := 0; start < len(matchedIDs); start += 500 {
-		end := min(start+500, len(matchedIDs))
-		if err := db.Model(&models.File{}).
-			Where("id IN ? AND storage_id = ? AND storage_state = ?", matchedIDs[start:end], mount.UUID, models.FileStorageUnavailable).
-			Update("storage_state", models.FileStorageAvailable).Error; err != nil {
-			return err
-		}
-	}
-	log.Printf("reconnected %d files to storage mount %s during startup", len(matchedIDs), mount.UUID)
-	return nil
+	return err
 }
 
 func markStorageMountLoadFailure(db *gorm.DB, mount *models.StorageMount, loadErr error) {

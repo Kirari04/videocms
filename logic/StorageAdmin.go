@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"ch/kirari04/videocms/models"
@@ -27,6 +28,7 @@ type StorageMountResponse struct {
 	Name                  string
 	Provider              string
 	Mounted               bool
+	Available             bool
 	System                bool
 	Configuration         *storage.S3MountConfiguration `json:",omitempty"`
 	CredentialsConfigured bool
@@ -100,12 +102,18 @@ func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
 	mountResponses := make([]StorageMountResponse, 0, len(mounts))
 	for _, mount := range mounts {
 		usage := usageByMount[mount.UUID]
+		available := false
+		if mount.Mounted && mount.LastError == "" && s.Deps.Storage != nil {
+			_, runtimeErr := s.Deps.Storage.Store(mount.UUID)
+			available = runtimeErr == nil
+		}
 		response := StorageMountResponse{
 			ID:                    mount.ID,
 			UUID:                  mount.UUID,
 			Name:                  mount.Name,
 			Provider:              mount.Provider,
 			Mounted:               mount.Mounted,
+			Available:             available,
 			System:                mount.System,
 			CredentialsConfigured: mount.EncryptedCredentials != "",
 			UsedBytes:             usage.UsedBytes,
@@ -217,6 +225,11 @@ func (s *Service) UpdateS3StorageMount(ctx context.Context, mountID uint, input 
 	if mount.System || mount.Provider != models.StorageProviderS3 {
 		return models.StorageMount{}, errors.New("storage mount cannot be edited")
 	}
+	releaseMount := s.Deps.StorageLifecycle.WriteLock(mount.UUID)
+	defer releaseMount()
+	if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
+		return models.StorageMount{}, err
+	}
 	input.Name = strings.TrimSpace(input.Name)
 	if input.Name == "" {
 		return models.StorageMount{}, errors.New("storage mount name is required")
@@ -234,6 +247,19 @@ func (s *Service) UpdateS3StorageMount(ctx context.Context, mountID uint, input 
 	configuration, encryptedCredentials, err := storage.EncodeS3Mount(input.Configuration, credentials, mount.UUID, s.Deps.StorageCipher)
 	if err != nil {
 		return models.StorageMount{}, err
+	}
+	if mount.Mounted {
+		currentConfiguration, decodeErr := storage.DecodeS3MountConfiguration(mount.Configuration)
+		if decodeErr != nil {
+			return models.StorageMount{}, fmt.Errorf("decode current storage mount configuration: %w", decodeErr)
+		}
+		nextConfiguration, decodeErr := storage.DecodeS3MountConfiguration(configuration)
+		if decodeErr != nil {
+			return models.StorageMount{}, decodeErr
+		}
+		if !sameS3StorageLocation(currentConfiguration, nextConfiguration) {
+			return models.StorageMount{}, errors.New("detach the storage mount before changing its bucket, region, endpoint, prefix, or path-style mode")
+		}
 	}
 	store, err := storage.NewS3StoreFromMount(ctx, mount.UUID, configuration, encryptedCredentials, s.Deps.StorageCipher)
 	if err != nil {
@@ -278,6 +304,11 @@ func (s *Service) UnmountStorageMount(mountID uint) (int64, error) {
 	}
 	if mount.System {
 		return 0, errors.New("built-in local storage cannot be unmounted")
+	}
+	releaseMount := s.Deps.StorageLifecycle.WriteLock(mount.UUID)
+	defer releaseMount()
+	if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
+		return 0, err
 	}
 	if !mount.Mounted {
 		var count int64
@@ -324,16 +355,28 @@ func (s *Service) RemountStorageMount(ctx context.Context, mountID uint) (Storag
 	if mount.System || mount.Provider != models.StorageProviderS3 {
 		return StorageReconnectResult{}, errors.New("storage mount cannot be remounted")
 	}
+	releaseMount := s.Deps.StorageLifecycle.WriteLock(mount.UUID)
+	if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
+		releaseMount()
+		return StorageReconnectResult{}, err
+	}
+	if mount.Mounted {
+		releaseMount()
+		return StorageReconnectResult{}, errors.New("storage mount is already mounted")
+	}
 	store, err := storage.NewS3StoreFromMount(ctx, mount.UUID, mount.Configuration, mount.EncryptedCredentials, s.Deps.StorageCipher)
 	if err != nil {
+		releaseMount()
 		return StorageReconnectResult{}, err
 	}
 	if err := checkStorageConnection(ctx, store); err != nil {
 		_ = store.Close()
+		releaseMount()
 		return StorageReconnectResult{}, err
 	}
 	if _, err := s.Deps.Storage.RegisterStore(mount.UUID, store); err != nil {
 		_ = store.Close()
+		releaseMount()
 		return StorageReconnectResult{}, err
 	}
 	now := time.Now().UTC()
@@ -344,9 +387,11 @@ func (s *Service) RemountStorageMount(ctx context.Context, mountID uint) (Storag
 		"last_checked_at": &now,
 	}).Error; err != nil {
 		_, _ = s.Deps.Storage.UnregisterStore(mount.UUID)
+		releaseMount()
 		return StorageReconnectResult{}, err
 	}
-	reconnect, reconnectErr := s.reconnectStorageMount(ctx, mount.ID, true, mount.UUID)
+	releaseMount()
+	reconnect, reconnectErr := s.ReconnectStorageMountFiles(ctx, mount.ID, true, mount.UUID)
 	if reconnectErr != nil {
 		reconnect.Warning = reconnectErr.Error()
 	}
@@ -355,6 +400,11 @@ func (s *Service) RemountStorageMount(ctx context.Context, mountID uint) (Storag
 
 func (s *Service) CheckStorageMount(ctx context.Context, mountID uint) error {
 	var mount models.StorageMount
+	if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
+		return err
+	}
+	releaseMount := s.Deps.StorageLifecycle.ReadLock(mount.UUID)
+	defer releaseMount()
 	if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
 		return err
 	}
@@ -374,69 +424,243 @@ func (s *Service) CheckStorageMount(ctx context.Context, mountID uint) error {
 
 var errStoragePrefixFound = errors.New("storage prefix found")
 
+const storageReconnectConcurrency = 8
+const storageReconnectFileBatchSize = 100
+
 func (s *Service) ReconnectStorageMount(ctx context.Context, mountID uint, apply bool) (StorageReconnectResult, error) {
-	return s.reconnectStorageMount(ctx, mountID, apply, "")
+	return s.ReconnectStorageMountFiles(ctx, mountID, apply, "")
 }
 
-func (s *Service) reconnectStorageMount(ctx context.Context, mountID uint, apply bool, originalStorageID string) (StorageReconnectResult, error) {
+// ReconnectStorageMountFiles scans one mounted backend for unavailable files.
+// originalStorageID limits startup/remount recovery to records that already
+// belonged to that mount; an empty value enables an administrator-requested
+// migration scan across all unavailable records.
+func (s *Service) ReconnectStorageMountFiles(ctx context.Context, mountID uint, apply bool, originalStorageID string) (StorageReconnectResult, error) {
 	var mount models.StorageMount
 	if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
 		return StorageReconnectResult{}, err
 	}
+	releaseMount := s.Deps.StorageLifecycle.ReadLock(mount.UUID)
+	if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
+		releaseMount()
+		return StorageReconnectResult{}, err
+	}
 	if !mount.Mounted {
+		releaseMount()
 		return StorageReconnectResult{}, errors.New("storage mount is not mounted")
 	}
-	store, err := s.Deps.Storage.Store(mount.UUID)
-	if err != nil {
+	if _, err := s.Deps.Storage.Store(mount.UUID); err != nil {
+		releaseMount()
 		return StorageReconnectResult{}, err
 	}
-	var files []models.File
-	filesQuery := s.Deps.DB.Select("id", "uuid").Where("storage_state = ?", models.FileStorageUnavailable)
-	if originalStorageID != "" {
-		filesQuery = filesQuery.Where("storage_id = ?", originalStorageID)
-	}
-	if err := filesQuery.Find(&files).Error; err != nil {
-		return StorageReconnectResult{}, err
-	}
-	result := StorageReconnectResult{Scanned: len(files)}
-	matchedIDs := make([]uint, 0)
-	for _, file := range files {
+	releaseMount()
+
+	result := StorageReconnectResult{}
+	lastFileID := uint(0)
+	for {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		prefix, err := s.Deps.Storage.Layout().FilePrefix(file.UUID)
-		if err != nil {
+		var files []models.File
+		filesQuery := s.Deps.DB.
+			Preload("Qualitys").
+			Preload("Audios").
+			Preload("Subtitles").
+			Where("storage_state = ? AND id > ?", models.FileStorageUnavailable, lastFileID).
+			Order("id ASC").
+			Limit(storageReconnectFileBatchSize)
+		if originalStorageID != "" {
+			filesQuery = filesQuery.Where("storage_id = ?", originalStorageID)
+		}
+		if err := filesQuery.Find(&files).Error; err != nil {
 			return result, err
 		}
-		walkErr := store.Walk(ctx, prefix, func(storage.ObjectInfo) error {
-			return errStoragePrefixFound
-		})
-		if errors.Is(walkErr, errStoragePrefixFound) {
-			matchedIDs = append(matchedIDs, file.ID)
-			continue
+		if len(files) == 0 {
+			return result, nil
 		}
-		if walkErr != nil {
-			return result, walkErr
+		lastFileID = files[len(files)-1].ID
+		if err := s.reconnectStorageFileBatch(ctx, mount, files, apply, &result); err != nil {
+			return result, err
 		}
 	}
-	result.Matched = len(matchedIDs)
-	if !apply || len(matchedIDs) == 0 {
-		return result, nil
+}
+
+func (s *Service) reconnectStorageFileBatch(ctx context.Context, mount models.StorageMount, files []models.File, apply bool, result *StorageReconnectResult) error {
+	releaseMount := s.Deps.StorageLifecycle.ReadLock(mount.UUID)
+	defer releaseMount()
+	var currentMount models.StorageMount
+	if err := s.Deps.DB.First(&currentMount, mount.ID).Error; err != nil {
+		return err
 	}
-	for start := 0; start < len(matchedIDs); start += 500 {
-		end := min(start+500, len(matchedIDs))
+	if !currentMount.Mounted {
+		return errors.New("storage mount was detached during reconnect scan")
+	}
+	store, err := s.Deps.Storage.Store(mount.UUID)
+	if err != nil {
+		return err
+	}
+	type scanResult struct {
+		fileID  uint
+		matched bool
+		err     error
+	}
+	scanCtx, cancelScan := context.WithCancel(ctx)
+	defer cancelScan()
+	jobs := make(chan models.File)
+	results := make(chan scanResult)
+	workerCount := min(storageReconnectConcurrency, len(files))
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for file := range jobs {
+				matched, scanErr := s.storageFileMatches(scanCtx, store, file)
+				select {
+				case results <- scanResult{fileID: file.ID, matched: matched, err: scanErr}:
+				case <-scanCtx.Done():
+					return
+				}
+			}
+		}()
+	}
+	go func() {
+		defer close(jobs)
+		for _, file := range files {
+			select {
+			case jobs <- file:
+			case <-scanCtx.Done():
+				return
+			}
+		}
+	}()
+	go func() {
+		workers.Wait()
+		close(results)
+	}()
+
+	matchedIDs := make([]uint, 0, 100)
+	flushMatches := func() error {
+		if !apply || len(matchedIDs) == 0 {
+			matchedIDs = matchedIDs[:0]
+			return nil
+		}
 		update := s.Deps.DB.Model(&models.File{}).
-			Where("id IN ? AND storage_state = ?", matchedIDs[start:end], models.FileStorageUnavailable).
+			Where("id IN ? AND storage_state = ?", matchedIDs, models.FileStorageUnavailable).
 			Updates(map[string]any{
 				"storage_id":    mount.UUID,
 				"storage_state": models.FileStorageAvailable,
 			})
 		if update.Error != nil {
-			return result, update.Error
+			return update.Error
 		}
 		result.Relinked += int(update.RowsAffected)
+		matchedIDs = matchedIDs[:0]
+		return nil
 	}
-	return result, nil
+	var scanErr error
+	for scanned := range results {
+		result.Scanned++
+		if scanned.err != nil {
+			if scanErr == nil {
+				scanErr = scanned.err
+				cancelScan()
+			}
+			continue
+		}
+		if !scanned.matched {
+			continue
+		}
+		result.Matched++
+		matchedIDs = append(matchedIDs, scanned.fileID)
+		if len(matchedIDs) == cap(matchedIDs) {
+			if err := flushMatches(); err != nil && scanErr == nil {
+				scanErr = err
+				cancelScan()
+			}
+		}
+	}
+	if err := flushMatches(); err != nil && scanErr == nil {
+		scanErr = err
+	}
+	if scanErr != nil {
+		return scanErr
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Service) storageFileMatches(ctx context.Context, store storage.Store, file models.File) (bool, error) {
+	anchors, err := s.storageReconnectAnchors(file)
+	if err != nil {
+		return false, err
+	}
+	if len(anchors) > 0 {
+		for _, anchor := range anchors {
+			if _, err := store.Stat(ctx, anchor); err != nil {
+				if errors.Is(err, storage.ErrNotFound) {
+					return false, nil
+				}
+				return false, err
+			}
+		}
+		return true, nil
+	}
+	prefix, err := s.Deps.Storage.Layout().FilePrefix(file.UUID)
+	if err != nil {
+		return false, err
+	}
+	walkErr := store.Walk(ctx, prefix, func(storage.ObjectInfo) error {
+		return errStoragePrefixFound
+	})
+	if errors.Is(walkErr, errStoragePrefixFound) {
+		return true, nil
+	}
+	return false, walkErr
+}
+
+func (s *Service) storageReconnectAnchors(file models.File) ([]storage.Key, error) {
+	anchors := make([]storage.Key, 0, 1+len(file.Qualitys)+len(file.Audios)+len(file.Subtitles))
+	if file.SourceKey != "" {
+		key, err := storage.ParseKey(file.SourceKey)
+		if err != nil {
+			return nil, err
+		}
+		anchors = append(anchors, key)
+	}
+	for _, quality := range file.Qualitys {
+		if !quality.Ready || quality.OutputFile == "" {
+			continue
+		}
+		key, err := s.Deps.Storage.Layout().Video(file.UUID, quality.Name, quality.OutputFile)
+		if err != nil {
+			return nil, err
+		}
+		anchors = append(anchors, key)
+	}
+	for _, audio := range file.Audios {
+		if !audio.Ready || audio.OutputFile == "" {
+			continue
+		}
+		key, err := s.Deps.Storage.Layout().Audio(file.UUID, audio.UUID, audio.OutputFile)
+		if err != nil {
+			return nil, err
+		}
+		anchors = append(anchors, key)
+	}
+	for _, subtitle := range file.Subtitles {
+		if !subtitle.Ready || subtitle.OutputFile == "" {
+			continue
+		}
+		key, err := s.Deps.Storage.Layout().Subtitle(file.UUID, subtitle.UUID, subtitle.OutputFile)
+		if err != nil {
+			return nil, err
+		}
+		anchors = append(anchors, key)
+	}
+	return anchors, nil
 }
 
 func (s *Service) CreateStoragePool(input StoragePoolInput) (models.StoragePool, error) {
@@ -557,6 +781,14 @@ func checkStorageConnection(ctx context.Context, store storage.Store) error {
 	checkCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	return checker.Check(checkCtx)
+}
+
+func sameS3StorageLocation(left, right storage.S3MountConfiguration) bool {
+	return left.Bucket == right.Bucket &&
+		left.Region == right.Region &&
+		left.Endpoint == right.Endpoint &&
+		left.Prefix == right.Prefix &&
+		left.UsePathStyle == right.UsePathStyle
 }
 
 func uniqueUintValues(values []uint) []uint {

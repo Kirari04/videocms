@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -51,7 +52,7 @@ func (s *Service) UploadStoreCandidates(userID uint) ([]string, error) {
 			END), 0) AS used_bytes`, models.FileStorageAvailable).
 		Joins("JOIN storage_mounts ON storage_mounts.id = pool_mounts.storage_mount_id").
 		Joins("LEFT JOIN files ON files.storage_id = storage_mounts.uuid").
-		Where("pool_mounts.storage_pool_id = ? AND storage_mounts.mounted = ?", poolID, true).
+		Where("pool_mounts.storage_pool_id = ? AND storage_mounts.mounted = ? AND (storage_mounts.last_error IS NULL OR storage_mounts.last_error = '')", poolID, true).
 		Group("storage_mounts.id, storage_mounts.uuid").
 		Order("used_bytes ASC, storage_mounts.uuid ASC").
 		Scan(&placements).Error
@@ -68,4 +69,31 @@ func (s *Service) UploadStoreCandidates(userID uint) ([]string, error) {
 		return nil, errors.New("selected storage pool has no available mounts")
 	}
 	return candidates, nil
+}
+
+// publishUploadSource keeps the selected mount stable until its caller has
+// committed the owning file record. Detach waits for the returned release
+// function, then marks that newly committed record unavailable with the rest
+// of the mount. Failed candidates are cleaned up before placement falls back.
+func (s *Service) publishUploadSource(ctx context.Context, userID uint, key storage.Key, localPath string) (string, func(), error) {
+	candidates, err := s.UploadStoreCandidates(userID)
+	if err != nil {
+		return "", nil, err
+	}
+	var publishErr error
+	for _, candidate := range candidates {
+		release := s.Deps.StorageLifecycle.ReadLock(candidate)
+		_, err := s.Deps.Storage.PublishFile(ctx, candidate, key, localPath, storage.PutOptions{})
+		if err == nil {
+			return candidate, release, nil
+		}
+		if store, storeErr := s.Deps.Storage.Store(candidate); storeErr == nil {
+			if cleanupErr := store.Delete(context.WithoutCancel(ctx), key); cleanupErr != nil {
+				err = errors.Join(err, fmt.Errorf("clean failed upload from %s: %w", candidate, cleanupErr))
+			}
+		}
+		release()
+		publishErr = errors.Join(publishErr, fmt.Errorf("%s: %w", candidate, err))
+	}
+	return "", nil, publishErr
 }

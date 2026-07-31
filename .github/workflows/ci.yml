@@ -77,8 +77,38 @@ jobs:
       - name: Download modules
         run: go mod download
 
+      - name: Start MinIO integration service
+        run: |
+          docker run --detach --name videocms-minio \
+            --publish 9000:9000 \
+            --env MINIO_ROOT_USER=videocms-ci \
+            --env MINIO_ROOT_PASSWORD=videocms-ci-secret \
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:9000/minio/health/ready >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs videocms-minio
+              exit 1
+            fi
+            sleep 1
+          done
+          docker exec videocms-minio mc alias set local http://127.0.0.1:9000 videocms-ci videocms-ci-secret
+          docker exec videocms-minio mc mb --ignore-existing local/videocms-ci
+
       - name: Test
+        env:
+          VIDEOCMS_S3_INTEGRATION_ENDPOINT: http://127.0.0.1:9000
+          VIDEOCMS_S3_INTEGRATION_BUCKET: videocms-ci
+          VIDEOCMS_S3_INTEGRATION_REGION: us-east-1
+          VIDEOCMS_S3_INTEGRATION_ACCESS_KEY_ID: videocms-ci
+          VIDEOCMS_S3_INTEGRATION_SECRET_ACCESS_KEY: videocms-ci-secret
         run: go test ./...
+
+      - name: Stop MinIO integration service
+        if: always()
+        run: docker rm --force videocms-minio || true
 
       - name: Vet
         run: go vet ./...

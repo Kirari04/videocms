@@ -169,25 +169,16 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 		return http.StatusInternalServerError, nil, false, err
 	}
 	storageCtx := context.Background()
-	candidates, err := s.UploadStoreCandidates(userId)
+	storeID, releaseStore, err := s.publishUploadSource(storageCtx, userId, sourceKey, *fromFile)
 	if err != nil {
-		log.Printf("Failed to select upload storage: %v", err)
+		log.Printf("Failed to publish source file to storage pool: %v", err)
 		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
 	}
-	storeID := ""
-	var publishErr error
-	for _, candidate := range candidates {
-		if _, err := s.Deps.Storage.PublishFile(storageCtx, candidate, sourceKey, *fromFile, storage.PutOptions{}); err != nil {
-			publishErr = errors.Join(publishErr, fmt.Errorf("%s: %w", candidate, err))
-			continue
+	defer func() {
+		if releaseStore != nil {
+			releaseStore()
 		}
-		storeID = candidate
-		break
-	}
-	if storeID == "" {
-		log.Printf("Failed to publish source file to storage pool: %v", publishErr)
-		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
-	}
+	}()
 	sourceOwnedByRecord := false
 	defer func() {
 		if !sourceOwnedByRecord {
@@ -237,6 +228,8 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
 	}
 	sourceOwnedByRecord = true
+	releaseStore()
+	releaseStore = nil
 	go func() {
 		if avgFramerate <= 0 {
 			return

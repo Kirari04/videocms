@@ -55,12 +55,13 @@ func (s *SnapshotStore) Replace(snapshot Snapshot) {
 }
 
 type Deps struct {
-	DB            *gorm.DB
-	Snapshots     *SnapshotStore
-	Cache         *cache.Cache
-	RequestGate   *RequestGate
-	Storage       *storage.Service
-	StorageCipher *storage.CredentialCipher
+	DB               *gorm.DB
+	Snapshots        *SnapshotStore
+	Cache            *cache.Cache
+	RequestGate      *RequestGate
+	Storage          *storage.Service
+	StorageCipher    *storage.CredentialCipher
+	StorageLifecycle StorageLifecycle
 }
 
 func (d *Deps) Config() config.Config {
