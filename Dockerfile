@@ -105,6 +105,11 @@ ENV FolderVideoQualitysPriv=./videos/qualitys
 ENV FolderVideoQualitysPub=/videos/qualitys
 ENV FolderVideoUploadsPriv=./videos/uploads
 ENV StorageScratchDir=./videos/scratch
+ENV StorageDefaultStore=local
+ENV StorageS3Region=us-east-1
+ENV StorageS3UsePathStyle=false
+ENV StorageS3UploadPartSize=16777216
+ENV StorageS3UploadConcurrency=4
 ENV StatsDriveName=nvme0n1
 
 EXPOSE 3000
