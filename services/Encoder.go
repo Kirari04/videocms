@@ -5,8 +5,9 @@ import (
 	"ch/kirari04/videocms/models"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
-	"log"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -30,9 +31,12 @@ type ActiveEncoding struct {
 }
 
 type EncodingTask struct {
-	Type   string
-	FileID uint
-	ID     uint // qualityID | audioID | subID
+	Type      string
+	FileID    uint
+	FileUUID  string
+	StorageID string
+	ID        uint // qualityID | audioID | subID
+	Name      string
 }
 
 type IwithProcess interface {
@@ -47,8 +51,9 @@ func (w *WorkerGroup) Encoder(ctx context.Context) {
 	}
 
 	cfg := w.Config()
-	log.Printf(
-		"Encoder scheduler started (enabled=%t, max concurrent encodes=%d)",
+	w.encoderLogf(
+		"scheduler_started",
+		"enabled=%t max_concurrent=%d",
 		encodingEnabled(cfg),
 		maxRunningEncodes(cfg),
 	)
@@ -79,8 +84,9 @@ func (w *WorkerGroup) Encoder(ctx context.Context) {
 // encoder only prevents new work from being claimed.
 func (w *WorkerGroup) NotifyEncoderConfigChanged() {
 	cfg := w.Config()
-	log.Printf(
-		"Encoder configuration updated (enabled=%t, max concurrent encodes=%d)",
+	w.encoderLogf(
+		"configuration_updated",
+		"enabled=%t max_concurrent=%d",
 		encodingEnabled(cfg),
 		maxRunningEncodes(cfg),
 	)
@@ -152,7 +158,7 @@ func (w *WorkerGroup) ResetEncodingState() {
 		}, "Encoding").
 		Or("progress > ?", 0).
 		Updates(map[string]interface{}{"encoding": false, "progress": 0}); res.Error != nil {
-		log.Println("Failed to reset encoding status on Quality", res.Error)
+		w.encoderLogf("state_reset_failed", "task_type=quality error=%q", res.Error)
 	}
 
 	if res := w.deps.DB.
@@ -162,7 +168,7 @@ func (w *WorkerGroup) ResetEncodingState() {
 		}, "Encoding").
 		Or("progress > ?", 0).
 		Updates(map[string]interface{}{"encoding": false, "progress": 0}); res.Error != nil {
-		log.Println("Failed to reset encoding status on Audio", res.Error)
+		w.encoderLogf("state_reset_failed", "task_type=audio error=%q", res.Error)
 	}
 
 	if res := w.deps.DB.
@@ -172,7 +178,7 @@ func (w *WorkerGroup) ResetEncodingState() {
 		}, "Encoding").
 		Or("progress > ?", 0).
 		Updates(map[string]interface{}{"encoding": false, "progress": 0}); res.Error != nil {
-		log.Println("Failed to reset encoding status on Subtitle", res.Error)
+		w.encoderLogf("state_reset_failed", "task_type=subtitle error=%q", res.Error)
 	}
 }
 
@@ -202,12 +208,12 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 		Limit(available).
 		Find(&encodingSubs)
 	if result.Error != nil {
-		log.Printf("Failed to load subtitles to encode: %v", result.Error)
+		w.encoderLogf("queue_load_failed", "task_type=subtitle error=%q", result.Error)
 		return
 	}
 
 	if len(encodingSubs) > 0 {
-		log.Printf("Loaded %v subs to encode", len(encodingSubs))
+		w.encoderLogf("queue_loaded", "task_type=subtitle count=%d", len(encodingSubs))
 	}
 
 	for i := range encodingSubs {
@@ -215,17 +221,21 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 		if !w.tryReserveEncodingSlot() {
 			return
 		}
+		task := EncodingTask{
+			Type:      "subtitle",
+			FileID:    v.FileID,
+			FileUUID:  v.File.UUID,
+			StorageID: v.File.StorageID,
+			ID:        v.ID,
+			Name:      v.Name,
+		}
 		v.Encoding = true
 		if result := v.Save(w.deps.DB); result.Error != nil {
 			w.releaseEncodingSlot()
-			log.Printf("Failed to claim subtitle %d for encoding: %v", v.ID, result.Error)
+			w.encodingTaskLog("task_claim_failed", task, time.Time{}, result.Error)
 			continue
 		}
-		w.startEncodingTask(ctx, EncodingTask{
-			Type:   "sub",
-			FileID: v.FileID,
-			ID:     v.ID,
-		})
+		w.startEncodingTask(ctx, task)
 		available--
 	}
 
@@ -246,13 +256,13 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 			Limit(available).
 			Find(&encodingAudios)
 		if result.Error != nil {
-			log.Printf("Failed to load audios to encode: %v", result.Error)
+			w.encoderLogf("queue_load_failed", "task_type=audio error=%q", result.Error)
 			return
 		}
 	}
 
 	if len(encodingAudios) > 0 {
-		log.Printf("Loaded %v audios to encode", len(encodingAudios))
+		w.encoderLogf("queue_loaded", "task_type=audio count=%d", len(encodingAudios))
 	}
 
 	for i := range encodingAudios {
@@ -260,17 +270,21 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 		if !w.tryReserveEncodingSlot() {
 			return
 		}
+		task := EncodingTask{
+			Type:      "audio",
+			FileID:    v.FileID,
+			FileUUID:  v.File.UUID,
+			StorageID: v.File.StorageID,
+			ID:        v.ID,
+			Name:      v.Name,
+		}
 		v.Encoding = true
 		if result := v.Save(w.deps.DB); result.Error != nil {
 			w.releaseEncodingSlot()
-			log.Printf("Failed to claim audio %d for encoding: %v", v.ID, result.Error)
+			w.encodingTaskLog("task_claim_failed", task, time.Time{}, result.Error)
 			continue
 		}
-		w.startEncodingTask(ctx, EncodingTask{
-			Type:   "audio",
-			FileID: v.FileID,
-			ID:     v.ID,
-		})
+		w.startEncodingTask(ctx, task)
 		available--
 	}
 
@@ -291,13 +305,13 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 			Limit(available).
 			Find(&encodingQualitys)
 		if result.Error != nil {
-			log.Printf("Failed to load qualities to encode: %v", result.Error)
+			w.encoderLogf("queue_load_failed", "task_type=quality error=%q", result.Error)
 			return
 		}
 	}
 
 	if len(encodingQualitys) > 0 {
-		log.Printf("Loaded %v qualitys to encode", len(encodingQualitys))
+		w.encoderLogf("queue_loaded", "task_type=quality count=%d", len(encodingQualitys))
 	}
 
 	for i := range encodingQualitys {
@@ -305,17 +319,21 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 		if !w.tryReserveEncodingSlot() {
 			return
 		}
+		task := EncodingTask{
+			Type:      "quality",
+			FileID:    v.FileID,
+			FileUUID:  v.File.UUID,
+			StorageID: v.File.StorageID,
+			ID:        v.ID,
+			Name:      v.Name,
+		}
 		v.Encoding = true
 		if result := v.Save(w.deps.DB); result.Error != nil {
 			w.releaseEncodingSlot()
-			log.Printf("Failed to claim quality %d for encoding: %v", v.ID, result.Error)
+			w.encodingTaskLog("task_claim_failed", task, time.Time{}, result.Error)
 			continue
 		}
-		w.startEncodingTask(ctx, EncodingTask{
-			Type:   "quality",
-			FileID: v.FileID,
-			ID:     v.ID,
-		})
+		w.startEncodingTask(ctx, task)
 		available--
 	}
 }
@@ -323,65 +341,69 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 func (w *WorkerGroup) startEncodingTask(ctx context.Context, task EncodingTask) {
 	go func() {
 		defer w.releaseEncodingSlot()
+		started := time.Now()
+		w.encodingTaskLog("task_started", task, time.Time{}, nil)
+
+		var err error
 		if w.encodingTaskRunner != nil {
-			w.encodingTaskRunner(ctx, task)
+			err = w.encodingTaskRunner(ctx, task)
+		} else {
+			err = w.runEncode(ctx, task)
+		}
+		if err != nil {
+			w.encodingTaskLog("task_failed", task, started, err)
 			return
 		}
-		w.runEncode(ctx, task)
+		w.encodingTaskLog("task_completed", task, started, nil)
 	}()
 }
 
-func (w *WorkerGroup) runEncode(ctx context.Context, encodingTaskInformation EncodingTask) {
+func (w *WorkerGroup) runEncode(ctx context.Context, encodingTaskInformation EncodingTask) error {
 	switch encodingTaskInformation.Type {
 	case "quality":
 		var encodingTask models.Quality
-		w.deps.DB.Preload("File").Find(&encodingTask, encodingTaskInformation.ID)
-		w.runEncodeQuality(ctx, encodingTask)
+		if result := w.deps.DB.Preload("File").First(&encodingTask, encodingTaskInformation.ID); result.Error != nil {
+			return fmt.Errorf("load quality task: %w", result.Error)
+		}
+		return w.runEncodeQuality(ctx, encodingTask, encodingTaskInformation)
 	case "audio":
 		var encodingTask models.Audio
-		w.deps.DB.Preload("File").Find(&encodingTask, encodingTaskInformation.ID)
-		w.runEncodeAudio(ctx, encodingTask)
-	case "sub":
+		if result := w.deps.DB.Preload("File").First(&encodingTask, encodingTaskInformation.ID); result.Error != nil {
+			return fmt.Errorf("load audio task: %w", result.Error)
+		}
+		return w.runEncodeAudio(ctx, encodingTask, encodingTaskInformation)
+	case "subtitle":
 		var encodingTask models.Subtitle
-		w.deps.DB.Preload("File").Find(&encodingTask, encodingTaskInformation.ID)
-		w.runEncodeSub(ctx, encodingTask)
+		if result := w.deps.DB.Preload("File").First(&encodingTask, encodingTaskInformation.ID); result.Error != nil {
+			return fmt.Errorf("load subtitle task: %w", result.Error)
+		}
+		return w.runEncodeSub(ctx, encodingTask, encodingTaskInformation)
+	default:
+		return fmt.Errorf("unsupported encoding task type %q", encodingTaskInformation.Type)
 	}
 }
 
-func (w *WorkerGroup) runEncodeQuality(ctx context.Context, encodingTask models.Quality) {
+func (w *WorkerGroup) runEncodeQuality(ctx context.Context, encodingTask models.Quality, task EncodingTask) error {
 	// we check if the original file has been deleted during the waittime
-	if !w.originalFileExists(encodingTask.FileID) {
-		encodingTask.Ready = false
-		encodingTask.Encoding = false
-		encodingTask.Failed = true
-		encodingTask.Error = "Skipped because waiting for deletion"
-		w.deps.DB.Save(&encodingTask)
-		return
+	exists, err := w.originalFileExists(encodingTask.FileID)
+	if err != nil {
+		return w.failEncodingTask(&encodingTask, fmt.Errorf("check source file: %w", err))
 	}
-
-	// log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
+	if !exists {
+		return w.failEncodingTask(&encodingTask, fmt.Errorf("source file was deleted before encoding started"))
+	}
 
 	totalDuration := encodingTask.File.Duration
 	absFileInput, cleanupInput, err := w.materializeEncodingSource(ctx, encodingTask.File)
 	if err != nil {
-		encodingTask.Ready = false
-		encodingTask.Encoding = false
-		encodingTask.Failed = true
-		encodingTask.Error = fmt.Sprintf("Failed to prepare source: %v", err)
-		w.deps.DB.Save(&encodingTask)
-		return
+		return w.failEncodingTask(&encodingTask, fmt.Errorf("prepare source: %w", err))
 	}
-	defer cleanupInput()
+	defer w.cleanupEncodingResource(task, "source", cleanupInput)
 	absFolderOutput, cleanupOutput, err := w.encodingOutputDirectory(ctx, "encode-quality", encodingTask.Path)
 	if err != nil {
-		encodingTask.Ready = false
-		encodingTask.Encoding = false
-		encodingTask.Failed = true
-		encodingTask.Error = fmt.Sprintf("Failed to prepare output: %v", err)
-		w.deps.DB.Save(&encodingTask)
-		return
+		return w.failEncodingTask(&encodingTask, fmt.Errorf("prepare output workspace: %w", err))
 	}
-	defer cleanupOutput()
+	defer w.cleanupEncodingResource(task, "output workspace", cleanupOutput)
 
 	var frameRateString string
 	var segmenDuration int = 4
@@ -391,7 +413,7 @@ func (w *WorkerGroup) runEncodeQuality(ctx context.Context, encodingTask models.
 
 	encFilePath := fmt.Sprintf("%s/%s", absFolderOutput, encodingTask.OutputFile)
 
-	var ffmpegCommand string = "echo Encoding type didnt match && exit 1"
+	var ffmpegCommand string
 	switch encodingTask.Type {
 	case "hls":
 
@@ -423,13 +445,22 @@ func (w *WorkerGroup) runEncodeQuality(ctx context.Context, encodingTask models.
 				totalDuration,
 				fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
 				&encodingTask,
+				task,
 			)) // progress tracking
+	default:
+		return w.failEncodingTask(
+			&encodingTask,
+			fmt.Errorf("unsupported quality encoding type %q", encodingTask.Type),
+		)
 	}
 
 	cmd := exec.CommandContext(ctx,
 		"bash",
 		"-c",
 		ffmpegCommand)
+	diagnostics := newEncodingDiagnosticTail(8192)
+	cmd.Stdout = diagnostics
+	cmd.Stderr = diagnostics
 
 	activeEncodingChannel := make(chan bool)
 	defer w.deleteActiveEncoding(encodingTask.FileID, encodingTask.ID, "quality")
@@ -449,19 +480,13 @@ func (w *WorkerGroup) runEncodeQuality(ctx context.Context, encodingTask models.
 			if cmd.Process != nil {
 				_ = cmd.Process.Kill()
 			}
-			log.Printf("killed encode (quality) of FileID %d QualityID %d\n", encodingTask.FileID, encodingTask.ID)
+			w.encodingTaskLog("task_kill_requested", task, time.Time{}, nil)
 		}
 	}()
 
 	start := time.Now()
 	if err := cmd.Run(); err != nil {
-		encodingTask.Ready = false
-		encodingTask.Encoding = false
-		encodingTask.Failed = true
-		w.deps.DB.Save(&encodingTask)
-		log.Printf("Error happend while encoding quality: %v", err.Error())
-		log.Println(ffmpegCommand)
-		return
+		return w.failEncodingTask(&encodingTask, ffmpegEncodingError(ctx, err, diagnostics))
 	}
 	if w.deps.Storage != nil && w.deps.Storage.Layout() != nil {
 		prefix, err := w.deps.Storage.Layout().VideoPrefix(encodingTask.File.UUID, encodingTask.Name)
@@ -469,12 +494,7 @@ func (w *WorkerGroup) runEncodeQuality(ctx context.Context, encodingTask models.
 			err = w.publishEncodingOutput(ctx, encodingTask.File, prefix, absFolderOutput)
 		}
 		if err != nil {
-			encodingTask.Ready = false
-			encodingTask.Encoding = false
-			encodingTask.Failed = true
-			encodingTask.Error = fmt.Sprintf("Failed to publish output: %v", err)
-			w.deps.DB.Save(&encodingTask)
-			return
+			return w.failEncodingTask(&encodingTask, fmt.Errorf("publish output: %w", err))
 		}
 	}
 	duration := time.Since(start).Seconds()
@@ -482,52 +502,36 @@ func (w *WorkerGroup) runEncodeQuality(ctx context.Context, encodingTask models.
 
 	qualitySize, err := dirSize(absFolderOutput)
 	if err != nil {
-		log.Printf("Failed to calc folder size after quality encode: %v", err)
+		w.encodingTaskLog("output_size_failed", task, time.Time{}, err)
 	}
 
 	encodingTask.Size = qualitySize
-	encodingTask.Encoding = false
-	encodingTask.Ready = true
-	encodingTask.Error = ""
-	w.deps.DB.Save(&encodingTask)
+	return w.completeEncodingTask(&encodingTask)
 }
 
-func (w *WorkerGroup) runEncodeAudio(ctx context.Context, encodingTask models.Audio) {
+func (w *WorkerGroup) runEncodeAudio(ctx context.Context, encodingTask models.Audio, task EncodingTask) error {
 	// we check if the original file has been deleted during the waittime
-	if !w.originalFileExists(encodingTask.FileID) {
-		encodingTask.Ready = false
-		encodingTask.Encoding = false
-		encodingTask.Failed = true
-		encodingTask.Error = "Skipped because waiting for deletion"
-		w.deps.DB.Save(&encodingTask)
-		return
+	exists, err := w.originalFileExists(encodingTask.FileID)
+	if err != nil {
+		return w.failEncodingTask(&encodingTask, fmt.Errorf("check source file: %w", err))
 	}
-
-	// log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
+	if !exists {
+		return w.failEncodingTask(&encodingTask, fmt.Errorf("source file was deleted before encoding started"))
+	}
 
 	totalDuration := encodingTask.File.Duration
 	absFileInput, cleanupInput, err := w.materializeEncodingSource(ctx, encodingTask.File)
 	if err != nil {
-		encodingTask.Ready = false
-		encodingTask.Encoding = false
-		encodingTask.Failed = true
-		encodingTask.Error = fmt.Sprintf("Failed to prepare source: %v", err)
-		w.deps.DB.Save(&encodingTask)
-		return
+		return w.failEncodingTask(&encodingTask, fmt.Errorf("prepare source: %w", err))
 	}
-	defer cleanupInput()
+	defer w.cleanupEncodingResource(task, "source", cleanupInput)
 	absFolderOutput, cleanupOutput, err := w.encodingOutputDirectory(ctx, "encode-audio", encodingTask.Path)
 	if err != nil {
-		encodingTask.Ready = false
-		encodingTask.Encoding = false
-		encodingTask.Failed = true
-		encodingTask.Error = fmt.Sprintf("Failed to prepare output: %v", err)
-		w.deps.DB.Save(&encodingTask)
-		return
+		return w.failEncodingTask(&encodingTask, fmt.Errorf("prepare output workspace: %w", err))
 	}
-	defer cleanupOutput()
+	defer w.cleanupEncodingResource(task, "output workspace", cleanupOutput)
 
-	var ffmpegCommand string = "echo Audioencoding type didnt match && exit 1"
+	var ffmpegCommand string
 	switch encodingTask.Type {
 	case "hls":
 
@@ -551,13 +555,22 @@ func (w *WorkerGroup) runEncodeAudio(ctx context.Context, encodingTask models.Au
 				totalDuration,
 				fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
 				&encodingTask,
+				task,
 			)) // progress tracking
+	default:
+		return w.failEncodingTask(
+			&encodingTask,
+			fmt.Errorf("unsupported audio encoding type %q", encodingTask.Type),
+		)
 	}
 
 	cmd := exec.CommandContext(ctx,
 		"bash",
 		"-c",
 		ffmpegCommand)
+	diagnostics := newEncodingDiagnosticTail(8192)
+	cmd.Stdout = diagnostics
+	cmd.Stderr = diagnostics
 
 	activeEncodingChannel := make(chan bool)
 	defer w.deleteActiveEncoding(encodingTask.FileID, encodingTask.ID, "audio")
@@ -577,19 +590,13 @@ func (w *WorkerGroup) runEncodeAudio(ctx context.Context, encodingTask models.Au
 			if cmd.Process != nil {
 				_ = cmd.Process.Kill()
 			}
-			log.Printf("killed encode (quality) of FileID %d AudioID %d\n", encodingTask.FileID, encodingTask.ID)
+			w.encodingTaskLog("task_kill_requested", task, time.Time{}, nil)
 		}
 	}()
 
 	start := time.Now()
 	if err := cmd.Run(); err != nil {
-		encodingTask.Ready = false
-		encodingTask.Encoding = false
-		encodingTask.Failed = true
-		w.deps.DB.Save(&encodingTask)
-		log.Printf("Error happend while encoding audio: %v", err.Error())
-		log.Println(ffmpegCommand)
-		return
+		return w.failEncodingTask(&encodingTask, ffmpegEncodingError(ctx, err, diagnostics))
 	}
 	if w.deps.Storage != nil && w.deps.Storage.Layout() != nil {
 		prefix, err := w.deps.Storage.Layout().AudioPrefix(encodingTask.File.UUID, encodingTask.UUID)
@@ -597,81 +604,56 @@ func (w *WorkerGroup) runEncodeAudio(ctx context.Context, encodingTask models.Au
 			err = w.publishEncodingOutput(ctx, encodingTask.File, prefix, absFolderOutput)
 		}
 		if err != nil {
-			encodingTask.Ready = false
-			encodingTask.Encoding = false
-			encodingTask.Failed = true
-			encodingTask.Error = fmt.Sprintf("Failed to publish output: %v", err)
-			w.deps.DB.Save(&encodingTask)
-			return
+			return w.failEncodingTask(&encodingTask, fmt.Errorf("publish output: %w", err))
 		}
 	}
 	duration := time.Since(start).Seconds()
 	w.logic.TrackEncoding(encodingTask.File.UserID, encodingTask.FileID, "audio", duration)
 
-	encodingTask.Encoding = false
-	encodingTask.Ready = true
-	encodingTask.Error = ""
-	w.deps.DB.Save(&encodingTask)
+	return w.completeEncodingTask(&encodingTask)
 }
 
-func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subtitle) {
+func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subtitle, task EncodingTask) error {
 	// we check if the original file has been deleted during the waittime
-	if !w.originalFileExists(encodingTask.FileID) {
-		encodingTask.Ready = false
-		encodingTask.Encoding = false
-		encodingTask.Failed = true
-		encodingTask.Error = "Skipped because waiting for deletion"
-		w.deps.DB.Save(&encodingTask)
-		return
+	exists, err := w.originalFileExists(encodingTask.FileID)
+	if err != nil {
+		return w.failEncodingTask(&encodingTask, fmt.Errorf("check source file: %w", err))
 	}
-
-	// log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
+	if !exists {
+		return w.failEncodingTask(&encodingTask, fmt.Errorf("source file was deleted before encoding started"))
+	}
 
 	totalDuration := encodingTask.File.Duration
 	absFileInput, cleanupInput, err := w.materializeEncodingSource(ctx, encodingTask.File)
 	if err != nil {
-		encodingTask.Ready = false
-		encodingTask.Encoding = false
-		encodingTask.Failed = true
-		encodingTask.Error = fmt.Sprintf("Failed to prepare source: %v", err)
-		w.deps.DB.Save(&encodingTask)
-		return
+		return w.failEncodingTask(&encodingTask, fmt.Errorf("prepare source: %w", err))
 	}
-	defer cleanupInput()
+	defer w.cleanupEncodingResource(task, "source", cleanupInput)
 	absFolderOutput, cleanupOutput, err := w.encodingOutputDirectory(ctx, "encode-subtitle", encodingTask.Path)
 	if err != nil {
-		encodingTask.Ready = false
-		encodingTask.Encoding = false
-		encodingTask.Failed = true
-		encodingTask.Error = fmt.Sprintf("Failed to prepare output: %v", err)
-		w.deps.DB.Save(&encodingTask)
-		return
+		return w.failEncodingTask(&encodingTask, fmt.Errorf("prepare output workspace: %w", err))
 	}
-	defer cleanupOutput()
+	defer w.cleanupEncodingResource(task, "output workspace", cleanupOutput)
 
-	var ffmpegCommand string = "echo Subencoding type didnt match && exit 1"
+	var ffmpegCommand string
 
 	if encodingTask.OriginalCodec == "hdmv_pgs_subtitle" {
 		cfg := w.Config()
 		if cfg.EnablePluginPgsServer == nil || *cfg.EnablePluginPgsServer == false {
-			log.Printf("PluginPgsServer disabled")
-			encodingTask.Ready = false
-			encodingTask.Encoding = false
-			encodingTask.Failed = true
-			w.deps.DB.Save(&encodingTask)
-			return
+			return w.failEncodingTask(
+				&encodingTask,
+				fmt.Errorf("PGS subtitle preprocessing is disabled"),
+			)
 		}
 
 		// prepocess pgs
 		if err := w.prepocessPgs(ctx, encodingTask, absFolderOutput, &absFileInput); err != nil {
-			log.Printf("[Preprocess Error] %v", err)
-			encodingTask.Ready = false
-			encodingTask.Encoding = false
-			encodingTask.Failed = true
-			w.deps.DB.Save(&encodingTask)
-			return
+			return w.failEncodingTask(&encodingTask, fmt.Errorf("preprocess PGS subtitle: %w", err))
 		}
-		defer os.Remove(absFileInput) // delete srt file after encode
+		preprocessedInput := absFileInput
+		defer w.cleanupEncodingResource(task, "preprocessed subtitle", func() error {
+			return os.Remove(preprocessedInput)
+		})
 
 		switch encodingTask.Type {
 		case "ass":
@@ -683,6 +665,7 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 					totalDuration,
 					fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
 					&encodingTask,
+					task,
 				)) // progress tracking
 		case "vtt":
 			ffmpegCommand = "ffmpeg " +
@@ -693,7 +676,13 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 					totalDuration,
 					fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
 					&encodingTask,
+					task,
 				)) // progress tracking
+		default:
+			return w.failEncodingTask(
+				&encodingTask,
+				fmt.Errorf("unsupported subtitle encoding type %q", encodingTask.Type),
+			)
 		}
 	} else {
 		// normal subtitles
@@ -710,6 +699,7 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 					totalDuration,
 					fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
 					&encodingTask,
+					task,
 				)) // progress tracking
 		case "vtt":
 			ffmpegCommand = "ffmpeg " +
@@ -723,7 +713,13 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 					totalDuration,
 					fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
 					&encodingTask,
+					task,
 				)) // progress tracking
+		default:
+			return w.failEncodingTask(
+				&encodingTask,
+				fmt.Errorf("unsupported subtitle encoding type %q", encodingTask.Type),
+			)
 		}
 	}
 
@@ -731,6 +727,9 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 		"bash",
 		"-c",
 		ffmpegCommand)
+	diagnostics := newEncodingDiagnosticTail(8192)
+	cmd.Stdout = diagnostics
+	cmd.Stderr = diagnostics
 	activeEncodingChannel := make(chan bool)
 	defer w.deleteActiveEncoding(encodingTask.FileID, encodingTask.ID, "sub")
 
@@ -749,19 +748,13 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 			if cmd.Process != nil {
 				_ = cmd.Process.Kill()
 			}
-			log.Printf("killed encode (quality) of FileID %d SubID %d\n", encodingTask.FileID, encodingTask.ID)
+			w.encodingTaskLog("task_kill_requested", task, time.Time{}, nil)
 		}
 	}()
 
 	start := time.Now()
 	if err := cmd.Run(); err != nil {
-		encodingTask.Ready = false
-		encodingTask.Encoding = false
-		encodingTask.Failed = true
-		w.deps.DB.Save(&encodingTask)
-		log.Printf("Error happend while encoding subtitle: %v", err.Error())
-		log.Println(ffmpegCommand)
-		return
+		return w.failEncodingTask(&encodingTask, ffmpegEncodingError(ctx, err, diagnostics))
 	}
 	if w.deps.Storage != nil && w.deps.Storage.Layout() != nil {
 		prefix, err := w.deps.Storage.Layout().SubtitlePrefix(encodingTask.File.UUID, encodingTask.UUID)
@@ -769,29 +762,23 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 			err = w.publishEncodingOutput(ctx, encodingTask.File, prefix, absFolderOutput)
 		}
 		if err != nil {
-			encodingTask.Ready = false
-			encodingTask.Encoding = false
-			encodingTask.Failed = true
-			encodingTask.Error = fmt.Sprintf("Failed to publish output: %v", err)
-			w.deps.DB.Save(&encodingTask)
-			return
+			return w.failEncodingTask(&encodingTask, fmt.Errorf("publish output: %w", err))
 		}
 	}
 	duration := time.Since(start).Seconds()
 	w.logic.TrackEncoding(encodingTask.File.UserID, encodingTask.FileID, "sub", duration)
 
-	encodingTask.Encoding = false
-	encodingTask.Ready = true
-	encodingTask.Error = ""
-	w.deps.DB.Save(&encodingTask)
+	return w.completeEncodingTask(&encodingTask)
 }
 
-func (w *WorkerGroup) tempSock(totalDuration float64, sockFileName string, encodingTask IwithProcess) string {
+func (w *WorkerGroup) tempSock(totalDuration float64, sockFileName string, encodingTask IwithProcess, task EncodingTask) string {
 	sockFilePath := path.Join(os.TempDir(), sockFileName)
-	_ = os.Remove(sockFilePath)
+	if err := os.Remove(sockFilePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		w.encodingTaskLog("progress_socket_cleanup_failed", task, time.Time{}, err)
+	}
 	l, err := net.Listen("unix", sockFilePath)
 	if err != nil {
-		log.Printf("failed to create encoder progress socket %s: %v", sockFilePath, err)
+		w.encodingTaskLog("progress_socket_listen_failed", task, time.Time{}, err)
 		return sockFilePath
 	}
 
@@ -800,7 +787,7 @@ func (w *WorkerGroup) tempSock(totalDuration float64, sockFileName string, encod
 		re := regexp.MustCompile(`out_time_ms=(\d+)`)
 		fd, err := l.Accept()
 		if err != nil {
-			log.Printf("encoder progress socket accept error: %v", err)
+			w.encodingTaskLog("progress_socket_accept_failed", task, time.Time{}, err)
 			return
 		}
 		defer fd.Close()
@@ -808,11 +795,17 @@ func (w *WorkerGroup) tempSock(totalDuration float64, sockFileName string, encod
 		data := ""
 		progress := ""
 		for {
-			_, err := fd.Read(buf)
+			n, err := fd.Read(buf)
 			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					w.encodingTaskLog("progress_socket_read_failed", task, time.Time{}, err)
+				}
 				return
 			}
-			data += string(buf)
+			data += string(buf[:n])
+			if len(data) > 4096 {
+				data = data[len(data)-4096:]
+			}
 			a := re.FindAllStringSubmatch(data, -1)
 			cp := ""
 			if len(a) > 0 && len(a[len(a)-1]) > 0 {
@@ -830,12 +823,15 @@ func (w *WorkerGroup) tempSock(totalDuration float64, sockFileName string, encod
 				// fmt.Println("progress: ", progress)
 				floatProg, err := strconv.ParseFloat(progress, 64)
 				if err != nil {
-					fmt.Println("could not save progress in database")
+					w.encodingTaskLog("progress_parse_failed", task, time.Time{}, err)
+					continue
 				}
 				if floatProg != 0 {
 					encodingTask.SetProcess(floatProg)
 				}
-				encodingTask.Save(w.deps.DB)
+				if result := encodingTask.Save(w.deps.DB); result.Error != nil {
+					w.encodingTaskLog("progress_persist_failed", task, time.Time{}, result.Error)
+				}
 			}
 		}
 	}()
@@ -843,11 +839,14 @@ func (w *WorkerGroup) tempSock(totalDuration float64, sockFileName string, encod
 	return sockFilePath
 }
 
-func (w *WorkerGroup) originalFileExists(fileId uint) bool {
-	if res := w.deps.DB.First(&models.File{}, fileId); res.Error != nil {
-		return false
+func (w *WorkerGroup) originalFileExists(fileID uint) (bool, error) {
+	if res := w.deps.DB.First(&models.File{}, fileID); res.Error != nil {
+		if errors.Is(res.Error, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, res.Error
 	}
-	return true
+	return true, nil
 }
 
 func (w *WorkerGroup) addActiveEncoding(encoding ActiveEncoding) {
@@ -880,7 +879,13 @@ func (w *WorkerGroup) deleteActiveEncoding(fileID uint, ID uint, Type string) {
 		}
 	}
 	if foundIndex < 0 {
-		log.Printf("Failed to delete an deleteActiveEncoding with the fileID %v and ID %v", fileID, ID)
+		w.encoderLogf(
+			"active_task_unregister_failed",
+			"task_type=%s file_id=%d task_id=%d",
+			Type,
+			fileID,
+			ID,
+		)
 		return
 	}
 
@@ -907,15 +912,18 @@ func (w *WorkerGroup) prepocessPgs(ctx context.Context, encodingTask models.Subt
 		"bash",
 		"-c",
 		ffmpegCommand)
+	diagnostics := newEncodingDiagnosticTail(8192)
+	cmd.Stdout = diagnostics
+	cmd.Stderr = diagnostics
 	if err := cmd.Run(); err != nil {
-		log.Println(ffmpegCommand)
-		return fmt.Errorf("Error happend while encoding subtitle: %v", err.Error())
+		return ffmpegEncodingError(ctx, err, diagnostics)
 	}
 
 	pgsFile, err := os.Open(ffmpegOutputFilePath)
 	if err != nil {
-		return fmt.Errorf("Error happend while opening pgs subtitle: %v", err.Error())
+		return fmt.Errorf("open extracted PGS subtitle: %w", err)
 	}
+	defer pgsFile.Close()
 
 	requestCtx, cancel := context.WithTimeout(ctx, time.Minute*5)
 	defer cancel()
@@ -926,14 +934,13 @@ func (w *WorkerGroup) prepocessPgs(ctx context.Context, encodingTask models.Subt
 		SetFileReader("file", "subtitle.sup", pgsFile).
 		Post(w.Config().PluginPgsServer)
 	if err != nil {
-		return fmt.Errorf("Error happend while scanning pgs subtitle: %v", err.Error())
+		return fmt.Errorf("send PGS subtitle to preprocessing service: %w", err)
 	}
 	if !res.IsSuccessState() {
-		return fmt.Errorf("Error happend waiting for srt from pgs plugin: %v", err)
-
+		return fmt.Errorf("PGS preprocessing service returned HTTP %d", res.StatusCode)
 	}
 	if err := os.WriteFile(pgsOutputFilePath, res.Bytes(), 0644); err != nil {
-		return fmt.Errorf("Error happend while saving srt from pgs: %v", err.Error())
+		return fmt.Errorf("save preprocessed PGS subtitle: %w", err)
 	}
 	*absFileInput = pgsOutputFilePath
 	return nil

@@ -6,6 +6,7 @@ import (
 	downloadsvc "ch/kirari04/videocms/download"
 	"ch/kirari04/videocms/logic"
 	"context"
+	"log"
 	"sync"
 	"time"
 )
@@ -21,7 +22,8 @@ type WorkerGroup struct {
 	activeEncodingJobs   int
 	encoderConfigChanged chan struct{}
 	encoderPollInterval  time.Duration
-	encodingTaskRunner   func(context.Context, EncodingTask)
+	encoderLogger        *log.Logger
+	encodingTaskRunner   func(context.Context, EncodingTask) error
 
 	activeDownloadsMu     sync.Mutex
 	activeDownloadCancels map[uint]context.CancelFunc
@@ -51,6 +53,7 @@ func NewWorkerGroup(deps *app.Deps, logicSvc *logic.Service) *WorkerGroup {
 		preparationTimeout:    downloadPreparationTimeout,
 		encoderConfigChanged:  make(chan struct{}, 1),
 		encoderPollInterval:   time.Second * 10,
+		encoderLogger:         log.Default(),
 		resourcesInterval:     time.Second * 10,
 	}
 }
