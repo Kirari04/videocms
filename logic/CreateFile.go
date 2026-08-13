@@ -163,17 +163,22 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 	if s.Deps == nil || s.Deps.Storage == nil || s.Deps.Storage.Layout() == nil {
 		return http.StatusInternalServerError, nil, false, storage.ErrStoreNotConfigured
 	}
-	storeID := s.Deps.Storage.DefaultStoreID()
 	sourceFileName := "original." + strings.ToLower(fileExt)
 	sourceKey, err := s.Deps.Storage.Layout().Source(fileId, sourceFileName)
 	if err != nil {
 		return http.StatusInternalServerError, nil, false, err
 	}
 	storageCtx := context.Background()
-	if _, err := s.Deps.Storage.PublishFile(storageCtx, storeID, sourceKey, *fromFile, storage.PutOptions{}); err != nil {
-		log.Printf("Failed to publish source file: %v", err)
+	storeID, releaseStore, err := s.publishUploadSource(storageCtx, userId, sourceKey, *fromFile)
+	if err != nil {
+		log.Printf("Failed to publish source file to storage pool: %v", err)
 		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
 	}
+	defer func() {
+		if releaseStore != nil {
+			releaseStore()
+		}
+	}()
 	sourceOwnedByRecord := false
 	defer func() {
 		if !sourceOwnedByRecord {
@@ -194,6 +199,7 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 			Hash:         FileHash,
 			Thumbnail:    thumbnailFileName,
 			StorageID:    storeID,
+			StorageState: models.FileStorageAvailable,
 			SourceKey:    sourceKey.String(),
 			Folder:       fmt.Sprintf("%s/%s", s.Config().FolderVideoQualitysPriv, fileId),
 			UserID:       userId,
@@ -222,6 +228,8 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
 	}
 	sourceOwnedByRecord = true
+	releaseStore()
+	releaseStore = nil
 	go func() {
 		if avgFramerate <= 0 {
 			return

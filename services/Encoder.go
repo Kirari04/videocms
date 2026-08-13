@@ -93,7 +93,9 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 	var encodingSubs []models.Subtitle
 	w.deps.DB.
 		Model(&models.Subtitle{}).
+		Joins("JOIN files ON files.id = subtitles.file_id").
 		Preload("File").
+		Where("files.storage_state = ?", models.FileStorageAvailable).
 		Where(&models.Subtitle{
 			Encoding: false,
 			Ready:    false,
@@ -122,7 +124,9 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 	if len(encodingSubs) < 10 {
 		w.deps.DB.
 			Model(&models.Audio{}).
+			Joins("JOIN files ON files.id = audios.file_id").
 			Preload("File").
+			Where("files.storage_state = ?", models.FileStorageAvailable).
 			Where(&models.Audio{
 				Encoding: false,
 				Ready:    false,
@@ -152,7 +156,9 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 	if len(encodingSubs) < 10 && len(encodingAudios) < 10 {
 		w.deps.DB.
 			Model(&models.Quality{}).
+			Joins("JOIN files ON files.id = qualities.file_id").
 			Preload("File").
+			Where("files.storage_state = ?", models.FileStorageAvailable).
 			Where(&models.Quality{
 				Encoding: false,
 				Ready:    false,

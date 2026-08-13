@@ -49,3 +49,7 @@ type Store interface {
 	Walk(ctx context.Context, prefix Key, fn func(ObjectInfo) error) error
 	Close() error
 }
+
+type HealthChecker interface {
+	Check(context.Context) error
+}

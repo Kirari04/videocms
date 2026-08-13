@@ -25,6 +25,7 @@ type LinkListItem struct {
 	Duration       float64
 	Thumbnail      string
 	Processing     bool
+	Available      bool
 }
 
 func (s *Service) buildLinkListItems(links []models.Link) *[]LinkListItem {
@@ -36,6 +37,10 @@ func (s *Service) buildLinkListItems(links []models.Link) *[]LinkListItem {
 				processing = true
 				break
 			}
+		}
+		available := link.File.StorageState != models.FileStorageUnavailable
+		if !available {
+			processing = false
 		}
 		items = append(items, LinkListItem{
 			ID:             link.ID,
@@ -49,6 +54,7 @@ func (s *Service) buildLinkListItems(links []models.Link) *[]LinkListItem {
 			Duration:       link.File.Duration,
 			Thumbnail:      s.ResolvedThumbnailURL(link),
 			Processing:     processing,
+			Available:      available,
 		})
 	}
 	return &items

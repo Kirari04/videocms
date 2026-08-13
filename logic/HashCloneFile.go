@@ -18,14 +18,42 @@ func (s *Service) CloneFileByHash(fromHash string, toFolder uint, fileName strin
 		}
 	}
 
-	// check file hash with database
-	var existingFile models.File
+	// Only reuse records whose storage is still available. An unavailable
+	// duplicate must fall through to a real upload so the new link is usable.
+	var candidates []models.File
 	if res := s.Deps.DB.
-		Where(&models.File{
-			Hash: fromHash,
-		}).First(&existingFile); res.Error != nil {
+		Where("hash = ? AND (storage_state IS NULL OR storage_state = '' OR storage_state = ?)", fromHash, models.FileStorageAvailable).
+		Order("id ASC").
+		Find(&candidates); res.Error != nil || len(candidates) == 0 {
 		return http.StatusNotFound, nil, errors.New("requested hash doesnt match any file")
 	}
+	var existingFile models.File
+	var releaseStore func()
+	for _, candidate := range candidates {
+		release := s.Deps.StorageLifecycle.ReadLock(candidate.StorageID)
+		var current models.File
+		if err := s.Deps.DB.
+			Where("id = ? AND (storage_state IS NULL OR storage_state = '' OR storage_state = ?)", candidate.ID, models.FileStorageAvailable).
+			First(&current).Error; err != nil {
+			release()
+			continue
+		}
+		if s.Deps.Storage == nil {
+			release()
+			continue
+		}
+		if _, err := s.Deps.Storage.StoreOrDefault(current.StorageID); err != nil {
+			release()
+			continue
+		}
+		existingFile = current
+		releaseStore = release
+		break
+	}
+	if releaseStore == nil {
+		return http.StatusNotFound, nil, errors.New("requested hash doesnt match any available file")
+	}
+	defer releaseStore()
 
 	// check storage quota
 	if status, err := s.CheckStorageQuota(userId, existingFile.Size, excludeSessionUUID); err != nil {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 )
 
 var ErrStoreNotConfigured = errors.New("storage store not configured")
@@ -12,6 +13,7 @@ var ErrStoreNotConfigured = errors.New("storage store not configured")
 // layout. Named stores allow records to retain their original location during
 // a gradual migration to another backend.
 type Service struct {
+	mu             sync.RWMutex
 	defaultStoreID string
 	stores         map[string]Store
 	layout         MediaLayout
@@ -67,11 +69,61 @@ func (s *Service) Store(id string) (Store, error) {
 	if s == nil {
 		return nil, ErrStoreNotConfigured
 	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	store, ok := s.stores[id]
 	if !ok || store == nil {
 		return nil, fmt.Errorf("%w: %s", ErrStoreNotConfigured, id)
 	}
 	return store, nil
+}
+
+// RegisterStore atomically mounts or replaces a named store. The returned
+// previous store is no longer discoverable but may still be in use by a
+// request that resolved it before the replacement, so callers must not close
+// it until those operations have drained.
+func (s *Service) RegisterStore(id string, store Store) (Store, error) {
+	if s == nil || id == "" || store == nil {
+		return nil, ErrStoreNotConfigured
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	previous := s.stores[id]
+	s.stores[id] = store
+	return previous, nil
+}
+
+// UnregisterStore removes an additional mount from future resolution. The
+// built-in default store cannot be unregistered.
+func (s *Service) UnregisterStore(id string) (Store, error) {
+	if s == nil || id == "" {
+		return nil, ErrStoreNotConfigured
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if id == s.defaultStoreID {
+		return nil, fmt.Errorf("cannot unmount built-in store %q", id)
+	}
+	store, ok := s.stores[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrStoreNotConfigured, id)
+	}
+	delete(s.stores, id)
+	return store, nil
+}
+
+func (s *Service) StoreIDs() []string {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ids := make([]string, 0, len(s.stores))
+	for id := range s.stores {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // StoreOrDefault resolves a persisted store ID. Empty IDs are treated as the
@@ -102,14 +154,20 @@ func (s *Service) Close() error {
 	if s == nil {
 		return nil
 	}
-	ids := make([]string, 0, len(s.stores))
-	for id := range s.stores {
+	s.mu.RLock()
+	stores := make(map[string]Store, len(s.stores))
+	for id, store := range s.stores {
+		stores[id] = store
+	}
+	s.mu.RUnlock()
+	ids := make([]string, 0, len(stores))
+	for id := range stores {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
 	var closeErr error
 	for _, id := range ids {
-		closeErr = errors.Join(closeErr, s.stores[id].Close())
+		closeErr = errors.Join(closeErr, stores[id].Close())
 	}
 	return closeErr
 }

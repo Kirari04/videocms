@@ -46,6 +46,7 @@ type GetFileResp struct {
 	ParentFolderID  uint
 	Size            int64
 	Duration        float64
+	Available       bool
 	Qualitys        []GetFileRespQuali
 	Subtitles       []GetFileRespSub
 	Audios          []GetFileRespAudio
@@ -131,6 +132,7 @@ func (s *Service) GetFile(LinkID uint, userID uint, isAdmin bool) (status int, f
 		ParentFolderID:  link.ParentFolderID,
 		Size:            link.File.Size,
 		Duration:        link.File.Duration,
+		Available:       link.File.StorageState != models.FileStorageUnavailable,
 		Qualitys:        Qualitys,
 		Subtitles:       Subtitles,
 		Audios:          Audios,

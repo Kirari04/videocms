@@ -31,6 +31,7 @@ func (w *WorkerGroup) runEncoderCleanup() {
 		Preload("Qualitys").
 		Preload("Subtitles").
 		Preload("Audios").
+		Where("storage_state = ?", models.FileStorageAvailable).
 		Where("path <> '' OR source_key <> ''").
 		Find(&dbReadyFiles); res.Error != nil {
 		log.Printf("Failed to get PossibleDeleteTargets: %v", res.Error)
