@@ -27,6 +27,8 @@ func (h *Handlers) UpdateSettings(c echo.Context) error {
 	remoteDownloadsNowDisabled := !settingFlagEnabled(validation.RemoteDownloadEnabled, true)
 	downloadsWereEnabled := settingFlagEnabled(previousSetting.DownloadEnabled, true)
 	downloadsNowDisabled := !settingFlagEnabled(validation.DownloadEnabled, true)
+	encoderConfigChanged := settingFlagEnabled(previousSetting.EncodingEnabled, true) != settingFlagEnabled(validation.EncodingEnabled, true) ||
+		strings.TrimSpace(previousSetting.MaxRunningEncodes) != strings.TrimSpace(validation.MaxRunningEncodes)
 
 	var setting models.Setting
 	setting.ID = validation.ID
@@ -118,6 +120,9 @@ func (h *Handlers) UpdateSettings(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	h.Deps.Snapshots.Replace(snapshot)
+	if h.Workers != nil && encoderConfigChanged {
+		h.Workers.NotifyEncoderConfigChanged()
+	}
 	if h.Workers != nil && remoteDownloadsWereEnabled && remoteDownloadsNowDisabled {
 		h.Workers.CancelAllRemoteDownloads("Remote downloads disabled by administrator")
 	}

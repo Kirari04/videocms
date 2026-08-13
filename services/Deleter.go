@@ -91,12 +91,8 @@ func (w *WorkerGroup) runDeleter() {
 		}
 
 		if encoding {
-			// kill ffmpeg process if active
-			for _, v := range w.activeEncodingsForFile(todo.ID) {
-				if v.FileID == todo.ID && v.Channel != nil {
-					*v.Channel <- true
-				}
-			}
+			// Cancel any active source transfer, encode, or output publication.
+			w.cancelActiveEncodingsForFile(todo.ID, "file queued for deletion")
 
 			// we will try again in the next loop (the encoding process may be finished until then)
 			skippingDeletion++
