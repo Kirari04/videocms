@@ -24,10 +24,8 @@ import (
 )
 
 type ActiveEncoding struct {
-	Type    string
-	FileID  uint
-	ID      uint       // qualityID | audioID | subID
-	Channel *chan bool // sending true will kill the encoding process
+	Task   EncodingTask
+	Cancel context.CancelFunc
 }
 
 type EncodingTask struct {
@@ -341,14 +339,19 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 func (w *WorkerGroup) startEncodingTask(ctx context.Context, task EncodingTask) {
 	go func() {
 		defer w.releaseEncodingSlot()
+		taskCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		w.addActiveEncoding(ActiveEncoding{Task: task, Cancel: cancel})
+		defer w.deleteActiveEncoding(task)
+
 		started := time.Now()
 		w.encodingTaskLog("task_started", task, time.Time{}, nil)
 
 		var err error
 		if w.encodingTaskRunner != nil {
-			err = w.encodingTaskRunner(ctx, task)
+			err = w.encodingTaskRunner(taskCtx, task)
 		} else {
-			err = w.runEncode(ctx, task)
+			err = w.runEncode(taskCtx, task)
 		}
 		if err != nil {
 			w.encodingTaskLog("task_failed", task, started, err)
@@ -462,28 +465,6 @@ func (w *WorkerGroup) runEncodeQuality(ctx context.Context, encodingTask models.
 	cmd.Stdout = diagnostics
 	cmd.Stderr = diagnostics
 
-	activeEncodingChannel := make(chan bool)
-	defer w.deleteActiveEncoding(encodingTask.FileID, encodingTask.ID, "quality")
-
-	w.addActiveEncoding(ActiveEncoding{
-		Type:    "quality",
-		FileID:  encodingTask.FileID,
-		ID:      encodingTask.ID,
-		Channel: &activeEncodingChannel,
-	})
-	go func() {
-		for {
-			_, ok := <-activeEncodingChannel
-			if !ok {
-				break
-			}
-			if cmd.Process != nil {
-				_ = cmd.Process.Kill()
-			}
-			w.encodingTaskLog("task_kill_requested", task, time.Time{}, nil)
-		}
-	}()
-
 	start := time.Now()
 	if err := cmd.Run(); err != nil {
 		return w.failEncodingTask(&encodingTask, ffmpegEncodingError(ctx, err, diagnostics))
@@ -571,28 +552,6 @@ func (w *WorkerGroup) runEncodeAudio(ctx context.Context, encodingTask models.Au
 	diagnostics := newEncodingDiagnosticTail(8192)
 	cmd.Stdout = diagnostics
 	cmd.Stderr = diagnostics
-
-	activeEncodingChannel := make(chan bool)
-	defer w.deleteActiveEncoding(encodingTask.FileID, encodingTask.ID, "audio")
-
-	w.addActiveEncoding(ActiveEncoding{
-		Type:    "audio",
-		FileID:  encodingTask.FileID,
-		ID:      encodingTask.ID,
-		Channel: &activeEncodingChannel,
-	})
-	go func() {
-		for {
-			_, ok := <-activeEncodingChannel
-			if !ok {
-				break
-			}
-			if cmd.Process != nil {
-				_ = cmd.Process.Kill()
-			}
-			w.encodingTaskLog("task_kill_requested", task, time.Time{}, nil)
-		}
-	}()
 
 	start := time.Now()
 	if err := cmd.Run(); err != nil {
@@ -730,27 +689,6 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 	diagnostics := newEncodingDiagnosticTail(8192)
 	cmd.Stdout = diagnostics
 	cmd.Stderr = diagnostics
-	activeEncodingChannel := make(chan bool)
-	defer w.deleteActiveEncoding(encodingTask.FileID, encodingTask.ID, "sub")
-
-	w.addActiveEncoding(ActiveEncoding{
-		Type:    "sub",
-		FileID:  encodingTask.FileID,
-		ID:      encodingTask.ID,
-		Channel: &activeEncodingChannel,
-	})
-	go func() {
-		for {
-			_, ok := <-activeEncodingChannel
-			if !ok {
-				break
-			}
-			if cmd.Process != nil {
-				_ = cmd.Process.Kill()
-			}
-			w.encodingTaskLog("task_kill_requested", task, time.Time{}, nil)
-		}
-	}()
 
 	start := time.Now()
 	if err := cmd.Run(); err != nil {
@@ -855,26 +793,42 @@ func (w *WorkerGroup) addActiveEncoding(encoding ActiveEncoding) {
 	w.activeEncodingsMu.Unlock()
 }
 
-func (w *WorkerGroup) activeEncodingsForFile(fileID uint) []ActiveEncoding {
+func (w *WorkerGroup) cancelActiveEncodingsForFile(fileID uint, reason string) int {
 	w.activeEncodingsMu.Lock()
-	defer w.activeEncodingsMu.Unlock()
-
 	encodings := make([]ActiveEncoding, 0)
 	for _, encoding := range w.activeEncodings {
-		if encoding.FileID == fileID {
+		if encoding.Task.FileID == fileID {
 			encodings = append(encodings, encoding)
 		}
 	}
-	return encodings
+	w.activeEncodingsMu.Unlock()
+
+	for _, encoding := range encodings {
+		w.encoderLogf(
+			"task_cancel_requested",
+			"task_type=%s file_id=%d file_uuid=%q task_id=%d task_name=%q storage_id=%q reason=%q",
+			encoding.Task.Type,
+			encoding.Task.FileID,
+			encoding.Task.FileUUID,
+			encoding.Task.ID,
+			encoding.Task.Name,
+			encoding.Task.StorageID,
+			reason,
+		)
+		if encoding.Cancel != nil {
+			encoding.Cancel()
+		}
+	}
+	return len(encodings)
 }
 
-func (w *WorkerGroup) deleteActiveEncoding(fileID uint, ID uint, Type string) {
+func (w *WorkerGroup) deleteActiveEncoding(task EncodingTask) {
 	w.activeEncodingsMu.Lock()
 	defer w.activeEncodingsMu.Unlock()
 
 	foundIndex := -1
 	for i, v := range w.activeEncodings {
-		if v.FileID == fileID && v.ID == ID && v.Type == Type {
+		if v.Task.FileID == task.FileID && v.Task.ID == task.ID && v.Task.Type == task.Type {
 			foundIndex = i
 		}
 	}
@@ -882,9 +836,9 @@ func (w *WorkerGroup) deleteActiveEncoding(fileID uint, ID uint, Type string) {
 		w.encoderLogf(
 			"active_task_unregister_failed",
 			"task_type=%s file_id=%d task_id=%d",
-			Type,
-			fileID,
-			ID,
+			task.Type,
+			task.FileID,
+			task.ID,
 		)
 		return
 	}

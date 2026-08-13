@@ -98,6 +98,46 @@ func TestEncodingDiagnosticTailIsBounded(t *testing.T) {
 	}
 }
 
+func TestCancelActiveEncodingsForFileUsesTaskContext(t *testing.T) {
+	worker := encoderTestWorker(t, true, 1, 1)
+	var logs bytes.Buffer
+	worker.encoderLogger = log.New(&logs, "", 0)
+	started := make(chan EncodingTask, 1)
+	canceled := make(chan struct{}, 1)
+	worker.encodingTaskRunner = func(ctx context.Context, task EncodingTask) error {
+		started <- task
+		<-ctx.Done()
+		canceled <- struct{}{}
+		return ctx.Err()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go worker.Encoder(ctx)
+	task := waitForEncodingStart(t, started)
+
+	if count := worker.cancelActiveEncodingsForFile(task.FileID, "test cancellation"); count != 1 {
+		t.Fatalf("canceled task count = %d, want 1", count)
+	}
+	waitForSignal(t, canceled, "encoding context cancellation")
+	waitForEncoderIdle(t, worker)
+	if count := worker.cancelActiveEncodingsForFile(task.FileID, "repeat cancellation"); count != 0 {
+		t.Fatalf("active task count after completion = %d, want 0", count)
+	}
+
+	output := logs.String()
+	for _, expected := range []string{
+		"component=encoder event=task_cancel_requested",
+		`reason="test cancellation"`,
+		"component=encoder event=task_failed",
+		`error="context canceled"`,
+	} {
+		if !strings.Contains(output, expected) {
+			t.Errorf("encoder cancellation log does not contain %q:\n%s", expected, output)
+		}
+	}
+}
+
 func TestEncoderStartsQueuedWorkWhenEnabledAtRuntime(t *testing.T) {
 	worker := encoderTestWorker(t, false, 1, 1)
 	started := make(chan EncodingTask, 1)
