@@ -1,6 +1,7 @@
 package services
 
 import (
+	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/models"
 	"context"
 	"crypto/sha256"
@@ -44,13 +45,103 @@ func (w *WorkerGroup) Encoder(ctx context.Context) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	w.limitChan = make(chan bool, w.Config().MaxRunningEncodes)
+
+	cfg := w.Config()
+	log.Printf(
+		"Encoder scheduler started (enabled=%t, max concurrent encodes=%d)",
+		encodingEnabled(cfg),
+		maxRunningEncodes(cfg),
+	)
+
 	for {
-		go w.loadEncodingTasks(ctx)
-		if !sleepContext(ctx, time.Second*10) {
+		if encodingEnabled(w.Config()) {
+			w.loadEncodingTasks(ctx)
+		}
+
+		interval := w.encoderPollInterval
+		if interval <= 0 {
+			interval = time.Second * 10
+		}
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
 			return
+		case <-w.encoderConfigChanged:
+			timer.Stop()
+		case <-timer.C:
 		}
 	}
+}
+
+// NotifyEncoderConfigChanged applies EncodingEnabled and MaxRunningEncodes
+// changes immediately. In-flight encodes are allowed to finish; disabling the
+// encoder only prevents new work from being claimed.
+func (w *WorkerGroup) NotifyEncoderConfigChanged() {
+	cfg := w.Config()
+	log.Printf(
+		"Encoder configuration updated (enabled=%t, max concurrent encodes=%d)",
+		encodingEnabled(cfg),
+		maxRunningEncodes(cfg),
+	)
+	w.wakeEncoder()
+}
+
+func encodingEnabled(cfg config.Config) bool {
+	return cfg.EncodingEnabled != nil && *cfg.EncodingEnabled
+}
+
+func maxRunningEncodes(cfg config.Config) int {
+	if cfg.MaxRunningEncodes < 1 {
+		return 1
+	}
+	return int(cfg.MaxRunningEncodes)
+}
+
+func (w *WorkerGroup) wakeEncoder() {
+	if w.encoderConfigChanged == nil {
+		return
+	}
+	select {
+	case w.encoderConfigChanged <- struct{}{}:
+	default:
+	}
+}
+
+func (w *WorkerGroup) availableEncodingSlots() int {
+	w.encoderMu.Lock()
+	defer w.encoderMu.Unlock()
+
+	cfg := w.Config()
+	if !encodingEnabled(cfg) {
+		return 0
+	}
+	available := maxRunningEncodes(cfg) - w.activeEncodingJobs
+	if available < 0 {
+		return 0
+	}
+	return available
+}
+
+func (w *WorkerGroup) tryReserveEncodingSlot() bool {
+	w.encoderMu.Lock()
+	defer w.encoderMu.Unlock()
+
+	cfg := w.Config()
+	if !encodingEnabled(cfg) || w.activeEncodingJobs >= maxRunningEncodes(cfg) {
+		return false
+	}
+	w.activeEncodingJobs++
+	return true
+}
+
+func (w *WorkerGroup) releaseEncodingSlot() {
+	w.encoderMu.Lock()
+	if w.activeEncodingJobs > 0 {
+		w.activeEncodingJobs--
+	}
+	w.encoderMu.Unlock()
+	w.wakeEncoder()
 }
 
 func (w *WorkerGroup) ResetEncodingState() {
@@ -86,12 +177,18 @@ func (w *WorkerGroup) ResetEncodingState() {
 }
 
 func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
-	var encodingTasks []EncodingTask
+	available := w.availableEncodingSlots()
+	if available == 0 {
+		return
+	}
+	if available > 10 {
+		available = 10
+	}
 
 	// we want to encode the subtitles first, then audio and in the end the qualities
 	// SUBTITLES
 	var encodingSubs []models.Subtitle
-	w.deps.DB.
+	result := w.deps.DB.
 		Model(&models.Subtitle{}).
 		Joins("JOIN files ON files.id = subtitles.file_id").
 		Preload("File").
@@ -101,28 +198,41 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 			Ready:    false,
 			Failed:   false,
 		}, "Encoding", "Ready", "Failed").
-		Order("id ASC").
-		Limit(10).
+		Order("subtitles.id ASC").
+		Limit(available).
 		Find(&encodingSubs)
+	if result.Error != nil {
+		log.Printf("Failed to load subtitles to encode: %v", result.Error)
+		return
+	}
 
 	if len(encodingSubs) > 0 {
 		log.Printf("Loaded %v subs to encode", len(encodingSubs))
 	}
 
-	for _, v := range encodingSubs {
+	for i := range encodingSubs {
+		v := &encodingSubs[i]
+		if !w.tryReserveEncodingSlot() {
+			return
+		}
 		v.Encoding = true
-		v.Save(w.deps.DB)
-		encodingTasks = append(encodingTasks, EncodingTask{
+		if result := v.Save(w.deps.DB); result.Error != nil {
+			w.releaseEncodingSlot()
+			log.Printf("Failed to claim subtitle %d for encoding: %v", v.ID, result.Error)
+			continue
+		}
+		w.startEncodingTask(ctx, EncodingTask{
 			Type:   "sub",
 			FileID: v.FileID,
 			ID:     v.ID,
 		})
+		available--
 	}
 
 	// AUDIOS
 	var encodingAudios []models.Audio
-	if len(encodingSubs) < 10 {
-		w.deps.DB.
+	if available > 0 {
+		result = w.deps.DB.
 			Model(&models.Audio{}).
 			Joins("JOIN files ON files.id = audios.file_id").
 			Preload("File").
@@ -132,29 +242,42 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 				Ready:    false,
 				Failed:   false,
 			}, "Encoding", "Ready", "Failed").
-			Order("id ASC").
-			Limit(10).
+			Order("audios.id ASC").
+			Limit(available).
 			Find(&encodingAudios)
+		if result.Error != nil {
+			log.Printf("Failed to load audios to encode: %v", result.Error)
+			return
+		}
 	}
 
 	if len(encodingAudios) > 0 {
 		log.Printf("Loaded %v audios to encode", len(encodingAudios))
 	}
 
-	for _, v := range encodingAudios {
+	for i := range encodingAudios {
+		v := &encodingAudios[i]
+		if !w.tryReserveEncodingSlot() {
+			return
+		}
 		v.Encoding = true
-		v.Save(w.deps.DB)
-		encodingTasks = append(encodingTasks, EncodingTask{
+		if result := v.Save(w.deps.DB); result.Error != nil {
+			w.releaseEncodingSlot()
+			log.Printf("Failed to claim audio %d for encoding: %v", v.ID, result.Error)
+			continue
+		}
+		w.startEncodingTask(ctx, EncodingTask{
 			Type:   "audio",
 			FileID: v.FileID,
 			ID:     v.ID,
 		})
+		available--
 	}
 
 	// QUALITYS
 	var encodingQualitys []models.Quality
-	if len(encodingSubs) < 10 && len(encodingAudios) < 10 {
-		w.deps.DB.
+	if available > 0 {
+		result = w.deps.DB.
 			Model(&models.Quality{}).
 			Joins("JOIN files ON files.id = qualities.file_id").
 			Preload("File").
@@ -164,39 +287,48 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 				Ready:    false,
 				Failed:   false,
 			}, "Encoding", "Ready", "Failed").
-			Order("id ASC").
-			Limit(10).
+			Order("qualities.id ASC").
+			Limit(available).
 			Find(&encodingQualitys)
+		if result.Error != nil {
+			log.Printf("Failed to load qualities to encode: %v", result.Error)
+			return
+		}
 	}
 
 	if len(encodingQualitys) > 0 {
 		log.Printf("Loaded %v qualitys to encode", len(encodingQualitys))
 	}
 
-	for _, v := range encodingQualitys {
+	for i := range encodingQualitys {
+		v := &encodingQualitys[i]
+		if !w.tryReserveEncodingSlot() {
+			return
+		}
 		v.Encoding = true
-		v.Save(w.deps.DB)
-		encodingTasks = append(encodingTasks, EncodingTask{
+		if result := v.Save(w.deps.DB); result.Error != nil {
+			w.releaseEncodingSlot()
+			log.Printf("Failed to claim quality %d for encoding: %v", v.ID, result.Error)
+			continue
+		}
+		w.startEncodingTask(ctx, EncodingTask{
 			Type:   "quality",
 			FileID: v.FileID,
 			ID:     v.ID,
 		})
+		available--
 	}
+}
 
-	// RUNNING ENCODING TASKS
-	for _, v := range encodingTasks {
-		select {
-		case <-ctx.Done():
+func (w *WorkerGroup) startEncodingTask(ctx context.Context, task EncodingTask) {
+	go func() {
+		defer w.releaseEncodingSlot()
+		if w.encodingTaskRunner != nil {
+			w.encodingTaskRunner(ctx, task)
 			return
-		case w.limitChan <- true:
 		}
-		go func(encodingTask EncodingTask) {
-			defer func() {
-				<-w.limitChan
-			}()
-			w.runEncode(ctx, encodingTask)
-		}(v)
-	}
+		w.runEncode(ctx, task)
+	}()
 }
 
 func (w *WorkerGroup) runEncode(ctx context.Context, encodingTaskInformation EncodingTask) {
