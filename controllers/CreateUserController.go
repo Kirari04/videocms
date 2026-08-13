@@ -16,6 +16,7 @@ type CreateUserRequest struct {
 	Balance               float64 `json:"balance"`
 	MaxRemoteDownloads    *int    `json:"maxRemoteDownloads" validate:"omitempty,min=1"`
 	RemoteDownloadEnabled *bool   `json:"remoteDownloadEnabled" validate:"omitempty,boolean"`
+	StoragePoolID         *uint   `json:"storagePoolId"`
 }
 
 func (h *Handlers) CreateUser(c echo.Context) error {
@@ -24,7 +25,7 @@ func (h *Handlers) CreateUser(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	status, user, err := h.Logic.CreateUser(req.Username, req.Password, req.Email, req.Admin, req.Storage, req.Balance, req.MaxRemoteDownloads, req.RemoteDownloadEnabled)
+	status, user, err := h.Logic.CreateUser(req.Username, req.Password, req.Email, req.Admin, req.Storage, req.Balance, req.MaxRemoteDownloads, req.RemoteDownloadEnabled, req.StoragePoolID)
 	if err != nil {
 		return c.String(status, err.Error())
 	}

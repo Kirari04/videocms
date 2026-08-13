@@ -11,7 +11,6 @@ import (
 	"log"
 	"math"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +24,7 @@ const (
 	PlayerStateQueued          = "queued"
 	PlayerStateFailed          = "failed"
 	PlayerStateCaptchaRequired = "captcha_required"
+	PlayerStateUnavailable     = "storage_unavailable"
 	PlayerStateNotFound        = "not_found"
 )
 
@@ -64,6 +64,12 @@ func (h *Handlers) PlayerController(c echo.Context) error {
 	if err != nil {
 		return c.Render(http.StatusNotFound, "404.html", echo.Map{})
 	}
+	if dbLink.File.StorageState == models.FileStorageUnavailable {
+		return c.Render(http.StatusServiceUnavailable, "error.html", echo.Map{
+			"Title": "Video unavailable",
+			"Error": "This video's storage is temporarily detached. Try again after an administrator reconnects it.",
+		})
+	}
 
 	if !h.playerCaptchaAllowed(c) {
 		return c.Redirect(http.StatusSeeOther, "/captcha/challenge?uuid="+dbLink.UUID)
@@ -99,15 +105,17 @@ func (h *Handlers) PlayerController(c echo.Context) error {
 
 	// List subtitles
 	for _, subItem := range dbLink.File.Subtitles {
-		if subItem.Ready {
-			subPath := fmt.Sprintf("%s/%s/%s/%s", h.Config().FolderVideoQualitysPriv, dbLink.File.UUID, subItem.UUID, subItem.OutputFile)
-			if subContent, err := os.ReadFile(subPath); err == nil {
-				jsonSubtitles = append(jsonSubtitles, map[string]string{
-					"data": base64.StdEncoding.EncodeToString(subContent),
-					"type": subItem.Type,
-					"name": subItem.Name,
-					"lang": subItem.Lang,
-				})
+		if subItem.Ready && h.Deps.Storage != nil && h.Deps.Storage.Layout() != nil {
+			key, keyErr := h.Deps.Storage.Layout().Subtitle(dbLink.File.UUID, subItem.UUID, subItem.OutputFile)
+			if keyErr == nil {
+				if subContent, err := h.readMediaObject(c, dbLink.File.StorageID, key, 16*1024*1024); err == nil {
+					jsonSubtitles = append(jsonSubtitles, map[string]string{
+						"data": base64.StdEncoding.EncodeToString(subContent),
+						"type": subItem.Type,
+						"name": subItem.Name,
+						"lang": subItem.Lang,
+					})
+				}
 			}
 		}
 	}
@@ -271,6 +279,15 @@ func (h *Handlers) playerCaptchaAllowed(c echo.Context) bool {
 }
 
 func BuildPlayerStatus(dbLink *models.Link) PlayerStatusResponse {
+	if dbLink != nil && dbLink.File.StorageState == models.FileStorageUnavailable {
+		return PlayerStatusResponse{
+			UUID:    dbLink.UUID,
+			Ready:   false,
+			State:   PlayerStateUnavailable,
+			Message: "This video's storage is temporarily detached.",
+			Tasks:   []PlayerStatusTask{},
+		}
+	}
 	status := PlayerStatusResponse{
 		UUID:    dbLink.UUID,
 		Ready:   false,
@@ -436,6 +453,7 @@ func buildMediaClaims(dbLink *models.Link) auth.MediaClaims {
 	return auth.MediaClaims{
 		LinkUUID:      dbLink.UUID,
 		FileUUID:      dbLink.File.UUID,
+		StorageID:     dbLink.File.StorageID,
 		UserID:        dbLink.UserID,
 		FileID:        dbLink.FileID,
 		QualityIDs:    qualityIDs,

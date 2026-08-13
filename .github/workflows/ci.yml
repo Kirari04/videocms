@@ -77,8 +77,39 @@ jobs:
       - name: Download modules
         run: go mod download
 
+      - name: Start Garage integration service
+        run: |
+          docker run --detach --name videocms-garage \
+            --publish 3900:3900 \
+            --volume "$PWD/.github/garage-ci.toml:/etc/garage.toml:ro" \
+            --env GARAGE_DEFAULT_ACCESS_KEY=GK0123456789abcdef0123456789abcdef \
+            --env GARAGE_DEFAULT_SECRET_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+            --env GARAGE_DEFAULT_BUCKET=videocms-ci \
+            dxflrs/garage:v2.3.0@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690 \
+            /garage server --single-node --default-bucket
+          for attempt in {1..30}; do
+            if docker exec videocms-garage /garage status >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs videocms-garage
+              exit 1
+            fi
+            sleep 1
+          done
+
       - name: Test
+        env:
+          VIDEOCMS_S3_INTEGRATION_ENDPOINT: http://127.0.0.1:3900
+          VIDEOCMS_S3_INTEGRATION_BUCKET: videocms-ci
+          VIDEOCMS_S3_INTEGRATION_REGION: garage
+          VIDEOCMS_S3_INTEGRATION_ACCESS_KEY_ID: GK0123456789abcdef0123456789abcdef
+          VIDEOCMS_S3_INTEGRATION_SECRET_ACCESS_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
         run: go test ./...
+
+      - name: Stop Garage integration service
+        if: always()
+        run: docker rm --force videocms-garage || true
 
       - name: Vet
         run: go vet ./...

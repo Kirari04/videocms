@@ -4,6 +4,7 @@ import (
 	"ch/kirari04/videocms/app"
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/models"
+	"ch/kirari04/videocms/storage"
 	"errors"
 	"net/http"
 	"os"
@@ -205,6 +206,18 @@ func writeThumbnailTestFile(t *testing.T, root string, fileUUID string, fileName
 }
 
 func thumbnailService(db *gorm.DB, privateRoot string, publicRoot string) *Service {
+	localStore, err := storage.NewLocalStore(privateRoot)
+	if err != nil {
+		panic(err)
+	}
+	storageService, err := storage.NewService(
+		"local",
+		storage.LegacyMediaLayout{},
+		map[string]storage.Store{"local": localStore},
+	)
+	if err != nil {
+		panic(err)
+	}
 	return NewService(&app.Deps{
 		DB: db,
 		Snapshots: app.NewSnapshotStore(app.Snapshot{
@@ -215,5 +228,6 @@ func thumbnailService(db *gorm.DB, privateRoot string, publicRoot string) *Servi
 			},
 		}),
 		RequestGate: app.NewRequestGate(),
+		Storage:     storageService,
 	})
 }

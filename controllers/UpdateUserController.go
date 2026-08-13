@@ -16,6 +16,7 @@ type UpdateUserRequest struct {
 	Balance               *float64 `json:"balance"`
 	MaxRemoteDownloads    *int     `json:"maxRemoteDownloads" validate:"omitempty,min=1"`
 	RemoteDownloadEnabled *bool    `json:"remoteDownloadEnabled" validate:"omitempty,boolean"`
+	StoragePoolID         *uint    `json:"storagePoolId"`
 }
 
 func (h *Handlers) UpdateUser(c echo.Context) error {
@@ -30,7 +31,7 @@ func (h *Handlers) UpdateUser(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	status, user, err := h.Logic.UpdateUser(id, req.Username, req.Email, req.Admin, req.Storage, req.Balance, req.MaxRemoteDownloads, req.RemoteDownloadEnabled)
+	status, user, err := h.Logic.UpdateUser(id, req.Username, req.Email, req.Admin, req.Storage, req.Balance, req.MaxRemoteDownloads, req.RemoteDownloadEnabled, req.StoragePoolID)
 	if err != nil {
 		return c.String(status, err.Error())
 	}

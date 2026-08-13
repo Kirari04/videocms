@@ -93,7 +93,9 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 	var encodingSubs []models.Subtitle
 	w.deps.DB.
 		Model(&models.Subtitle{}).
+		Joins("JOIN files ON files.id = subtitles.file_id").
 		Preload("File").
+		Where("files.storage_state = ?", models.FileStorageAvailable).
 		Where(&models.Subtitle{
 			Encoding: false,
 			Ready:    false,
@@ -122,7 +124,9 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 	if len(encodingSubs) < 10 {
 		w.deps.DB.
 			Model(&models.Audio{}).
+			Joins("JOIN files ON files.id = audios.file_id").
 			Preload("File").
+			Where("files.storage_state = ?", models.FileStorageAvailable).
 			Where(&models.Audio{
 				Encoding: false,
 				Ready:    false,
@@ -152,7 +156,9 @@ func (w *WorkerGroup) loadEncodingTasks(ctx context.Context) {
 	if len(encodingSubs) < 10 && len(encodingAudios) < 10 {
 		w.deps.DB.
 			Model(&models.Quality{}).
+			Joins("JOIN files ON files.id = qualities.file_id").
 			Preload("File").
+			Where("files.storage_state = ?", models.FileStorageAvailable).
 			Where(&models.Quality{
 				Encoding: false,
 				Ready:    false,
@@ -224,7 +230,26 @@ func (w *WorkerGroup) runEncodeQuality(ctx context.Context, encodingTask models.
 	// log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 
 	totalDuration := encodingTask.File.Duration
-	os.MkdirAll(encodingTask.Path, 0777)
+	absFileInput, cleanupInput, err := w.materializeEncodingSource(ctx, encodingTask.File)
+	if err != nil {
+		encodingTask.Ready = false
+		encodingTask.Encoding = false
+		encodingTask.Failed = true
+		encodingTask.Error = fmt.Sprintf("Failed to prepare source: %v", err)
+		w.deps.DB.Save(&encodingTask)
+		return
+	}
+	defer cleanupInput()
+	absFolderOutput, cleanupOutput, err := w.encodingOutputDirectory(ctx, "encode-quality", encodingTask.Path)
+	if err != nil {
+		encodingTask.Ready = false
+		encodingTask.Encoding = false
+		encodingTask.Failed = true
+		encodingTask.Error = fmt.Sprintf("Failed to prepare output: %v", err)
+		w.deps.DB.Save(&encodingTask)
+		return
+	}
+	defer cleanupOutput()
 
 	var frameRateString string
 	var segmenDuration int = 4
@@ -232,8 +257,6 @@ func (w *WorkerGroup) runEncodeQuality(ctx context.Context, encodingTask models.
 		frameRateString = fmt.Sprintf("-r %.4f", encodingTask.AvgFrameRate)
 	}
 
-	absFileInput, _ := filepath.Abs(encodingTask.File.Path)
-	absFolderOutput, _ := filepath.Abs(encodingTask.Path)
 	encFilePath := fmt.Sprintf("%s/%s", absFolderOutput, encodingTask.OutputFile)
 
 	var ffmpegCommand string = "echo Encoding type didnt match && exit 1"
@@ -308,6 +331,20 @@ func (w *WorkerGroup) runEncodeQuality(ctx context.Context, encodingTask models.
 		log.Println(ffmpegCommand)
 		return
 	}
+	if w.deps.Storage != nil && w.deps.Storage.Layout() != nil {
+		prefix, err := w.deps.Storage.Layout().VideoPrefix(encodingTask.File.UUID, encodingTask.Name)
+		if err == nil {
+			err = w.publishEncodingOutput(ctx, encodingTask.File, prefix, absFolderOutput)
+		}
+		if err != nil {
+			encodingTask.Ready = false
+			encodingTask.Encoding = false
+			encodingTask.Failed = true
+			encodingTask.Error = fmt.Sprintf("Failed to publish output: %v", err)
+			w.deps.DB.Save(&encodingTask)
+			return
+		}
+	}
 	duration := time.Since(start).Seconds()
 	w.logic.TrackEncoding(encodingTask.File.UserID, encodingTask.FileID, "quality", duration)
 
@@ -319,6 +356,7 @@ func (w *WorkerGroup) runEncodeQuality(ctx context.Context, encodingTask models.
 	encodingTask.Size = qualitySize
 	encodingTask.Encoding = false
 	encodingTask.Ready = true
+	encodingTask.Error = ""
 	w.deps.DB.Save(&encodingTask)
 }
 
@@ -336,10 +374,26 @@ func (w *WorkerGroup) runEncodeAudio(ctx context.Context, encodingTask models.Au
 	// log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 
 	totalDuration := encodingTask.File.Duration
-	os.MkdirAll(encodingTask.Path, 0777)
-
-	absFileInput, _ := filepath.Abs(encodingTask.File.Path)
-	absFolderOutput, _ := filepath.Abs(encodingTask.Path)
+	absFileInput, cleanupInput, err := w.materializeEncodingSource(ctx, encodingTask.File)
+	if err != nil {
+		encodingTask.Ready = false
+		encodingTask.Encoding = false
+		encodingTask.Failed = true
+		encodingTask.Error = fmt.Sprintf("Failed to prepare source: %v", err)
+		w.deps.DB.Save(&encodingTask)
+		return
+	}
+	defer cleanupInput()
+	absFolderOutput, cleanupOutput, err := w.encodingOutputDirectory(ctx, "encode-audio", encodingTask.Path)
+	if err != nil {
+		encodingTask.Ready = false
+		encodingTask.Encoding = false
+		encodingTask.Failed = true
+		encodingTask.Error = fmt.Sprintf("Failed to prepare output: %v", err)
+		w.deps.DB.Save(&encodingTask)
+		return
+	}
+	defer cleanupOutput()
 
 	var ffmpegCommand string = "echo Audioencoding type didnt match && exit 1"
 	switch encodingTask.Type {
@@ -405,11 +459,26 @@ func (w *WorkerGroup) runEncodeAudio(ctx context.Context, encodingTask models.Au
 		log.Println(ffmpegCommand)
 		return
 	}
+	if w.deps.Storage != nil && w.deps.Storage.Layout() != nil {
+		prefix, err := w.deps.Storage.Layout().AudioPrefix(encodingTask.File.UUID, encodingTask.UUID)
+		if err == nil {
+			err = w.publishEncodingOutput(ctx, encodingTask.File, prefix, absFolderOutput)
+		}
+		if err != nil {
+			encodingTask.Ready = false
+			encodingTask.Encoding = false
+			encodingTask.Failed = true
+			encodingTask.Error = fmt.Sprintf("Failed to publish output: %v", err)
+			w.deps.DB.Save(&encodingTask)
+			return
+		}
+	}
 	duration := time.Since(start).Seconds()
 	w.logic.TrackEncoding(encodingTask.File.UserID, encodingTask.FileID, "audio", duration)
 
 	encodingTask.Encoding = false
 	encodingTask.Ready = true
+	encodingTask.Error = ""
 	w.deps.DB.Save(&encodingTask)
 }
 
@@ -427,10 +496,26 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 	// log.Printf("Start encoding %s %s\n", encodingTask.File.UUID, encodingTask.Name)
 
 	totalDuration := encodingTask.File.Duration
-	os.MkdirAll(encodingTask.Path, 0777)
-
-	absFileInput, _ := filepath.Abs(encodingTask.File.Path)
-	absFolderOutput, _ := filepath.Abs(encodingTask.Path)
+	absFileInput, cleanupInput, err := w.materializeEncodingSource(ctx, encodingTask.File)
+	if err != nil {
+		encodingTask.Ready = false
+		encodingTask.Encoding = false
+		encodingTask.Failed = true
+		encodingTask.Error = fmt.Sprintf("Failed to prepare source: %v", err)
+		w.deps.DB.Save(&encodingTask)
+		return
+	}
+	defer cleanupInput()
+	absFolderOutput, cleanupOutput, err := w.encodingOutputDirectory(ctx, "encode-subtitle", encodingTask.Path)
+	if err != nil {
+		encodingTask.Ready = false
+		encodingTask.Encoding = false
+		encodingTask.Failed = true
+		encodingTask.Error = fmt.Sprintf("Failed to prepare output: %v", err)
+		w.deps.DB.Save(&encodingTask)
+		return
+	}
+	defer cleanupOutput()
 
 	var ffmpegCommand string = "echo Subencoding type didnt match && exit 1"
 
@@ -546,11 +631,26 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 		log.Println(ffmpegCommand)
 		return
 	}
+	if w.deps.Storage != nil && w.deps.Storage.Layout() != nil {
+		prefix, err := w.deps.Storage.Layout().SubtitlePrefix(encodingTask.File.UUID, encodingTask.UUID)
+		if err == nil {
+			err = w.publishEncodingOutput(ctx, encodingTask.File, prefix, absFolderOutput)
+		}
+		if err != nil {
+			encodingTask.Ready = false
+			encodingTask.Encoding = false
+			encodingTask.Failed = true
+			encodingTask.Error = fmt.Sprintf("Failed to publish output: %v", err)
+			w.deps.DB.Save(&encodingTask)
+			return
+		}
+	}
 	duration := time.Since(start).Seconds()
 	w.logic.TrackEncoding(encodingTask.File.UserID, encodingTask.FileID, "sub", duration)
 
 	encodingTask.Encoding = false
 	encodingTask.Ready = true
+	encodingTask.Error = ""
 	w.deps.DB.Save(&encodingTask)
 }
 

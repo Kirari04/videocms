@@ -81,6 +81,8 @@ type Config struct {
 	FolderVideoQualitysPub  string `validate:"required,min=1,max=255"`
 	FolderVideoQualitysPriv string `validate:"required,min=1,max=255"`
 	FolderVideoUploadsPriv  string `validate:"required,min=1,max=255"`
+	StorageScratchDir       string `validate:"required,min=1,max=255"`
+	StorageEncryptionKey    string `json:"-"`
 
 	CorsAllowOrigins     string
 	CorsAllowHeaders     string
@@ -241,6 +243,8 @@ func LoadEnv() Config {
 	env.FolderVideoQualitysPriv = getEnv("FolderVideoQualitysPriv", "./videos/qualitys")
 	env.FolderVideoQualitysPub = getEnv("FolderVideoQualitysPub", "/videos/qualitys")
 	env.FolderVideoUploadsPriv = getEnv("FolderVideoUploadsPriv", "./videos/uploads")
+	env.StorageScratchDir = getEnv("StorageScratchDir", "./videos/scratch")
+	env.StorageEncryptionKey = getEnv("StorageEncryptionKey", "")
 	env.StatsDriveName = getEnv("StatsDriveName", "nvme0n1")
 
 	return env

@@ -10,6 +10,9 @@ type File struct {
 	AvgFrameRate float64
 	Height       int64
 	Width        int64
+	StorageID    string `gorm:"size:64;index" json:"-"`
+	StorageState string `gorm:"size:16;index;default:available"`
+	SourceKey    string `gorm:"size:1024" json:"-"`
 	Path         string `gorm:"size:120;" json:"-"`
 	Folder       string `gorm:"size:120;" json:"-"`
 	User         User   `json:"-"`

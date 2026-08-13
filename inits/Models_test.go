@@ -17,6 +17,16 @@ type legacyWebPage struct {
 	ListInFooter bool
 }
 
+type legacyStoredFile struct {
+	models.Model
+	UUID string
+	Path string
+}
+
+func (legacyStoredFile) TableName() string {
+	return "files"
+}
+
 func (legacyWebPage) TableName() string {
 	return "web_pages"
 }
@@ -85,5 +95,70 @@ func TestMigrateModelsPreservesLegacyWebPages(t *testing.T) {
 	}
 	if traffic.Source != models.TrafficSourcePlayer || traffic.Bytes != 512 {
 		t.Fatalf("migrated traffic = %#v, want player source with 512 bytes", traffic)
+	}
+}
+
+func TestMigrateModelsBackfillsLegacyFileStorageID(t *testing.T) {
+	db, err := gorm.Open(
+		sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"),
+		&gorm.Config{},
+	)
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
+	}
+	if err := db.AutoMigrate(&legacyStoredFile{}); err != nil {
+		t.Fatalf("migrate legacy file: %v", err)
+	}
+	if err := db.Create(&legacyStoredFile{UUID: "legacy-file", Path: "/legacy/source.mp4"}).Error; err != nil {
+		t.Fatalf("create legacy file: %v", err)
+	}
+	deletedFile := legacyStoredFile{UUID: "deleted-legacy-file", Path: "/legacy/deleted.mp4"}
+	if err := db.Create(&deletedFile).Error; err != nil {
+		t.Fatalf("create deleted legacy file: %v", err)
+	}
+	if err := db.Delete(&deletedFile).Error; err != nil {
+		t.Fatalf("soft-delete legacy file: %v", err)
+	}
+	if err := MigrateModels(db); err != nil {
+		t.Fatalf("MigrateModels() error = %v", err)
+	}
+
+	var file models.File
+	if err := db.Where("uuid = ?", "legacy-file").First(&file).Error; err != nil {
+		t.Fatalf("load migrated file: %v", err)
+	}
+	if file.StorageID != "local" {
+		t.Fatalf("storage ID = %q, want local", file.StorageID)
+	}
+	if file.SourceKey != "" || file.Path != "/legacy/source.mp4" {
+		t.Fatalf("legacy source fields changed unexpectedly: %#v", file)
+	}
+	var deleted models.File
+	if err := db.Unscoped().Where("uuid = ?", "deleted-legacy-file").First(&deleted).Error; err != nil {
+		t.Fatalf("load migrated deleted file: %v", err)
+	}
+	if deleted.StorageID != "local" || !deleted.DeletedAt.Valid {
+		t.Fatalf("deleted file migration = %#v, want soft-deleted local record", deleted)
+	}
+	if deleted.StorageState != models.FileStorageAvailable || file.StorageState != models.FileStorageAvailable {
+		t.Fatalf("migrated storage states = %q/%q, want available", file.StorageState, deleted.StorageState)
+	}
+	var localMount models.StorageMount
+	if err := db.Where("uuid = ?", models.StorageMountLocalUUID).First(&localMount).Error; err != nil {
+		t.Fatalf("load local storage mount: %v", err)
+	}
+	if !localMount.Mounted || !localMount.System {
+		t.Fatalf("local storage mount = %#v", localMount)
+	}
+	var localPool models.StoragePool
+	if err := db.Where("uuid = ?", models.StoragePoolLocalUUID).First(&localPool).Error; err != nil {
+		t.Fatalf("load local storage pool: %v", err)
+	}
+	if !localPool.IsDefault || !localPool.System {
+		t.Fatalf("local storage pool = %#v", localPool)
+	}
+	var membership models.StoragePoolMount
+	if err := db.Where("storage_pool_id = ? AND storage_mount_id = ?", localPool.ID, localMount.ID).First(&membership).Error; err != nil {
+		t.Fatalf("load local storage pool membership: %v", err)
 	}
 }

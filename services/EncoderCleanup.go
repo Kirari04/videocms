@@ -2,7 +2,9 @@ package services
 
 import (
 	"ch/kirari04/videocms/models"
+	"ch/kirari04/videocms/storage"
 	"context"
+	"errors"
 	"log"
 	"os"
 	"time"
@@ -29,9 +31,8 @@ func (w *WorkerGroup) runEncoderCleanup() {
 		Preload("Qualitys").
 		Preload("Subtitles").
 		Preload("Audios").
-		Not(&models.File{
-			Path: "",
-		}, "Path").
+		Where("storage_state = ?", models.FileStorageAvailable).
+		Where("path <> '' OR source_key <> ''").
 		Find(&dbReadyFiles); res.Error != nil {
 		log.Printf("Failed to get PossibleDeleteTargets: %v", res.Error)
 		return
@@ -78,19 +79,63 @@ func (w *WorkerGroup) runEncoderCleanup() {
 		if qualityAmount == int64(len(dbReadyFile.Qualitys)) &&
 			subtitleAmount == int64(len(dbReadyFile.Subtitles)) &&
 			audioAmount == int64(len(dbReadyFile.Audios)) {
-			if err := os.Remove(dbReadyFile.Path); err != nil {
-				log.Printf("Failed to delete file from path (%v): %v", dbReadyFile.Path, err)
-				continue
+			if dbReadyFile.SourceKey != "" {
+				if w.deps.Storage == nil {
+					log.Printf("Failed to delete source object for file %d: storage is not configured", dbReadyFile.ID)
+					continue
+				}
+				store, err := w.deps.Storage.StoreOrDefault(dbReadyFile.StorageID)
+				if err != nil {
+					log.Printf("Failed to resolve source store for file %d: %v", dbReadyFile.ID, err)
+					continue
+				}
+				key, err := storage.ParseKey(dbReadyFile.SourceKey)
+				if err != nil {
+					log.Printf("Failed to parse source key for file %d: %v", dbReadyFile.ID, err)
+					continue
+				}
+				if err := store.Delete(context.Background(), key); err != nil {
+					log.Printf("Failed to delete source object %s: %v", dbReadyFile.SourceKey, err)
+					continue
+				}
+			}
+			if dbReadyFile.Path != "" {
+				if err := os.Remove(dbReadyFile.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
+					log.Printf("Failed to delete file from path (%v): %v", dbReadyFile.Path, err)
+					continue
+				}
 			}
 
 			// overwrite total filesize in file
-			newSize, err := dirSize(dbReadyFile.Folder)
+			newSize, err := w.storedFileSize(context.Background(), dbReadyFile)
 			if err != nil {
-				log.Printf("Failed to calc folder size after cleenup: %v", err)
+				log.Printf("Failed to calculate stored size after cleanup: %v", err)
+			} else {
+				dbReadyFile.Size = newSize
 			}
-			dbReadyFile.Size = newSize
 			dbReadyFile.Path = ""
+			dbReadyFile.SourceKey = ""
 			w.deps.DB.Save(&dbReadyFile)
 		}
 	}
+}
+
+func (w *WorkerGroup) storedFileSize(ctx context.Context, file models.File) (int64, error) {
+	if w.deps.Storage == nil || w.deps.Storage.Layout() == nil {
+		return dirSize(file.Folder)
+	}
+	store, err := w.deps.Storage.StoreOrDefault(file.StorageID)
+	if err != nil {
+		return 0, err
+	}
+	prefix, err := w.deps.Storage.Layout().FilePrefix(file.UUID)
+	if err != nil {
+		return 0, err
+	}
+	var size int64
+	err = store.Walk(ctx, prefix, func(info storage.ObjectInfo) error {
+		size += info.Size
+		return nil
+	})
+	return size, err
 }

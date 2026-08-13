@@ -58,6 +58,7 @@ COPY middlewares ./middlewares
 COPY models ./models
 COPY routes ./routes
 COPY services ./services
+COPY storage ./storage
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
@@ -103,6 +104,7 @@ ENV Host=:3000
 ENV FolderVideoQualitysPriv=./videos/qualitys
 ENV FolderVideoQualitysPub=/videos/qualitys
 ENV FolderVideoUploadsPriv=./videos/uploads
+ENV StorageScratchDir=./videos/scratch
 ENV StatsDriveName=nvme0n1
 
 EXPOSE 3000

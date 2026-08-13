@@ -199,6 +199,12 @@ func (w *WorkerGroup) processDownloadPreparation(parentCtx context.Context, job 
 	timeout := w.preparationTimeout(job.MediaDuration)
 	jobCtx, cancelTimeout := context.WithTimeout(parentCtx, timeout)
 	defer cancelTimeout()
+	cleanupInputs, err := downloadsvc.MaterializeSelection(jobCtx, w.deps.Storage, &link.File, selection)
+	if err != nil {
+		w.failDownloadJob(&job, "source_unavailable", "The selected tracks could not be prepared.", err)
+		return
+	}
+	defer cleanupInputs()
 
 	var progressMu sync.Mutex
 	lastProgress := float64(0)

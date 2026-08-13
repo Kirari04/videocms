@@ -3,7 +3,6 @@ package controllers
 import (
 	"ch/kirari04/videocms/helpers"
 	"net/http"
-	"os"
 
 	"github.com/labstack/echo/v4"
 )
@@ -18,18 +17,16 @@ func (h *Handlers) GetThumbnailData(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	_, filePath, userID, fileID, err := h.Logic.GetThumbnailData(requestValidation.FILE, requestValidation.UUID)
+	_, object, err := h.Logic.ResolveThumbnailObject(requestValidation.FILE, requestValidation.UUID)
 	if err != nil {
 		return c.NoContent(http.StatusNotFound)
 	}
-
-	fileInfo, err := os.Stat(*filePath)
-	if err == nil {
-		h.Logic.TrackTraffic(userID, fileID, 0, 0, uint64(fileInfo.Size()))
+	if h.Deps.Storage == nil || h.Deps.Storage.Layout() == nil {
+		return c.NoContent(http.StatusInternalServerError)
 	}
-
-	if err := c.File(*filePath); err != nil {
-		return c.NoContent(http.StatusNotFound)
+	key, err := h.Deps.Storage.Layout().Thumbnail(object.FileUUID, requestValidation.FILE)
+	if err != nil {
+		return c.NoContent(http.StatusBadRequest)
 	}
-	return nil
+	return h.serveMediaObject(c, object.StoreID, key, "", mediaTraffic{userID: object.UserID, fileID: object.FileID})
 }

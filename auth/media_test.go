@@ -15,6 +15,7 @@ func TestGenerateAndVerifyMediaToken(t *testing.T) {
 	tokenString, expires, err := authSvc.GenerateMediaToken(MediaClaims{
 		LinkUUID:      "link-uuid",
 		FileUUID:      "file-uuid",
+		StorageID:     "archive",
 		UserID:        1,
 		FileID:        2,
 		QualityIDs:    map[string]uint{"720p": 3},
@@ -37,6 +38,9 @@ func TestGenerateAndVerifyMediaToken(t *testing.T) {
 	}
 	if claims.LinkUUID != "link-uuid" || claims.FileUUID != "file-uuid" {
 		t.Fatalf("unexpected claims: %+v", claims)
+	}
+	if claims.StorageID != "archive" {
+		t.Fatalf("storage ID was not preserved: %q", claims.StorageID)
 	}
 	if claims.QualityIDs["720p"] != 3 {
 		t.Fatalf("quality id was not preserved: %+v", claims.QualityIDs)
