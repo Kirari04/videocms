@@ -6,6 +6,7 @@ import (
 	downloadsvc "ch/kirari04/videocms/download"
 	"ch/kirari04/videocms/logic"
 	"context"
+	"log"
 	"sync"
 	"time"
 )
@@ -16,7 +17,13 @@ type WorkerGroup struct {
 
 	activeEncodingsMu sync.Mutex
 	activeEncodings   []ActiveEncoding
-	limitChan         chan bool
+
+	encoderMu            sync.Mutex
+	activeEncodingJobs   int
+	encoderConfigChanged chan struct{}
+	encoderPollInterval  time.Duration
+	encoderLogger        *log.Logger
+	encodingTaskRunner   func(context.Context, EncodingTask) error
 
 	activeDownloadsMu     sync.Mutex
 	activeDownloadCancels map[uint]context.CancelFunc
@@ -44,6 +51,9 @@ func NewWorkerGroup(deps *app.Deps, logicSvc *logic.Service) *WorkerGroup {
 		activePreparations:    map[uint]activeDownloadPreparation{},
 		downloadAssembler:     downloadsvc.FFmpegAssembler{},
 		preparationTimeout:    downloadPreparationTimeout,
+		encoderConfigChanged:  make(chan struct{}, 1),
+		encoderPollInterval:   time.Second * 10,
+		encoderLogger:         log.Default(),
 		resourcesInterval:     time.Second * 10,
 	}
 }
@@ -57,11 +67,11 @@ func (w *WorkerGroup) Start(ctx context.Context) {
 		ctx = context.Background()
 	}
 
-	cfg := w.Config()
-	if cfg.EncodingEnabled != nil && *cfg.EncodingEnabled {
-		w.ResetEncodingState()
-		go w.Encoder(ctx)
-	}
+	// Reset jobs left in progress by a previous process before starting the
+	// scheduler. The scheduler stays alive while encoding is disabled so an
+	// administrator can enable it without restarting the application.
+	w.ResetEncodingState()
+	go w.Encoder(ctx)
 
 	go w.Downloader(ctx)
 	go w.DownloadPreparer(ctx)
