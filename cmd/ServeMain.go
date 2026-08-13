@@ -20,6 +20,13 @@ func ServeMain() {
 		log.Println("failed to initialize runtime:", err)
 		os.Exit(1)
 	}
+	if deps.Storage != nil {
+		defer func() {
+			if err := deps.Storage.Close(); err != nil {
+				log.Printf("failed to close storage: %v", err)
+			}
+		}()
+	}
 
 	// sync UserRequestAsync
 	deps.RequestGate.Sync(true)

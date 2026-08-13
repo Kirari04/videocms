@@ -6,6 +6,7 @@ import (
 	"ch/kirari04/videocms/configdb"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
+	"ch/kirari04/videocms/storage"
 	"log"
 	"os"
 	"time"
@@ -41,11 +42,31 @@ func InitRuntime() (*app.Deps, error) {
 	if err := inits.EnsureFolders(snapshot.Config); err != nil {
 		return nil, err
 	}
+	localMediaStore, err := storage.NewLocalStore(snapshot.Config.FolderVideoQualitysPriv)
+	if err != nil {
+		return nil, err
+	}
+	workspace, err := storage.NewLocalWorkspace(snapshot.Config.StorageScratchDir)
+	if err != nil {
+		_ = localMediaStore.Close()
+		return nil, err
+	}
+	storageService, err := storage.NewServiceWithWorkspace(
+		"local",
+		storage.LegacyMediaLayout{},
+		workspace,
+		map[string]storage.Store{"local": localMediaStore},
+	)
+	if err != nil {
+		_ = localMediaStore.Close()
+		return nil, err
+	}
 
 	return &app.Deps{
 		DB:          db,
 		Snapshots:   app.NewSnapshotStore(snapshot),
 		Cache:       cache.New(5*time.Minute, 10*time.Minute),
 		RequestGate: app.NewRequestGate(),
+		Storage:     storageService,
 	}, nil
 }

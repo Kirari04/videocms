@@ -1,6 +1,8 @@
 package logic
 
 import (
+	"ch/kirari04/videocms/storage"
+	"context"
 	"fmt"
 	"log"
 	"math"
@@ -12,18 +14,23 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func (s *Service) CreateThumbnail(imageCountAxis int, inputFile string, height int, outputFile string, outputFolder string, videoDuration float64, fps float64) (status int, err error) {
-	// read file & folder
-	absOutputFolder, err := filepath.Abs(outputFolder)
-	if err != nil {
-		return http.StatusBadRequest, err
-	}
-	os.MkdirAll(absOutputFolder, 0777)
+func (s *Service) CreateThumbnail(imageCountAxis int, inputFile string, height int, outputFile string, fileUUID string, videoDuration float64, fps float64) (status int, err error) {
+	return s.CreateThumbnailInStore(imageCountAxis, inputFile, height, outputFile, fileUUID, "", videoDuration, fps)
+}
 
+func (s *Service) CreateThumbnailInStore(imageCountAxis int, inputFile string, height int, outputFile string, fileUUID string, storeID string, videoDuration float64, fps float64) (status int, err error) {
 	absInputFile, err := filepath.Abs(inputFile)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
+	if s.Deps == nil || s.Deps.Storage == nil || s.Deps.Storage.Workspace() == nil {
+		return http.StatusInternalServerError, storage.ErrStoreNotConfigured
+	}
+	tempOutputFolder, cleanupOutput, err := s.Deps.Storage.Workspace().TempDir(context.Background(), "generated-thumbnail")
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	defer cleanupOutput()
 
 	// build ffmpeg command
 	imageCount := imageCountAxis * imageCountAxis
@@ -71,15 +78,15 @@ func (s *Service) CreateThumbnail(imageCountAxis int, inputFile string, height i
 
 	ffmpegCommand += filterComplex
 
-	ffmpegCommand += fmt.Sprintf("%s/%s -y", absOutputFolder, outputFile)
+	outputPath := filepath.Join(tempOutputFolder, outputFile)
+	ffmpegCommand += fmt.Sprintf("%s -y", outputPath)
 
 	ffmpegCommandSimpleImage := fmt.Sprintf(
-		`ffmpeg -i %s -ss %.2f -vf scale=-1:%d -vframes 1 %s/%s -y`,
+		`ffmpeg -i %s -ss %.2f -vf scale=-1:%d -vframes 1 %s -y`,
 		absInputFile,
 		videoDuration/2,
 		imageFullHeight,
-		absOutputFolder,
-		outputFile,
+		outputPath,
 	)
 
 	cmd := exec.Command(
@@ -102,6 +109,32 @@ func (s *Service) CreateThumbnail(imageCountAxis int, inputFile string, height i
 			return http.StatusInternalServerError, echo.ErrInternalServerError
 		}
 
+	}
+
+	store, layout, err := s.mediaStorage(storeID)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	key, err := layout.Thumbnail(fileUUID, outputFile)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	output, err := os.Open(outputPath)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	defer output.Close()
+	info, err := output.Stat()
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	expectedSize := info.Size()
+	if _, err := store.Put(context.Background(), key, output, storage.PutOptions{
+		ContentType:  "image/webp",
+		CacheControl: "public, max-age=3600",
+		ExpectedSize: &expectedSize,
+	}); err != nil {
+		return http.StatusInternalServerError, err
 	}
 
 	return http.StatusOK, nil
