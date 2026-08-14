@@ -1,8 +1,10 @@
 package controllers
 
 import (
+	"ch/kirari04/videocms/background"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/models"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 )
@@ -48,39 +51,93 @@ func (h *Handlers) CreateRemoteDownload(c echo.Context) error {
 		}
 	}
 
-	maxDownloads := user.Settings.EffectiveMaxRemoteDownloads()
+	rawRequestKey := strings.TrimSpace(c.Request().Header.Get("Idempotency-Key"))
+	if rawRequestKey == "" {
+		rawRequestKey = uuid.NewString()
+	}
+	requestKey := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("remote:%d:%s", userId, rawRequestKey))))
 
-	var currentCount int64
-	h.Deps.DB.Model(&models.RemoteDownload{}).
-		Where("user_id = ? AND status IN ?", userId, models.ActiveRemoteDownloadStatuses()).
-		Count(&currentCount)
-
-	if currentCount+int64(len(req.Urls)) > int64(maxDownloads) {
-		return c.String(http.StatusTooManyRequests, "Queue limit reached")
+	// The request key is stored on each domain row, not just the background
+	// job. This lets a client safely replay after a crash between the two
+	// database writes without creating orphaned downloads.
+	h.remoteDownloadCreateMu.Lock()
+	defer h.remoteDownloadCreateMu.Unlock()
+	var existing []models.RemoteDownload
+	if err := h.Deps.DB.Where("user_id = ? AND request_key = ?", userId, requestKey).Order("request_index ASC").Find(&existing).Error; err != nil {
+		return c.String(http.StatusInternalServerError, "Failed to inspect download request")
+	}
+	byIndex := make(map[int]models.RemoteDownload, len(existing))
+	for _, download := range existing {
+		byIndex[download.RequestIndex] = download
+	}
+	missing := len(req.Urls) - len(existing)
+	if missing < 0 {
+		return c.String(http.StatusConflict, "Idempotency key was already used for a different request")
+	}
+	for index, rawURL := range req.Urls {
+		if download, ok := byIndex[index]; ok && (download.Url != strings.TrimSpace(rawURL) || download.ParentFolderID != req.ParentFolderID) {
+			return c.String(http.StatusConflict, "Idempotency key was already used for a different request")
+		}
+	}
+	if missing > 0 {
+		var currentCount int64
+		if err := h.Deps.DB.Model(&models.RemoteDownload{}).Where("user_id = ? AND status IN ?", userId, models.ActiveRemoteDownloadStatuses()).Count(&currentCount).Error; err != nil {
+			return c.String(http.StatusInternalServerError, "Failed to inspect download queue")
+		}
+		if currentCount+int64(missing) > int64(user.Settings.EffectiveMaxRemoteDownloads()) {
+			return c.String(http.StatusTooManyRequests, "Queue limit reached")
+		}
 	}
 
-	// Create records
-	var created []models.RemoteDownload
+	created := make([]models.RemoteDownload, len(req.Urls))
 	if err := h.Deps.DB.Transaction(func(tx *gorm.DB) error {
-		for _, rawURL := range req.Urls {
+		for index, rawURL := range req.Urls {
+			if download, ok := byIndex[index]; ok {
+				created[index] = download
+				continue
+			}
 			download := models.RemoteDownload{
-				UserID:         userId,
-				ParentFolderID: req.ParentFolderID,
-				Url:            strings.TrimSpace(rawURL),
-				Status:         models.RemoteDownloadStatusPending,
-				Progress:       0,
+				RequestKey: requestKey, RequestIndex: index, UserID: userId,
+				ParentFolderID: req.ParentFolderID, Url: strings.TrimSpace(rawURL),
+				Status: models.RemoteDownloadStatusPending, Progress: 0,
 			}
-			if res := tx.Create(&download); res.Error != nil {
-				return res.Error
+			if err := tx.Create(&download).Error; err != nil {
+				return err
 			}
-			created = append(created, download)
+			created[index] = download
 		}
 		return nil
 	}); err != nil {
 		return c.String(http.StatusInternalServerError, "Failed to create download task")
 	}
+	if h.Deps.Background != nil {
+		for index := range created {
+			download := &created[index]
+			if download.BackgroundJobID != "" {
+				continue
+			}
+			ownerID := userId
+			job, _, err := h.background().Enqueue(c.Request().Context(), background.JobSpec{
+				Kind: "remote.ingest", Visibility: background.VisibilityUser, OwnerID: &ownerID,
+				SubjectType: "remote_download", SubjectID: strconv.FormatUint(uint64(download.ID), 10),
+				IdempotencyKey: fmt.Sprintf("remote:%s:%d", requestKey, index), Label: "Remote download",
+				Tasks: []background.TaskSpec{{
+					Kind: "remote.fetch", Queue: background.QueueNetwork, Phase: "Downloading",
+					Payload: map[string]any{"remoteDownloadId": download.ID}, DedupeKey: fmt.Sprintf("remote:%d", download.ID),
+					Priority: 30, Required: true, Weight: 60,
+				}},
+			})
+			if err != nil {
+				return c.String(http.StatusInternalServerError, "Failed to queue remote download")
+			}
+			download.BackgroundJobID = job.ID
+			if err := h.Deps.DB.Model(download).Update("background_job_id", job.ID).Error; err != nil {
+				return c.String(http.StatusInternalServerError, "Failed to link remote download job")
+			}
+		}
+	}
 
-	return c.JSON(http.StatusCreated, created)
+	return c.JSON(http.StatusAccepted, created)
 }
 
 func (h *Handlers) ListRemoteDownloads(c echo.Context) error {
@@ -121,7 +178,21 @@ func (h *Handlers) CancelRemoteDownload(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid download ID")
 	}
 
-	status, err := h.Workers.CancelRemoteDownload(c.Get("UserID").(uint), downloadID)
+	userID := c.Get("UserID").(uint)
+	var download models.RemoteDownload
+	if err := h.Deps.DB.Where("id = ? AND user_id = ?", downloadID, userID).First(&download).Error; err != nil {
+		return c.String(http.StatusNotFound, "download not found")
+	}
+	if download.BackgroundJobID != "" && h.Deps.Background != nil {
+		username, _ := c.Get("Username").(string)
+		if err := h.Deps.Background.CancelJob(c.Request().Context(), download.BackgroundJobID, userID, username); err != nil {
+			return backgroundAPIError(c, err)
+		}
+		now := time.Now()
+		_ = h.Deps.DB.Model(&download).Updates(map[string]any{"status": models.RemoteDownloadStatusCanceled, "error": "Download canceled", "finished_at": &now, "canceled_at": &now}).Error
+		return c.String(http.StatusAccepted, "ok")
+	}
+	status, err := h.Workers.CancelRemoteDownload(userID, downloadID)
 	if err != nil {
 		return c.String(status, err.Error())
 	}
@@ -138,6 +209,14 @@ func (h *Handlers) RetryRemoteDownload(c echo.Context) error {
 	download, status, err := h.retryRemoteDownload(userID, downloadID)
 	if err != nil {
 		return c.String(status, err.Error())
+	}
+	if download.BackgroundJobID != "" && h.Deps.Background != nil {
+		username, _ := c.Get("Username").(string)
+		if err := h.Deps.Background.RetryJob(c.Request().Context(), download.BackgroundJobID, userID, username); err != nil {
+			return backgroundAPIError(c, err)
+		}
+		h.Deps.Background.Wake()
+		status = http.StatusAccepted
 	}
 	return c.JSON(status, download)
 }

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"ch/kirari04/videocms/background"
 	"ch/kirari04/videocms/models"
 	"context"
 	"errors"
@@ -147,6 +148,16 @@ func (w *WorkerGroup) processDownload(parentCtx context.Context, task models.Rem
 		downloadCtx, cancelTimeout = context.WithTimeout(parentCtx, time.Duration(cfg.RemoteDownloadTimeout)*time.Second)
 	}
 	defer cancelTimeout()
+	if w.recoverImportedRemote(&task) {
+		return
+	}
+	if task.Status == models.RemoteDownloadStatusImporting && task.TempPath != "" {
+		if info, err := os.Stat(task.TempPath); err == nil && info.Size() > 0 {
+			task.BytesDownloaded = info.Size()
+			w.importRemoteTemp(downloadCtx, &task, task.TempPath, task.Name)
+			return
+		}
+	}
 
 	req, err := http.NewRequestWithContext(downloadCtx, http.MethodGet, task.Url, nil)
 	if err != nil {
@@ -233,25 +244,30 @@ func (w *WorkerGroup) processDownload(parentCtx context.Context, task models.Rem
 	task.Status = models.RemoteDownloadStatusImporting
 	task.Progress = 0.95
 
-	fileUUID := uuid.NewString()
-	status, dbLink, cloned, err := w.logic.CreateFile(&tempPath, task.ParentFolderID, task.Name, fileUUID, task.BytesDownloaded, task.UserID, "")
+	w.importRemoteTemp(downloadCtx, &task, tempPath, fileName)
+}
+
+func (w *WorkerGroup) importRemoteTemp(downloadCtx context.Context, task *models.RemoteDownload, tempPath, fileName string) {
+	fileUUID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(fmt.Sprintf("videocms:remote-download:%d:%d", task.UserID, task.ID))).String()
+	creationToken := fmt.Sprintf("remote:%d", task.ID)
+	status, dbLink, cloned, err := w.logic.CreateFileContext(downloadCtx, &tempPath, task.ParentFolderID, task.Name, fileUUID, task.BytesDownloaded, task.UserID, creationToken)
 	if err != nil {
 		cleanupRemoteTemp(tempPath, fileName)
-		w.failDownload(&task, fmt.Sprintf("Import failed (status %d): %v", status, err))
+		w.failDownload(task, fmt.Sprintf("Import failed (status %d): %v", status, err))
 		return
 	}
 	if dbLink == nil {
 		cleanupRemoteTemp(tempPath, fileName)
-		w.failDownload(&task, "Import failed: missing created link")
+		w.failDownload(task, "Import failed: missing created link")
 		return
 	}
 
-	if w.isCancelRequested(task.ID) {
+	if w.isCancelRequested(task.ID) || downloadCtx.Err() != nil {
 		_ = w.deleteImportedRemoteLink(task.UserID, dbLink.ID)
 		if cloned {
 			cleanupRemoteTemp(tempPath, fileName)
 		}
-		w.finishCanceled(&task, "Download canceled")
+		w.finishCanceled(task, "Download canceled")
 		return
 	}
 
@@ -259,6 +275,25 @@ func (w *WorkerGroup) processDownload(parentCtx context.Context, task models.Rem
 		cleanupRemoteTemp(tempPath, fileName)
 	}
 
+	if err := w.completeRemoteImport(task, dbLink); err != nil {
+		w.failDownload(task, "Import completed but its result could not be saved")
+	}
+}
+
+func (w *WorkerGroup) recoverImportedRemote(task *models.RemoteDownload) bool {
+	creationKey := fmt.Sprintf("upload:%d:remote:%d", task.UserID, task.ID)
+	var link models.Link
+	if err := w.deps.DB.Where("creation_key = ?", creationKey).First(&link).Error; err != nil {
+		return false
+	}
+	if err := w.completeRemoteImport(task, &link); err != nil {
+		return false
+	}
+	cleanupRemoteTemp(task.TempPath, task.Name)
+	return true
+}
+
+func (w *WorkerGroup) completeRemoteImport(task *models.RemoteDownload, link *models.Link) error {
 	finishTime := time.Now()
 	duration := 0.0
 	if task.StartedAt != nil {
@@ -269,14 +304,17 @@ func (w *WorkerGroup) processDownload(parentCtx context.Context, task models.Rem
 	task.FinishedAt = &finishTime
 	task.Progress = 1.0
 	task.Duration = duration
-	task.LinkID = dbLink.ID
-	task.LinkUUID = dbLink.UUID
-	task.FileID = dbLink.FileID
+	task.LinkID = link.ID
+	task.LinkUUID = link.UUID
+	task.FileID = link.FileID
 	task.Error = ""
 	task.TempPath = ""
-	w.deps.DB.Save(&task)
+	if err := w.deps.DB.Save(task).Error; err != nil {
+		return err
+	}
 
-	w.logStats(task)
+	w.logStats(*task)
+	return nil
 }
 
 func secureHTTPClient() *http.Client {
@@ -435,6 +473,9 @@ func (w *WorkerGroup) copyRemoteBody(ctx context.Context, src io.Reader, dst io.
 					"bytes_downloaded": task.BytesDownloaded,
 					"progress":         task.Progress,
 				})
+				if task.TotalSize > 0 {
+					background.ReportProgress(ctx, task.Progress*0.9, "Downloading remote video")
+				}
 				lastUpdate = time.Now()
 			}
 		}
@@ -448,6 +489,9 @@ func (w *WorkerGroup) copyRemoteBody(ctx context.Context, src io.Reader, dst io.
 					"bytes_downloaded": task.BytesDownloaded,
 					"progress":         task.Progress,
 				})
+				if task.TotalSize > 0 {
+					background.ReportProgress(ctx, task.Progress*0.9, "Downloading remote video")
+				}
 				return downloaded, nil
 			}
 			return downloaded, readErr
@@ -512,6 +556,7 @@ func (w *WorkerGroup) deleteImportedRemoteLink(userID uint, linkID uint) error {
 	if linkID == 0 {
 		return nil
 	}
+	_ = w.deps.DB.Model(&models.Link{}).Where("id = ? AND user_id = ?", linkID, userID).Update("creation_key", "").Error
 	_, err := w.logic.DeleteFiles(&models.LinksDeleteValidation{
 		LinkIDs: []models.LinkDeleteValidation{{LinkID: linkID}},
 	}, userID, false)
@@ -670,10 +715,11 @@ func (w *WorkerGroup) logStats(task models.RemoteDownload) {
 	}
 
 	stat := models.RemoteDownloadLog{
-		UserID:  task.UserID,
-		Domain:  domain,
-		Bytes:   uint64(task.BytesDownloaded),
-		Seconds: task.Duration,
+		RemoteDownloadID: task.ID,
+		UserID:           task.UserID,
+		Domain:           domain,
+		Bytes:            uint64(task.BytesDownloaded),
+		Seconds:          task.Duration,
 	}
-	w.deps.DB.Create(&stat)
+	w.deps.DB.Where("remote_download_id = ?", task.ID).FirstOrCreate(&stat)
 }

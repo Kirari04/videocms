@@ -1,9 +1,11 @@
 package inits
 
 import (
+	"ch/kirari04/videocms/background"
 	"ch/kirari04/videocms/models"
 	"errors"
 	"fmt"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -81,6 +83,12 @@ func MigrateModels(gormDB *gorm.DB) error {
 		&models.DownloadJob{},
 	); err != nil {
 		return err
+	}
+	if err := background.Migrate(gormDB); err != nil {
+		return fmt.Errorf("failed to migrate background work tables: %w", err)
+	}
+	if err := background.BackfillLegacy(gormDB, time.Now()); err != nil {
+		return fmt.Errorf("failed to backfill background work: %w", err)
 	}
 
 	if err := gormDB.Model(&models.TrafficLog{}).

@@ -22,6 +22,7 @@ const (
 
 type UploadSession struct {
 	Model
+	BackgroundJobID  string `gorm:"size:36;index" json:"BackgroundJobID,omitempty"`
 	UUID             string
 	ClientUploadUUID string
 	TusID            string `gorm:"index"`

@@ -22,6 +22,8 @@ Follow the documentation to setup VideoCMS: [https://videocms-docs.vercel.app/](
 
 Storage mounts, pool routing, upgrade behavior, and reconnecting migrated buckets are described in [the storage guide](./docs/storage.md).
 
+Durable jobs, queue controls, retries, retention, and the v2 task API are described in [the background-jobs guide](./docs/background-jobs.md).
+
 ## Screenshots 📸
 
 ### Landing

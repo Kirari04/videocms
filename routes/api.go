@@ -34,6 +34,38 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	protectedApi := apiGroup.Group("",
 		middlewareFactory.AuthMiddleware(),
 		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateApi), cfg.RatelimitBurstApi, time.Minute*5)))
+
+	// Unified background-work API. User routes are owner-scoped; the central
+	// operations console is protected by the admin middleware.
+	v2 := protectedApi.Group("/v2")
+	v2.GET("/jobs", handlers.ListMyBackgroundJobs)
+	v2.GET("/jobs/:id", handlers.GetMyBackgroundJob)
+	v2.POST("/jobs/:id/cancel", handlers.CancelMyBackgroundJob)
+	v2.POST("/jobs/:id/retry", handlers.RetryMyBackgroundJob)
+	// Versioned submission endpoints return 202 + Location and can be followed
+	// through the generic jobs API above.
+	v2.POST("/uploads/simple", handlers.SimpleUploadController,
+		middleware.BodyLimit(fmt.Sprintf("%dk", cfg.MaxUploadFilesize/1024+1024)))
+	v2.POST("/uploads/:upload_id/finalize", handlers.FinalizeTusUpload)
+	v2.POST("/remote-downloads", handlers.CreateRemoteDownload)
+	v2.DELETE("/file", handlers.DeleteFileController)
+	v2.DELETE("/files", handlers.DeleteFilesController)
+	v2.DELETE("/folder", handlers.DeleteFolder)
+	v2.DELETE("/folders", handlers.DeleteFolders)
+	adminV2 := v2.Group("/admin", middlewareFactory.IsAdmin())
+	adminV2.GET("/jobs", handlers.ListAdminBackgroundJobs)
+	adminV2.GET("/jobs/summary", handlers.GetAdminBackgroundSummary)
+	adminV2.GET("/jobs/:id", handlers.GetAdminBackgroundJob)
+	adminV2.POST("/jobs/:id/cancel", handlers.CancelAdminBackgroundJob)
+	adminV2.POST("/jobs/:id/retry", handlers.RetryAdminBackgroundJob)
+	adminV2.POST("/tasks/:id/cancel", handlers.CancelAdminBackgroundTask)
+	adminV2.POST("/tasks/:id/retry", handlers.RetryAdminBackgroundTask)
+	adminV2.GET("/task-queues", handlers.ListAdminBackgroundQueues)
+	adminV2.POST("/task-queues/:name/pause", handlers.PauseAdminBackgroundQueue)
+	adminV2.POST("/task-queues/:name/resume", handlers.ResumeAdminBackgroundQueue)
+	adminV2.GET("/task-schedules", handlers.ListAdminBackgroundSchedules)
+	adminV2.POST("/task-schedules/:key/run", handlers.RunAdminBackgroundSchedule)
+	adminV2.GET("/task-runtime", handlers.GetAdminBackgroundRuntime)
 	protectedApi.POST("/folder", handlers.CreateFolder)
 	protectedApi.PUT("/folder", handlers.UpdateFolder)
 	protectedApi.DELETE("/folder", handlers.DeleteFolder)

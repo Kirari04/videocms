@@ -53,6 +53,12 @@ func LoadSnapshot(db *gorm.DB, base config.Config) (app.Snapshot, error) {
 
 	env.MaxItemsMultiDelete = getEnvDb_int64(&setting.MaxItemsMultiDelete, 1000)
 	env.MaxRunningEncodes = getEnvDb_int64(&setting.MaxRunningEncodes, 1)
+	env.MaxParallelDownloadPreparations = getEnvDb_int64(&setting.MaxParallelDownloadPreparations, 1)
+	legacyFFmpegCapacity := env.MaxRunningEncodes
+	if env.MaxParallelDownloadPreparations > legacyFFmpegCapacity {
+		legacyFFmpegCapacity = env.MaxParallelDownloadPreparations
+	}
+	env.MaxParallelFFmpegTasks = getEnvDb_int64(&setting.MaxParallelFFmpegTasks, legacyFFmpegCapacity)
 	env.MaxFramerate = getEnvDb_int64(&setting.MaxFramerate, 60)
 
 	if setting.MaxUploadChunkSize == "" && setting.LegacyMaxUploadChunkSize != "" {
@@ -110,7 +116,6 @@ func LoadSnapshot(db *gorm.DB, base config.Config) (app.Snapshot, error) {
 
 	env.MaxParallelDownloads = getEnvDb_int64(&setting.MaxParallelDownloads, 1)
 	env.RemoteDownloadTimeout = getEnvDb_int64(&setting.RemoteDownloadTimeout, 3600) // 1 hour
-	env.MaxParallelDownloadPreparations = getEnvDb_int64(&setting.MaxParallelDownloadPreparations, 1)
 	env.MaxQueuedDownloadPreparations = getEnvDb_int64(&setting.MaxQueuedDownloadPreparations, 20)
 	env.DownloadPreparationRetentionHours = getEnvDb_int64(&setting.DownloadPreparationRetentionHours, 6)
 

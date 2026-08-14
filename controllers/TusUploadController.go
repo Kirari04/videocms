@@ -27,9 +27,9 @@ func (h *Handlers) FinalizeTusUpload(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	status, response, err := h.TUS.Finalize(c.Param("upload_id"), userID)
+	job, _, status, err := h.TUS.EnqueueFinalize(c.Request().Context(), c.Param("upload_id"), userID)
 	if err != nil {
 		return c.String(status, err.Error())
 	}
-	return c.JSON(status, response)
+	return acceptedBackgroundJob(c, job)
 }

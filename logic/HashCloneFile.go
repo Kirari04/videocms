@@ -3,6 +3,7 @@ package logic
 import (
 	"ch/kirari04/videocms/models"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -64,6 +65,7 @@ func (s *Service) CloneFileByHash(fromHash string, toFolder uint, fileName strin
 	// link old uploaded file to new link
 	dbLink := models.Link{
 		UUID:           uuid.NewString(),
+		CreationKey:    uploadCreationKey(userId, excludeSessionUUID),
 		ParentFolderID: toFolder,
 		UserID:         userId,
 		FileID:         existingFile.ID,
@@ -74,4 +76,11 @@ func (s *Service) CloneFileByHash(fromHash string, toFolder uint, fileName strin
 		return http.StatusInternalServerError, nil, res.Error
 	}
 	return http.StatusOK, &dbLink, nil
+}
+
+func uploadCreationKey(userID uint, clientUploadUUID string) string {
+	if clientUploadUUID == "" {
+		return ""
+	}
+	return fmt.Sprintf("upload:%d:%s", userID, clientUploadUUID)
 }

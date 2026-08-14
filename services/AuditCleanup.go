@@ -22,16 +22,17 @@ func (w *WorkerGroup) AuditCleanup(ctx context.Context) {
 /*
 This function deletes audit logs older than 30 days
 */
-func (w *WorkerGroup) runAuditCleanup() {
+func (w *WorkerGroup) runAuditCleanup() error {
 	expiryDate := time.Now().AddDate(0, 0, -30)
 
 	result := w.deps.DB.Unscoped().Where("created_at < ?", expiryDate).Delete(&models.ApiKeyAuditLog{})
 	if result.Error != nil {
 		log.Printf("Failed to cleanup old audit logs: %v", result.Error)
-		return
+		return result.Error
 	}
 
 	if result.RowsAffected > 0 {
 		log.Printf("Cleaned up %d old API Key audit logs.", result.RowsAffected)
 	}
+	return nil
 }

@@ -19,6 +19,13 @@ func (s *Service) CreateThumbnail(imageCountAxis int, inputFile string, height i
 }
 
 func (s *Service) CreateThumbnailInStore(imageCountAxis int, inputFile string, height int, outputFile string, fileUUID string, storeID string, videoDuration float64, fps float64) (status int, err error) {
+	return s.CreateThumbnailInStoreContext(context.Background(), imageCountAxis, inputFile, height, outputFile, fileUUID, storeID, videoDuration, fps)
+}
+
+func (s *Service) CreateThumbnailInStoreContext(ctx context.Context, imageCountAxis int, inputFile string, height int, outputFile string, fileUUID string, storeID string, videoDuration float64, fps float64) (status int, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	absInputFile, err := filepath.Abs(inputFile)
 	if err != nil {
 		return http.StatusBadRequest, err
@@ -26,7 +33,7 @@ func (s *Service) CreateThumbnailInStore(imageCountAxis int, inputFile string, h
 	if s.Deps == nil || s.Deps.Storage == nil || s.Deps.Storage.Workspace() == nil {
 		return http.StatusInternalServerError, storage.ErrStoreNotConfigured
 	}
-	tempOutputFolder, cleanupOutput, err := s.Deps.Storage.Workspace().TempDir(context.Background(), "generated-thumbnail")
+	tempOutputFolder, cleanupOutput, err := s.Deps.Storage.Workspace().TempDir(ctx, "generated-thumbnail")
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -89,7 +96,7 @@ func (s *Service) CreateThumbnailInStore(imageCountAxis int, inputFile string, h
 		outputPath,
 	)
 
-	cmd := exec.Command(
+	cmd := exec.CommandContext(ctx,
 		"bash",
 		"-c",
 		ffmpegCommand,
@@ -99,7 +106,7 @@ func (s *Service) CreateThumbnailInStore(imageCountAxis int, inputFile string, h
 		log.Printf("Failed during thumbnail conversion: %s", ffmpegCommand)
 
 		// if tiles fail try simple one instead
-		cmd := exec.Command(
+		cmd := exec.CommandContext(ctx,
 			"bash",
 			"-c",
 			ffmpegCommandSimpleImage,
@@ -129,7 +136,7 @@ func (s *Service) CreateThumbnailInStore(imageCountAxis int, inputFile string, h
 		return http.StatusInternalServerError, err
 	}
 	expectedSize := info.Size()
-	if _, err := store.Put(context.Background(), key, output, storage.PutOptions{
+	if _, err := store.Put(ctx, key, output, storage.PutOptions{
 		ContentType:  "image/webp",
 		CacheControl: "public, max-age=3600",
 		ExpectedSize: &expectedSize,

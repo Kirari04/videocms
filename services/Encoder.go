@@ -1,6 +1,7 @@
 package services
 
 import (
+	"ch/kirari04/videocms/background"
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/models"
 	"context"
@@ -444,7 +445,7 @@ func (w *WorkerGroup) runEncodeQuality(ctx context.Context, encodingTask models.
 			"-hls_flags independent_segments " + // signals that segments can be decoded independently
 			fmt.Sprint("-start_number 0 ") + // start number
 			fmt.Sprintf("%s ", encFilePath) + // output file
-			fmt.Sprintf("-progress unix://%s -y", w.tempSock(
+			fmt.Sprintf("-progress unix://%s -y", w.tempSock(ctx,
 				totalDuration,
 				fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
 				&encodingTask,
@@ -532,7 +533,7 @@ func (w *WorkerGroup) runEncodeAudio(ctx context.Context, encodingTask models.Au
 			fmt.Sprint("-hls_list_size 0 ") +
 			fmt.Sprint("-start_number 0 ") + // start number
 			fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
-			fmt.Sprintf("-progress unix://%s -y", w.tempSock(
+			fmt.Sprintf("-progress unix://%s -y", w.tempSock(ctx,
 				totalDuration,
 				fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
 				&encodingTask,
@@ -620,7 +621,7 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 				fmt.Sprintf("-i %s ", absFileInput) + // input file
 				fmt.Sprintf("-c:s %s ", encodingTask.Codec) + // setting audio codec
 				fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
-				fmt.Sprintf("-progress unix://%s -y", w.tempSock(
+				fmt.Sprintf("-progress unix://%s -y", w.tempSock(ctx,
 					totalDuration,
 					fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
 					&encodingTask,
@@ -631,7 +632,7 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 				fmt.Sprintf("-i %s ", absFileInput) + // input file
 				fmt.Sprintf("-c:s %s ", encodingTask.Codec) + // setting audio codec
 				fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
-				fmt.Sprintf("-progress unix://%s -y", w.tempSock(
+				fmt.Sprintf("-progress unix://%s -y", w.tempSock(ctx,
 					totalDuration,
 					fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
 					&encodingTask,
@@ -654,7 +655,7 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 				fmt.Sprintf("-map 0:s:%d ", encodingTask.Index) + // mapping first audio stream
 				fmt.Sprintf("-c:s %s ", encodingTask.Codec) + // setting audio codec
 				fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
-				fmt.Sprintf("-progress unix://%s -y", w.tempSock(
+				fmt.Sprintf("-progress unix://%s -y", w.tempSock(ctx,
 					totalDuration,
 					fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
 					&encodingTask,
@@ -668,7 +669,7 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 				fmt.Sprintf("-map 0:s:%d ", encodingTask.Index) + // mapping first audio stream
 				fmt.Sprintf("-c:s %s ", encodingTask.Codec) + // setting audio codec
 				fmt.Sprintf("%s/%s ", absFolderOutput, encodingTask.OutputFile) + // output file
-				fmt.Sprintf("-progress unix://%s -y", w.tempSock(
+				fmt.Sprintf("-progress unix://%s -y", w.tempSock(ctx,
 					totalDuration,
 					fmt.Sprintf("%x", sha256.Sum256([]byte(uuid.NewString()))),
 					&encodingTask,
@@ -709,7 +710,7 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 	return w.completeEncodingTask(&encodingTask)
 }
 
-func (w *WorkerGroup) tempSock(totalDuration float64, sockFileName string, encodingTask IwithProcess, task EncodingTask) string {
+func (w *WorkerGroup) tempSock(ctx context.Context, totalDuration float64, sockFileName string, encodingTask IwithProcess, task EncodingTask) string {
 	sockFilePath := path.Join(os.TempDir(), sockFileName)
 	if err := os.Remove(sockFilePath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		w.encodingTaskLog("progress_socket_cleanup_failed", task, time.Time{}, err)
@@ -722,6 +723,10 @@ func (w *WorkerGroup) tempSock(totalDuration float64, sockFileName string, encod
 
 	go func() {
 		defer l.Close()
+		go func() {
+			<-ctx.Done()
+			_ = l.Close()
+		}()
 		re := regexp.MustCompile(`out_time_ms=(\d+)`)
 		fd, err := l.Accept()
 		if err != nil {
@@ -766,6 +771,7 @@ func (w *WorkerGroup) tempSock(totalDuration float64, sockFileName string, encod
 				}
 				if floatProg != 0 {
 					encodingTask.SetProcess(floatProg)
+					background.ReportProgress(ctx, floatProg, "Encoding media")
 				}
 				if result := encodingTask.Save(w.deps.DB); result.Error != nil {
 					w.encodingTaskLog("progress_persist_failed", task, time.Time{}, result.Error)

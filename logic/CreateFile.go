@@ -25,6 +25,21 @@ import (
 )
 
 func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint, excludeSessionUUID string) (status int, newFile *models.Link, cloned bool, err error) {
+	return s.CreateFileContext(context.Background(), fromFile, toFolder, fileName, fileId, fileSize, userId, excludeSessionUUID)
+}
+
+func (s *Service) CreateFileContext(ctx context.Context, fromFile *string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint, excludeSessionUUID string) (status int, newFile *models.Link, cloned bool, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if creationKey := uploadCreationKey(userId, excludeSessionUUID); creationKey != "" {
+		var existing models.Link
+		if err := s.Deps.DB.Where("creation_key = ?", creationKey).First(&existing).Error; err == nil {
+			return http.StatusOK, &existing, true, nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
+		}
+	}
 	//check if requested folder exists (if set)
 	if toFolder > 0 {
 		res := s.Deps.DB.First(&models.Folder{}, toFolder)
@@ -34,7 +49,7 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 	}
 
 	// obtain hash from file
-	FileHash, err := helpers.HashFile(*fromFile)
+	FileHash, err := helpers.HashFileContext(ctx, *fromFile)
 	if err != nil {
 		log.Printf("Failed to create hash from file: %v", err)
 		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
@@ -71,11 +86,11 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 	}
 
 	// ffprobe context
-	ctx, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
+	probeCtx, cancelFn := context.WithTimeout(ctx, 30*time.Second)
 	defer cancelFn()
 
 	// probe file
-	data, err := ffprobe.ProbeURL(ctx, *fromFile)
+	data, err := ffprobe.ProbeURL(probeCtx, *fromFile)
 	if err != nil {
 		// log.Printf("Error getting data using ffprobe: %v", err)
 		// return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
@@ -168,8 +183,7 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 	if err != nil {
 		return http.StatusInternalServerError, nil, false, err
 	}
-	storageCtx := context.Background()
-	storeID, releaseStore, err := s.publishUploadSource(storageCtx, userId, sourceKey, *fromFile)
+	storeID, releaseStore, err := s.publishUploadSource(ctx, userId, sourceKey, *fromFile)
 	if err != nil {
 		log.Printf("Failed to publish source file to storage pool: %v", err)
 		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
@@ -214,6 +228,7 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 		}
 		dbLink = models.Link{
 			UUID:           uuid.NewString(),
+			CreationKey:    uploadCreationKey(userId, excludeSessionUUID),
 			Name:           fileName,
 			ParentFolderID: toFolder,
 			UserID:         userId,
@@ -230,35 +245,6 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 	sourceOwnedByRecord = true
 	releaseStore()
 	releaseStore = nil
-	go func() {
-		if avgFramerate <= 0 {
-			return
-		}
-		materialized, cleanup, err := s.Deps.Storage.Materialize(
-			context.Background(),
-			storeID,
-			sourceKey,
-			"thumbnail-source",
-			filepath.Ext(sourceFileName),
-		)
-		if err != nil {
-			log.Printf("Failed to materialize thumbnail source %s: %v", sourceKey.String(), err)
-			return
-		}
-		defer cleanup()
-		if _, err := s.CreateThumbnailInStore(
-			4,
-			materialized,
-			1080,
-			thumbnailFileName,
-			fileId,
-			storeID,
-			videoDuration,
-			avgFramerate,
-		); err != nil {
-			log.Printf("Failed to generate thumbnail for file %s: %v", fileId, err)
-		}
-	}()
 
 	// save subtitle data to database so they can be converted later
 	for index, subtitleStream := range subtitleStreams {

@@ -3,6 +3,7 @@ package models
 type Link struct {
 	Model
 	UUID           string
+	CreationKey    string  `gorm:"size:96;uniqueIndex:idx_link_creation_key,where:creation_key <> ''" json:"-"`
 	Name           string  `gorm:"size:128;"`
 	Thumbnail      string  `gorm:"size:128;" json:"-"`
 	File           File    `json:"-"`

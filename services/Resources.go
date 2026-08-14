@@ -16,48 +16,31 @@ func (w *WorkerGroup) Resources(ctx context.Context) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	go w.CleanupResources(ctx)
-
 	for {
 		cfg := w.Config()
-		v, _ := mem.VirtualMemory()
-		c, _ := cpu.Percent(time.Second*2, false)
-		n, _ := net.IOCounters(false)
-		d, _ := disk.IOCounters(cfg.StatsDriveName)
+		v, memErr := mem.VirtualMemory()
+		c, cpuErr := cpu.Percent(time.Second*2, false)
+		n, netErr := net.IOCounters(false)
+		d, diskErr := disk.IOCounters(cfg.StatsDriveName)
 
-		printCpu := c[0]
-		printRam := v.UsedPercent
-
-		var printNetSent uint64 = 0
-		if w.netSent == 0 {
-			w.netSent = n[0].BytesSent
-		} else {
-			printNetSent = n[0].BytesSent - w.netSent
-			w.netSent = n[0].BytesSent
+		var printCPU, printRAM float64
+		if memErr == nil && v != nil {
+			printRAM = v.UsedPercent
 		}
-
-		var printNetRecv uint64 = 0
-		if w.netRecv == 0 {
-			w.netRecv = n[0].BytesRecv
-		} else {
-			printNetRecv = n[0].BytesRecv - w.netRecv
-			w.netRecv = n[0].BytesRecv
+		if cpuErr == nil && len(c) > 0 {
+			printCPU = c[0]
 		}
-
-		var printDiskWrite uint64 = 0
-		if w.diskWrite == 0 {
-			w.diskWrite = d[cfg.StatsDriveName].WriteBytes
-		} else {
-			printDiskWrite = d[cfg.StatsDriveName].WriteBytes - w.diskWrite
-			w.diskWrite = d[cfg.StatsDriveName].WriteBytes
+		var printNetSent, printNetRecv uint64
+		if netErr == nil && len(n) > 0 {
+			printNetSent = counterDelta(n[0].BytesSent, &w.netSent)
+			printNetRecv = counterDelta(n[0].BytesRecv, &w.netRecv)
 		}
-
-		var printDiskRead uint64 = 0
-		if w.diskRead == 0 {
-			w.diskRead = d[cfg.StatsDriveName].ReadBytes
-		} else {
-			printDiskRead = d[cfg.StatsDriveName].ReadBytes - w.diskRead
-			w.diskRead = d[cfg.StatsDriveName].ReadBytes
+		var printDiskWrite, printDiskRead uint64
+		if diskErr == nil {
+			if drive, ok := d[cfg.StatsDriveName]; ok {
+				printDiskWrite = counterDelta(drive.WriteBytes, &w.diskWrite)
+				printDiskRead = counterDelta(drive.ReadBytes, &w.diskRead)
+			}
 		}
 
 		var printENCQualityQueue int64
@@ -88,13 +71,17 @@ func (w *WorkerGroup) Resources(ctx context.Context) {
 			log.Println("Failed to count printENCSubtitleQueue", res.Error)
 		}
 
+		intervalSeconds := uint64(w.resourcesInterval.Seconds())
+		if intervalSeconds < 1 {
+			intervalSeconds = 1
+		}
 		if res := w.deps.DB.Create(&models.SystemResource{
-			Cpu:              printCpu,
-			Mem:              printRam,
-			NetOut:           printNetSent / uint64(w.resourcesInterval.Seconds()),
-			NetIn:            printNetRecv / uint64(w.resourcesInterval.Seconds()),
-			DiskW:            printDiskWrite / uint64(w.resourcesInterval.Seconds()),
-			DiskR:            printDiskRead / uint64(w.resourcesInterval.Seconds()),
+			Cpu:              printCPU,
+			Mem:              printRAM,
+			NetOut:           printNetSent / intervalSeconds,
+			NetIn:            printNetRecv / intervalSeconds,
+			DiskW:            printDiskWrite / intervalSeconds,
+			DiskR:            printDiskRead / intervalSeconds,
 			ENCQualityQueue:  printENCQualityQueue,
 			ENCAudioQueue:    printENCAudioQueue,
 			ENCSubtitleQueue: printENCSubtitleQueue,
@@ -105,6 +92,18 @@ func (w *WorkerGroup) Resources(ctx context.Context) {
 			return
 		}
 	}
+}
+
+func counterDelta(current uint64, previous *uint64) uint64 {
+	if previous == nil {
+		return 0
+	}
+	before := *previous
+	*previous = current
+	if before == 0 || current < before {
+		return 0
+	}
+	return current - before
 }
 
 func (w *WorkerGroup) CleanupResources(ctx context.Context) {
