@@ -1,11 +1,14 @@
 package middlewares
 
 import (
+	"ch/kirari04/videocms/background"
 	"ch/kirari04/videocms/models"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
@@ -25,18 +28,34 @@ func (f *Factory) AuthMiddleware() echo.MiddlewareFunc {
 					return c.String(http.StatusForbidden, "Invalid or Expired API Key")
 				}
 
-				// Update LastUsedAt and Log Audit (Async for performance)
-				go func(akID, uID uint, method, path, ip string) {
-					now := time.Now()
-					f.Deps.DB.Model(&models.ApiKey{}).Where("id = ?", akID).Update("last_used_at", &now)
-					f.Deps.DB.Create(&models.ApiKeyAuditLog{
-						ApiKeyID: akID,
-						UserID:   uID,
-						Method:   method,
-						Path:     path,
-						IP:       ip,
+				// Persist the audit intent before executing the API-key request. This
+				// replaces the former detached best-effort goroutine.
+				if f.Deps.Background != nil {
+					ownerID := apiKey.UserID
+					_, _, enqueueErr := f.Deps.Background.Enqueue(c.Request().Context(), background.JobSpec{
+						Kind: "audit.record", Visibility: background.VisibilitySystem, OwnerID: &ownerID,
+						SubjectType: "api_key", SubjectID: fmt.Sprint(apiKey.ID),
+						IdempotencyKey: "audit:" + uuid.NewString(), Label: "Record API-key activity",
+						Tasks: []background.TaskSpec{{
+							Kind: "audit.record", Queue: background.QueueAudit, Phase: "Recording API activity",
+							Payload:   map[string]any{"apiKeyId": apiKey.ID, "userId": apiKey.UserID, "method": c.Request().Method, "path": c.Request().URL.Path, "ip": c.RealIP()},
+							DedupeKey: "record", Priority: 10, Required: true, Weight: 1,
+						}},
 					})
-				}(apiKey.ID, apiKey.UserID, c.Request().Method, c.Request().URL.Path, c.RealIP())
+					if enqueueErr != nil {
+						return c.String(http.StatusServiceUnavailable, "API audit service unavailable")
+					}
+				} else {
+					now := time.Now()
+					f.Deps.DB.Model(&models.ApiKey{}).Where("id = ?", apiKey.ID).Update("last_used_at", &now)
+					f.Deps.DB.Create(&models.ApiKeyAuditLog{
+						ApiKeyID: apiKey.ID,
+						UserID:   apiKey.UserID,
+						Method:   c.Request().Method,
+						Path:     c.Request().URL.Path,
+						IP:       c.RealIP(),
+					})
+				}
 
 				c.Set("Username", apiKey.User.Username)
 				c.Set("UserID", apiKey.UserID)

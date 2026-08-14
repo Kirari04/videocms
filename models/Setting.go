@@ -38,9 +38,10 @@ type Setting struct {
 	TrustedProxies    string `validate:"max=2000" gorm:"size:2000;"`
 	TrustLocalTraffic string `validate:"required,boolean"`
 
-	MaxItemsMultiDelete string `validate:"required,number,min=1"`
-	MaxRunningEncodes   string `validate:"required,number,min=1"`
-	MaxFramerate        string `validate:"required,number,min=1"`
+	MaxItemsMultiDelete    string `validate:"required,number,min=1"`
+	MaxRunningEncodes      string `validate:"required,number,min=1"`
+	MaxParallelFFmpegTasks string `validate:"required,number,min=1,max=16"`
+	MaxFramerate           string `validate:"required,number,min=1"`
 
 	MaxUploadFilesize        string `validate:"required,number,min=1"`
 	MaxUploadChunkSize       string `validate:"required,number,min=1"`

@@ -4,22 +4,23 @@ import "gorm.io/gorm"
 
 type Subtitle struct {
 	Model
-	UUID          string
-	Name          string `gorm:"size:120;"`
-	Lang          string `gorm:"size:10;"`
-	Path          string `gorm:"size:120;" json:"-"`
-	OriginalCodec string `json:"-"`
-	Index         int    `json:"-"`
-	Codec         string
-	Type          string
-	OutputFile    string
-	Encoding      bool
-	Progress      float64
-	Failed        bool
-	Ready         bool
-	Error         string `json:"-"`
-	File          File   `json:"-"`
-	FileID        uint
+	BackgroundTaskID string `gorm:"size:36;index" json:"-"`
+	UUID             string
+	Name             string `gorm:"size:120;"`
+	Lang             string `gorm:"size:10;"`
+	Path             string `gorm:"size:120;" json:"-"`
+	OriginalCodec    string `json:"-"`
+	Index            int    `json:"-"`
+	Codec            string
+	Type             string
+	OutputFile       string
+	Encoding         bool
+	Progress         float64
+	Failed           bool
+	Ready            bool
+	Error            string `json:"-"`
+	File             File   `json:"-"`
+	FileID           uint
 }
 
 func (c *Subtitle) SetProcess(v float64) {

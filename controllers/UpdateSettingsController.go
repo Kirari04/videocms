@@ -4,6 +4,7 @@ import (
 	"ch/kirari04/videocms/configdb"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/models"
+	"context"
 	"log"
 	"net/http"
 	"strings"
@@ -27,6 +28,8 @@ func (h *Handlers) UpdateSettings(c echo.Context) error {
 	remoteDownloadsNowDisabled := !settingFlagEnabled(validation.RemoteDownloadEnabled, true)
 	downloadsWereEnabled := settingFlagEnabled(previousSetting.DownloadEnabled, true)
 	downloadsNowDisabled := !settingFlagEnabled(validation.DownloadEnabled, true)
+	encodingsWereEnabled := settingFlagEnabled(previousSetting.EncodingEnabled, true)
+	encodingsNowDisabled := !settingFlagEnabled(validation.EncodingEnabled, true)
 	encoderConfigChanged := settingFlagEnabled(previousSetting.EncodingEnabled, true) != settingFlagEnabled(validation.EncodingEnabled, true) ||
 		strings.TrimSpace(previousSetting.MaxRunningEncodes) != strings.TrimSpace(validation.MaxRunningEncodes)
 
@@ -59,6 +62,7 @@ func (h *Handlers) UpdateSettings(c echo.Context) error {
 	setting.TrustLocalTraffic = validation.TrustLocalTraffic
 	setting.MaxItemsMultiDelete = validation.MaxItemsMultiDelete
 	setting.MaxRunningEncodes = validation.MaxRunningEncodes
+	setting.MaxParallelFFmpegTasks = validation.MaxParallelFFmpegTasks
 	setting.MaxFramerate = validation.MaxFramerate
 	setting.MaxUploadFilesize = validation.MaxUploadFilesize
 	setting.MaxUploadChunkSize = validation.MaxUploadChunkSize
@@ -123,11 +127,19 @@ func (h *Handlers) UpdateSettings(c echo.Context) error {
 	if h.Workers != nil && encoderConfigChanged {
 		h.Workers.NotifyEncoderConfigChanged()
 	}
-	if h.Workers != nil && remoteDownloadsWereEnabled && remoteDownloadsNowDisabled {
-		h.Workers.CancelAllRemoteDownloads("Remote downloads disabled by administrator")
-	}
-	if h.Workers != nil && downloadsWereEnabled && downloadsNowDisabled {
-		h.Workers.CancelAllDownloadPreparations("Downloads disabled by administrator")
+	if h.Deps.Background != nil {
+		h.Deps.Background.Wake()
+		actorID, _ := c.Get("UserID").(uint)
+		actorName, _ := c.Get("Username").(string)
+		if encodingsWereEnabled && encodingsNowDisabled {
+			_ = h.Deps.Background.CancelKinds(context.Background(), []string{"media.encode."}, actorID, actorName, "Encoding disabled by administrator")
+		}
+		if remoteDownloadsWereEnabled && remoteDownloadsNowDisabled {
+			_ = h.Deps.Background.CancelKinds(context.Background(), []string{"remote.fetch"}, actorID, actorName, "Remote downloads disabled by administrator")
+		}
+		if downloadsWereEnabled && downloadsNowDisabled {
+			_ = h.Deps.Background.CancelKinds(context.Background(), []string{"download.prepare"}, actorID, actorName, "Prepared downloads disabled by administrator")
+		}
 	}
 	return c.String(http.StatusOK, "ok")
 }

@@ -69,9 +69,10 @@ type Config struct {
 	TrustedProxies    string
 	TrustLocalTraffic *bool
 
-	MaxItemsMultiDelete int64
-	MaxRunningEncodes   int64
-	MaxFramerate        int64
+	MaxItemsMultiDelete    int64
+	MaxRunningEncodes      int64
+	MaxParallelFFmpegTasks int64
+	MaxFramerate           int64
 
 	MaxUploadFilesize  int64
 	MaxUploadChunkSize int64

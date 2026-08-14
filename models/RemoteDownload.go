@@ -16,6 +16,9 @@ const (
 
 type RemoteDownload struct {
 	Model
+	BackgroundJobID   string  `gorm:"size:36;index" json:"backgroundJobId,omitempty"`
+	RequestKey        string  `gorm:"size:64;index:idx_remote_download_request" json:"-"`
+	RequestIndex      int     `gorm:"index:idx_remote_download_request" json:"-"`
 	UserID            uint    `gorm:"index"`
 	ParentFolderID    uint    `gorm:"index"`
 	Url               string  `gorm:"size:2048;"`
