@@ -20,9 +20,9 @@ A self-hosted Content Management System for your videos. 🎞️
 
 Follow the documentation to setup VideoCMS: [https://videocms-docs.vercel.app/](https://videocms-docs.vercel.app/)
 
-Storage mounts, pool routing, upgrade behavior, and reconnecting migrated buckets are described in [the storage guide](./docs/storage.md).
+Storage mounts, pool routing, upgrade behavior, and reconnecting migrated buckets are described in [the storage guide](https://videocms-docs.vercel.app/operations/storage).
 
-Durable jobs, queue controls, retries, retention, and the v2 task API are described in [the background-jobs guide](./docs/background-jobs.md).
+Monitoring, canceling, retrying, and troubleshooting background work are described in [the background-jobs guide](https://videocms-docs.vercel.app/operations/background-jobs).
 
 ## Screenshots 📸
 
