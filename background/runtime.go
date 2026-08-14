@@ -18,8 +18,9 @@ import (
 )
 
 var (
-	errRuntimeStopping = errors.New("background runtime stopping")
-	errUserCanceled    = errors.New("background job canceled")
+	errRuntimeStopping     = errors.New("background runtime stopping")
+	errUserCanceled        = errors.New("background job canceled")
+	ErrIdempotencyConflict = errors.New("idempotency key was already used for a different request")
 )
 
 type Options struct {
@@ -35,13 +36,15 @@ type Runtime struct {
 	handlers  map[string]Handler
 	schedules map[string]ScheduleDefinition
 
-	mu      sync.Mutex
-	active  map[string]activeTask
-	started bool
-	wake    chan struct{}
-	wg      sync.WaitGroup
-	rootCtx context.Context
-	cancel  context.CancelCauseFunc
+	mu       sync.Mutex
+	active   map[string]activeTask
+	loops    map[string]LoopHealth
+	started  bool
+	starting bool
+	wake     chan struct{}
+	wg       sync.WaitGroup
+	rootCtx  context.Context
+	cancel   context.CancelCauseFunc
 }
 
 type activeTask struct {
@@ -79,6 +82,7 @@ func New(db *gorm.DB, options Options) *Runtime {
 		handlers:  make(map[string]Handler),
 		schedules: make(map[string]ScheduleDefinition),
 		active:    make(map[string]activeTask),
+		loops:     make(map[string]LoopHealth),
 		wake:      make(chan struct{}, 1),
 	}
 }
@@ -123,29 +127,126 @@ func (r *Runtime) Start(parent context.Context) error {
 		r.mu.Unlock()
 		return nil
 	}
+	if r.starting {
+		r.mu.Unlock()
+		return errors.New("background runtime is already starting")
+	}
 	r.rootCtx, r.cancel = context.WithCancelCause(parent)
-	r.started = true
+	r.starting = true
 	r.mu.Unlock()
 
 	if err := r.ensureQueues(); err != nil {
+		r.startFailed(err)
 		return err
 	}
 	if err := r.Recover(r.rootCtx); err != nil {
+		r.startFailed(err)
 		return err
 	}
 	if err := r.ensureSchedules(); err != nil {
+		r.startFailed(err)
 		return err
 	}
+	r.mu.Lock()
+	r.started = true
+	r.starting = false
+	r.mu.Unlock()
 	r.wg.Add(3)
-	go r.dispatchLoop()
-	go r.heartbeatLoop()
-	go r.scheduleLoop()
+	go r.superviseLoop("dispatcher", r.dispatchLoop)
+	go r.superviseLoop("heartbeat", r.heartbeatLoop)
+	go r.superviseLoop("scheduler", r.scheduleLoop)
 	go func() {
 		<-r.rootCtx.Done()
 		r.cancelActive(errRuntimeStopping)
 	}()
 	r.Wake()
 	return nil
+}
+
+func (r *Runtime) startFailed(cause error) {
+	r.mu.Lock()
+	cancel := r.cancel
+	r.rootCtx = nil
+	r.cancel = nil
+	r.starting = false
+	r.started = false
+	r.mu.Unlock()
+	if cancel != nil {
+		cancel(cause)
+	}
+}
+
+func (r *Runtime) superviseLoop(name string, loop func()) {
+	defer r.wg.Done()
+	for r.rootCtx != nil && r.rootCtx.Err() == nil {
+		now := time.Now()
+		r.mu.Lock()
+		health := r.loops[name]
+		health.Name, health.Status, health.LastStartAt = name, "running", &now
+		r.loops[name] = health
+		r.mu.Unlock()
+
+		failure := runRuntimeLoop(loop)
+		if r.rootCtx == nil || r.rootCtx.Err() != nil {
+			r.mu.Lock()
+			health := r.loops[name]
+			health.Status = "stopped"
+			r.loops[name] = health
+			r.mu.Unlock()
+			return
+		}
+		if failure == "" {
+			failure = "runtime loop stopped unexpectedly"
+		}
+		r.mu.Lock()
+		health = r.loops[name]
+		health.Status = "degraded"
+		health.Restarts++
+		health.LastError = RedactDiagnostic(failure)
+		r.loops[name] = health
+		r.mu.Unlock()
+		r.options.Logger.Printf("component=background event=loop_restart loop=%s error=%q", name, failure)
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-r.rootCtx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	}
+}
+
+func runRuntimeLoop(loop func()) (failure string) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			failure = fmt.Sprintf("panic: %v\n%s", recovered, debug.Stack())
+		}
+	}()
+	loop()
+	return ""
+}
+
+func (r *Runtime) Health() RuntimeHealth {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	status := "stopped"
+	if r.starting {
+		status = "starting"
+	} else if r.started && r.rootCtx != nil && r.rootCtx.Err() == nil {
+		status = "running"
+		for _, health := range r.loops {
+			if health.Status != "running" {
+				status = "degraded"
+				break
+			}
+		}
+	}
+	loops := make([]LoopHealth, 0, len(r.loops))
+	for _, health := range r.loops {
+		loops = append(loops, health)
+	}
+	sort.Slice(loops, func(i, j int) bool { return loops[i].Name < loops[j].Name })
+	return RuntimeHealth{Status: status, Loops: loops}
 }
 
 func (r *Runtime) ensureSchedules() error {
@@ -170,7 +271,6 @@ func (r *Runtime) ensureSchedules() error {
 }
 
 func (r *Runtime) scheduleLoop() {
-	defer r.wg.Done()
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 	r.runDueSchedules()
@@ -196,11 +296,17 @@ func (r *Runtime) runDueSchedules() {
 	for key, definition := range definitions {
 		var state ScheduleState
 		if err := r.db.Where("key = ? AND enabled = ? AND (next_run_at IS NULL OR next_run_at <= ?)", key, true, now).First(&state).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				r.options.Logger.Printf("component=background event=schedule_load_failed schedule=%s error=%q", key, err)
+			}
 			continue
 		}
 		next := now.Add(definition.Interval)
 		claimed := r.db.Model(&ScheduleState{}).Where("key = ? AND enabled = ? AND (next_run_at IS NULL OR next_run_at <= ?)", key, true, now).Updates(map[string]any{"next_run_at": &next, "last_run_at": &now})
 		if claimed.Error != nil || claimed.RowsAffected != 1 {
+			if claimed.Error != nil {
+				r.options.Logger.Printf("component=background event=schedule_claim_failed schedule=%s error=%q", key, claimed.Error)
+			}
 			continue
 		}
 		spec := definition.Build()
@@ -208,29 +314,38 @@ func (r *Runtime) runDueSchedules() {
 		spec.IdempotencyKey = fmt.Sprintf("schedule:%s:%d", key, now.UnixNano()/int64(definition.Interval))
 		job, _, err := r.Enqueue(r.rootCtx, spec)
 		if err != nil {
-			_ = r.db.Model(&ScheduleState{}).Where("key = ?", key).Updates(map[string]any{"last_status": JobFailed, "last_error": boundedMessage(err.Error(), 512)}).Error
+			if updateErr := r.db.Model(&ScheduleState{}).Where("key = ?", key).Updates(map[string]any{"last_status": JobFailed, "last_error": boundedMessage(err.Error(), 512)}).Error; updateErr != nil {
+				r.options.Logger.Printf("component=background event=schedule_error_state_failed schedule=%s error=%q", key, updateErr)
+			}
 			continue
 		}
-		_ = r.db.Model(&ScheduleState{}).Where("key = ?", key).Updates(map[string]any{"last_job_id": job.ID, "last_status": job.Status, "last_error": ""}).Error
+		if err := r.db.Model(&ScheduleState{}).Where("key = ?", key).Updates(map[string]any{"last_job_id": job.ID, "last_status": job.Status, "last_error": ""}).Error; err != nil {
+			r.options.Logger.Printf("component=background event=schedule_state_failed schedule=%s error=%q", key, err)
+		}
 	}
 }
 
 func (r *Runtime) refreshScheduleOutcomes() {
 	var states []ScheduleState
 	if err := r.db.Where("last_job_id <> ''").Find(&states).Error; err != nil {
+		r.options.Logger.Printf("component=background event=schedule_refresh_failed error=%q", err)
 		return
 	}
-	now := time.Now()
 	for _, state := range states {
 		var job Job
 		if err := r.db.First(&job, "id = ?", state.LastJobID).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				r.options.Logger.Printf("component=background event=schedule_job_load_failed schedule=%s error=%q", state.Key, err)
+			}
 			continue
 		}
 		updates := map[string]any{"last_status": job.Status, "last_error": job.ErrorMessage}
 		if job.Status == JobSucceeded || job.Status == JobSucceededWithWarnings {
-			updates["last_success_at"] = &now
+			updates["last_success_at"] = job.FinishedAt
 		}
-		_ = r.db.Model(&ScheduleState{}).Where("key = ?", state.Key).Updates(updates).Error
+		if err := r.db.Model(&ScheduleState{}).Where("key = ?", state.Key).Updates(updates).Error; err != nil {
+			r.options.Logger.Printf("component=background event=schedule_outcome_failed schedule=%s error=%q", state.Key, err)
+		}
 	}
 }
 
@@ -254,8 +369,12 @@ func (r *Runtime) RunSchedule(ctx context.Context, key string, actorID uint, act
 	if err != nil {
 		return nil, err
 	}
-	_ = r.db.WithContext(ctx).Model(&ScheduleState{}).Where("key = ?", key).Updates(map[string]any{"last_job_id": job.ID, "last_status": job.Status, "last_run_at": time.Now()}).Error
-	_ = addEvent(r.db.WithContext(ctx), Event{JobID: job.ID, Type: "schedule_run_requested", ActorID: optionalActor(actorID), ActorName: actorName, Message: "Schedule run requested"})
+	if err := r.db.WithContext(ctx).Model(&ScheduleState{}).Where("key = ?", key).Updates(map[string]any{"last_job_id": job.ID, "last_status": job.Status, "last_run_at": time.Now()}).Error; err != nil {
+		r.options.Logger.Printf("component=background event=manual_schedule_state_failed schedule=%s job=%s error=%q", key, job.ID, err)
+	}
+	if err := addEvent(r.db.WithContext(ctx), Event{JobID: job.ID, Type: "schedule_run_requested", ActorID: optionalActor(actorID), ActorName: actorName, Message: "Schedule run requested"}); err != nil {
+		r.options.Logger.Printf("component=background event=manual_schedule_event_failed schedule=%s job=%s error=%q", key, job.ID, err)
+	}
 	return job, nil
 }
 
@@ -304,7 +423,18 @@ func (r *Runtime) Recover(ctx context.Context) error {
 			return err
 		}
 		if err := tx.Model(&Task{}).
-			Where("status = ?", TaskCancelRequested).
+			Where("status IN ? AND commit_started_at IS NOT NULL", []string{TaskRunning, TaskCancelRequested}).
+			Updates(map[string]any{
+				"status":        TaskFailed,
+				"error_code":    "commit_interrupted",
+				"error_message": "The worker stopped after irreversible work began; review before retrying",
+				"finished_at":   &now,
+				"heartbeat_at":  nil,
+			}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&Task{}).
+			Where("status = ? AND commit_started_at IS NULL", TaskCancelRequested).
 			Updates(map[string]any{
 				"status":        TaskCanceled,
 				"error_code":    "canceled",
@@ -315,7 +445,7 @@ func (r *Runtime) Recover(ctx context.Context) error {
 			return err
 		}
 		if err := tx.Model(&Task{}).
-			Where("status = ?", TaskRunning).
+			Where("status = ? AND commit_started_at IS NULL", TaskRunning).
 			Updates(map[string]any{
 				"status":              TaskQueued,
 				"run_after":           nil,
@@ -342,8 +472,82 @@ func (r *Runtime) Recover(ctx context.Context) error {
 	})
 }
 
+// recoverStaleTasks reclaims tasks that are marked running but no longer have
+// a live goroutine in this process. It closes the durability gap left by a
+// transient failure while persisting a handler result.
+func (r *Runtime) recoverStaleTasks(ctx context.Context, before time.Time) error {
+	r.mu.Lock()
+	active := make(map[string]struct{}, len(r.active))
+	for id := range r.active {
+		active[id] = struct{}{}
+	}
+	r.mu.Unlock()
+
+	now := time.Now()
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var candidates []Task
+		if err := tx.Where("status IN ? AND (heartbeat_at IS NULL OR heartbeat_at < ?)", []string{TaskRunning, TaskCancelRequested}, before).
+			Order("created_at ASC, id ASC").Find(&candidates).Error; err != nil {
+			return err
+		}
+		jobs := make(map[string]struct{})
+		for _, task := range candidates {
+			if _, ok := active[task.ID]; ok {
+				continue
+			}
+			attemptStatus := AttemptInterrupted
+			taskStatus := TaskQueued
+			code := "worker_stale"
+			message := "Worker heartbeat expired; queued again"
+			finishedAt := any(nil)
+			if task.CommitStartedAt != nil {
+				taskStatus = TaskFailed
+				code = "commit_interrupted"
+				message = "The worker stopped after irreversible work began; review before retrying"
+				finishedAt = &now
+			} else if task.Status == TaskCancelRequested {
+				attemptStatus = AttemptCanceled
+				taskStatus = TaskCanceled
+				code = "canceled"
+				message = "Cancellation completed after the worker heartbeat expired"
+				finishedAt = &now
+			}
+			updated := tx.Model(&Task{}).
+				Where("id = ? AND status = ? AND (heartbeat_at IS NULL OR heartbeat_at < ?)", task.ID, task.Status, before).
+				Updates(map[string]any{
+					"status": taskStatus, "run_after": nil, "heartbeat_at": nil, "finished_at": finishedAt,
+					"cancel_requested_at": nil, "error_code": code, "error_message": message,
+				})
+			if updated.Error != nil {
+				return updated.Error
+			}
+			if updated.RowsAffected == 0 {
+				continue
+			}
+			if err := tx.Model(&Attempt{}).Where("task_id = ? AND status = ?", task.ID, AttemptRunning).Updates(map[string]any{
+				"status": attemptStatus, "error_code": code, "error_message": message, "finished_at": &now,
+			}).Error; err != nil {
+				return err
+			}
+			if err := addEvent(tx, Event{JobID: task.JobID, TaskID: task.ID, Type: "task_recovered", Message: message}); err != nil {
+				return err
+			}
+			jobs[task.JobID] = struct{}{}
+		}
+		for jobID := range jobs {
+			var job Job
+			if err := tx.First(&job, "id = ?", jobID).Error; err != nil {
+				return err
+			}
+			if err := recomputeJob(tx, &job, now); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (r *Runtime) dispatchLoop() {
-	defer r.wg.Done()
 	ticker := time.NewTicker(r.options.PollInterval)
 	defer ticker.Stop()
 	for {
@@ -360,7 +564,12 @@ func (r *Runtime) dispatchLoop() {
 func (r *Runtime) dispatchAvailable() {
 	queues := []string{QueueFFmpeg, QueueNetwork, QueueStorage, QueueMaintenance, QueueAudit}
 	for _, queue := range queues {
-		if r.rootCtx.Err() != nil || r.queuePaused(queue) {
+		paused, err := r.queuePaused(queue)
+		if err != nil {
+			r.options.Logger.Printf("component=background event=queue_state_failed queue=%s error=%q", queue, err)
+			continue
+		}
+		if r.rootCtx.Err() != nil || paused {
 			continue
 		}
 		available := r.capacity(queue) - r.activeCount(queue)
@@ -394,14 +603,15 @@ func (r *Runtime) claim(queue string) (*Task, *Attempt, error) {
 		updated := tx.Model(&Task{}).
 			Where("id = ? AND status IN ?", task.ID, []string{TaskQueued, TaskRetryWait}).
 			Updates(map[string]any{
-				"status":        TaskRunning,
-				"attempt_count": gorm.Expr("attempt_count + 1"),
-				"started_at":    gorm.Expr("COALESCE(started_at, ?)", startedAt),
-				"heartbeat_at":  &now,
-				"run_after":     nil,
-				"error_code":    "",
-				"error_message": "",
-				"finished_at":   nil,
+				"status":            TaskRunning,
+				"attempt_count":     gorm.Expr("attempt_count + 1"),
+				"started_at":        gorm.Expr("COALESCE(started_at, ?)", startedAt),
+				"heartbeat_at":      &now,
+				"run_after":         nil,
+				"commit_started_at": nil,
+				"error_code":        "",
+				"error_message":     "",
+				"finished_at":       nil,
 			})
 		if updated.Error != nil {
 			return updated.Error
@@ -480,13 +690,23 @@ func (r *Runtime) launch(task Task, attempt Attempt) {
 			}
 			result, runErr = handler(ctx, task)
 		}()
-		if runErr == nil && ctx.Err() != nil {
-			runErr = ctx.Err()
-		}
-		if err := r.finish(task, attempt, result, classifyError(ctx, runErr)); err != nil {
+		if err := r.finishWithRetry(task, attempt, result, classifyError(ctx, runErr)); err != nil {
 			r.options.Logger.Printf("component=background event=finish_failed job=%s task=%s error=%q", task.JobID, task.ID, err)
 		}
 	}()
+}
+
+func (r *Runtime) finishWithRetry(task Task, attempt Attempt, result Result, taskErr *TaskError) error {
+	var err error
+	for retry := 0; retry < 5; retry++ {
+		if err = r.finish(task, attempt, result, taskErr); err == nil {
+			return nil
+		}
+		if retry < 4 {
+			time.Sleep(time.Duration(retry+1) * 50 * time.Millisecond)
+		}
+	}
+	return err
 }
 
 func (r *Runtime) finish(task Task, attempt Attempt, result Result, taskErr *TaskError) error {
@@ -498,6 +718,9 @@ func (r *Runtime) finish(task Task, attempt Attempt, result Result, taskErr *Tas
 		}
 		if current.Status != TaskRunning && current.Status != TaskCancelRequested {
 			return nil
+		}
+		if taskErr == nil && current.Status == TaskCancelRequested && current.CommitStartedAt == nil {
+			taskErr = &TaskError{Code: "canceled", Public: "Canceled", Class: ErrorCanceled, Cause: errUserCanceled}
 		}
 
 		attemptStatus := AttemptSucceeded
@@ -695,10 +918,14 @@ func recomputeJob(tx *gorm.DB, job *Job, now time.Time) error {
 	}
 	status := JobQueued
 	phase := ""
+	lastPhase := ""
 	var totalWeight, completedWeight int64
-	running, waiting, queued, failedRequired, failedOptional, canceled := 0, 0, 0, 0, 0, 0
+	running, waiting, queued, failedRequired, failedOptional, canceledRequired, canceledOptional := 0, 0, 0, 0, 0, 0, 0
 	errorCode, errorMessage := "", ""
 	for _, task := range tasks {
+		if task.Phase != "" {
+			lastPhase = task.Phase
+		}
 		weight := task.Weight
 		if weight < 1 {
 			weight = 1
@@ -741,15 +968,22 @@ func recomputeJob(tx *gorm.DB, job *Job, now time.Time) error {
 				errorCode, errorMessage = task.ErrorCode, task.ErrorMessage
 			}
 		case TaskCanceled:
-			canceled++
+			if task.Required {
+				canceledRequired++
+			} else {
+				canceledOptional++
+			}
+			if errorCode == "" {
+				errorCode, errorMessage = task.ErrorCode, task.ErrorMessage
+			}
 		}
 	}
-	progress := job.Progress
+	if phase == "" {
+		phase = lastPhase
+	}
+	progress := 0
 	if totalWeight > 0 {
-		calculated := int(completedWeight / (totalWeight / 10000))
-		if calculated > progress {
-			progress = calculated
-		}
+		progress = int(completedWeight / (totalWeight / 10000))
 	}
 	terminal := running == 0 && waiting == 0 && queued == 0
 	if !terminal {
@@ -767,10 +1001,11 @@ func recomputeJob(tx *gorm.DB, job *Job, now time.Time) error {
 		switch {
 		case failedRequired > 0:
 			status = JobFailed
-		case job.CancelRequestedAt != nil || canceled > 0:
+		case job.CancelRequestedAt != nil || canceledRequired > 0:
 			status = JobCanceled
-		case failedOptional > 0:
+		case failedOptional > 0 || canceledOptional > 0:
 			status = JobSucceededWithWarnings
+			progress = 10000
 		default:
 			status = JobSucceeded
 			progress = 10000
@@ -814,33 +1049,15 @@ func ReportProgress(ctx context.Context, progress float64, message string) {
 	}
 	reporter.lastAt, reporter.last = now, value
 	reporter.mu.Unlock()
-	_ = reporter.runtime.db.WithContext(ctx).Model(&Task{}).Where("id = ? AND status IN ?", reporter.taskID, []string{TaskRunning, TaskCancelRequested}).Updates(map[string]any{
-		"progress":         value,
-		"progress_message": boundedMessage(message, 255),
-		"heartbeat_at":     &now,
-	}).Error
-}
-
-// BeginPhase atomically moves a running task into a new phase. Handlers use it
-// as the boundary before irreversible work: cancellation either wins first
-// and this returns false, or the new job phase becomes visible before an
-// operator can request cancellation.
-func BeginPhase(ctx context.Context, phase string) bool {
-	reporter, _ := ctx.Value(executionReporterKey{}).(*executionReporter)
-	if reporter == nil || strings.TrimSpace(phase) == "" {
-		return false
-	}
-	now := time.Now()
-	err := reporter.runtime.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		updated := tx.Model(&Task{}).Where("id = ? AND status = ?", reporter.taskID, TaskRunning).Update("phase", boundedMessage(phase, 120))
-		if updated.Error != nil {
+	if err := reporter.runtime.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		updated := tx.Model(&Task{}).Where("id = ? AND status IN ?", reporter.taskID, []string{TaskRunning, TaskCancelRequested}).Updates(map[string]any{
+			"progress": value, "progress_message": boundedMessage(message, 255), "heartbeat_at": &now,
+		})
+		if updated.Error != nil || updated.RowsAffected == 0 {
 			return updated.Error
 		}
-		if updated.RowsAffected != 1 {
-			return ErrConflict
-		}
 		var task Task
-		if err := tx.First(&task, "id = ?", reporter.taskID).Error; err != nil {
+		if err := tx.Select("job_id").First(&task, "id = ?", reporter.taskID).Error; err != nil {
 			return err
 		}
 		var job Job
@@ -848,12 +1065,64 @@ func BeginPhase(ctx context.Context, phase string) bool {
 			return err
 		}
 		return recomputeJob(tx, &job, now)
+	}); err != nil && !errors.Is(err, context.Canceled) {
+		reporter.runtime.options.Logger.Printf("component=background event=progress_update_failed task=%s error=%q", reporter.taskID, err)
+	}
+}
+
+// BeginPhase atomically moves a running task into a new phase. Handlers use it
+// as the boundary before irreversible work: cancellation either wins first
+// and this returns false, or the new job phase becomes visible before an
+// operator can request cancellation.
+func BeginPhase(ctx context.Context, phase string) bool {
+	return BeginCommit(ctx, phase)
+}
+
+// BeginCommit establishes the cancellation fence before irreversible work.
+// Once it succeeds, a concurrent cancellation request is rejected and a
+// successful handler result wins even if its context is canceled later.
+func BeginCommit(ctx context.Context, phase string) bool {
+	if ctx == nil {
+		return strings.TrimSpace(phase) != ""
+	}
+	reporter, _ := ctx.Value(executionReporterKey{}).(*executionReporter)
+	if strings.TrimSpace(phase) == "" {
+		return false
+	}
+	// The same worker functions remain usable by legacy synchronous callers.
+	// Only runtime-managed contexts need a durable cancellation fence.
+	if reporter == nil {
+		return ctx == nil || ctx.Err() == nil
+	}
+	now := time.Now()
+	err := reporter.runtime.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var task Task
+		if err := tx.First(&task, "id = ?", reporter.taskID).Error; err != nil {
+			return err
+		}
+		if task.Status != TaskRunning {
+			return ErrConflict
+		}
+		var job Job
+		if err := tx.First(&job, "id = ?", task.JobID).Error; err != nil {
+			return err
+		}
+		if job.CancelRequestedAt != nil {
+			return ErrConflict
+		}
+		updated := tx.Model(&Task{}).Where("id = ? AND status = ? AND cancel_requested_at IS NULL", reporter.taskID, TaskRunning).Updates(map[string]any{"phase": boundedMessage(phase, 120), "commit_started_at": &now})
+		if updated.Error != nil {
+			return updated.Error
+		}
+		if updated.RowsAffected != 1 {
+			return ErrConflict
+		}
+		return recomputeJob(tx, &job, now)
 	})
 	return err == nil
 }
 
 func (r *Runtime) heartbeatLoop() {
-	defer r.wg.Done()
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -868,7 +1137,12 @@ func (r *Runtime) heartbeatLoop() {
 			}
 			r.mu.Unlock()
 			if len(ids) > 0 {
-				_ = r.db.Model(&Task{}).Where("id IN ? AND status IN ?", ids, []string{TaskRunning, TaskCancelRequested}).Update("heartbeat_at", &now).Error
+				if err := r.db.Model(&Task{}).Where("id IN ? AND status IN ?", ids, []string{TaskRunning, TaskCancelRequested}).Update("heartbeat_at", &now).Error; err != nil {
+					r.options.Logger.Printf("component=background event=heartbeat_failed error=%q", err)
+				}
+			}
+			if err := r.recoverStaleTasks(r.rootCtx, now.Add(-30*time.Second)); err != nil {
+				r.options.Logger.Printf("component=background event=stale_recovery_failed error=%q", err)
 			}
 		}
 	}
@@ -912,10 +1186,13 @@ func (r *Runtime) cancelActive(cause error) {
 	}
 }
 
-func (r *Runtime) queuePaused(queue string) bool {
+func (r *Runtime) queuePaused(queue string) (bool, error) {
 	var state QueueState
 	err := r.db.First(&state, "name = ?", queue).Error
-	return err == nil && state.Paused
+	if err != nil {
+		return false, err
+	}
+	return state.Paused, nil
 }
 
 func (r *Runtime) ensureQueues() error {
@@ -935,7 +1212,9 @@ func (r *Runtime) QueueSummaries(ctx context.Context) ([]QueueSummary, error) {
 	result := make([]QueueSummary, 0, len(states))
 	for _, state := range states {
 		summary := QueueSummary{QueueState: state, Capacity: r.capacity(state.Name), Active: r.activeCount(state.Name)}
-		_ = r.db.WithContext(ctx).Model(&Task{}).Where("queue = ? AND status IN ?", state.Name, []string{TaskQueued, TaskRetryWait}).Count(&summary.Waiting).Error
+		if err := r.db.WithContext(ctx).Model(&Task{}).Where("queue = ? AND status IN ?", state.Name, []string{TaskQueued, TaskRetryWait}).Count(&summary.Waiting).Error; err != nil {
+			return nil, err
+		}
 		var oldest Task
 		if err := r.db.WithContext(ctx).Where("queue = ? AND status IN ?", state.Name, []string{TaskQueued, TaskRetryWait}).Order("created_at ASC").First(&oldest).Error; err == nil {
 			summary.OldestAt = &oldest.CreatedAt
@@ -978,7 +1257,11 @@ func (r *Runtime) CancelJob(ctx context.Context, jobID string, actorID uint, act
 		if terminalJobStatus(job.Status) {
 			return ErrConflict
 		}
-		if job.Kind == "content.delete" && job.Phase != "" && job.Phase != "queued" && job.Phase != "validating" {
+		var committing int64
+		if err := tx.Model(&Task{}).Where("job_id = ? AND commit_started_at IS NOT NULL AND status IN ?", jobID, []string{TaskRunning, TaskCancelRequested}).Count(&committing).Error; err != nil {
+			return err
+		}
+		if committing > 0 {
 			return ErrConflict
 		}
 		if err := tx.Model(&job).Updates(map[string]any{"status": JobCancelRequested, "cancel_requested_at": &now}).Error; err != nil {
@@ -1002,10 +1285,12 @@ func (r *Runtime) CancelJob(ctx context.Context, jobID string, actorID uint, act
 	if err != nil {
 		return err
 	}
+	var ids []string
+	if err := r.db.WithContext(ctx).Model(&Task{}).Where("job_id = ? AND status = ?", jobID, TaskCancelRequested).Pluck("id", &ids).Error; err != nil {
+		return err
+	}
 	r.mu.Lock()
 	var cancels []context.CancelCauseFunc
-	var ids []string
-	_ = r.db.WithContext(ctx).Model(&Task{}).Where("job_id = ? AND status = ?", jobID, TaskCancelRequested).Pluck("id", &ids).Error
 	for _, id := range ids {
 		if active, ok := r.active[id]; ok {
 			cancels = append(cancels, active.cancel)
@@ -1030,6 +1315,7 @@ func (r *Runtime) RetryJob(ctx context.Context, jobID string, actorID uint, acto
 		}
 		result := tx.Model(&Task{}).Where("job_id = ? AND status IN ?", jobID, []string{TaskFailed, TaskCanceled}).Updates(map[string]any{
 			"status": TaskQueued, "run_after": nil, "finished_at": nil, "cancel_requested_at": nil, "error_code": "", "error_message": "",
+			"commit_started_at": nil, "progress": 0, "progress_message": "",
 			"max_attempts": gorm.Expr("attempt_count + 4"),
 		})
 		if result.Error != nil {
@@ -1056,6 +1342,9 @@ func (r *Runtime) CancelTask(ctx context.Context, taskID string, actorID uint, a
 			return err
 		}
 		if terminalTaskStatus(loaded.Status) {
+			return ErrConflict
+		}
+		if loaded.CommitStartedAt != nil {
 			return ErrConflict
 		}
 		updates := map[string]any{"status": TaskCanceled, "finished_at": &now, "error_code": "canceled", "error_message": "Canceled by administrator"}
@@ -1098,6 +1387,7 @@ func (r *Runtime) RetryTask(ctx context.Context, taskID string, actorID uint, ac
 		}
 		if err := tx.Model(&task).Updates(map[string]any{
 			"status": TaskQueued, "run_after": nil, "finished_at": nil, "cancel_requested_at": nil, "error_code": "", "error_message": "",
+			"commit_started_at": nil, "progress": 0, "progress_message": "",
 			"max_attempts": gorm.Expr("attempt_count + 4"),
 		}).Error; err != nil {
 			return err

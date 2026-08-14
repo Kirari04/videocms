@@ -470,6 +470,9 @@ func (w *WorkerGroup) runEncodeQuality(ctx context.Context, encodingTask models.
 	if err := cmd.Run(); err != nil {
 		return w.failEncodingTask(&encodingTask, ffmpegEncodingError(ctx, err, diagnostics))
 	}
+	if !background.BeginCommit(ctx, "Publishing encoded quality") {
+		return context.Canceled
+	}
 	if w.deps.Storage != nil && w.deps.Storage.Layout() != nil {
 		prefix, err := w.deps.Storage.Layout().VideoPrefix(encodingTask.File.UUID, encodingTask.Name)
 		if err == nil {
@@ -557,6 +560,9 @@ func (w *WorkerGroup) runEncodeAudio(ctx context.Context, encodingTask models.Au
 	start := time.Now()
 	if err := cmd.Run(); err != nil {
 		return w.failEncodingTask(&encodingTask, ffmpegEncodingError(ctx, err, diagnostics))
+	}
+	if !background.BeginCommit(ctx, "Publishing encoded audio") {
+		return context.Canceled
 	}
 	if w.deps.Storage != nil && w.deps.Storage.Layout() != nil {
 		prefix, err := w.deps.Storage.Layout().AudioPrefix(encodingTask.File.UUID, encodingTask.UUID)
@@ -694,6 +700,9 @@ func (w *WorkerGroup) runEncodeSub(ctx context.Context, encodingTask models.Subt
 	start := time.Now()
 	if err := cmd.Run(); err != nil {
 		return w.failEncodingTask(&encodingTask, ffmpegEncodingError(ctx, err, diagnostics))
+	}
+	if !background.BeginCommit(ctx, "Publishing encoded subtitle") {
+		return context.Canceled
 	}
 	if w.deps.Storage != nil && w.deps.Storage.Layout() != nil {
 		prefix, err := w.deps.Storage.Layout().SubtitlePrefix(encodingTask.File.UUID, encodingTask.UUID)

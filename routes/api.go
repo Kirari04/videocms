@@ -47,7 +47,12 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	v2.POST("/uploads/simple", handlers.SimpleUploadController,
 		middleware.BodyLimit(fmt.Sprintf("%dk", cfg.MaxUploadFilesize/1024+1024)))
 	v2.POST("/uploads/:upload_id/finalize", handlers.FinalizeTusUpload)
-	v2.POST("/remote-downloads", handlers.CreateRemoteDownload)
+	v2.POST("/remote-downloads", handlers.CreateRemoteDownloadV2)
+	v2.GET("/remote-downloads", handlers.ListRemoteDownloads)
+	v2.DELETE("/remote-downloads", handlers.ClearRemoteDownloads)
+	v2.POST("/remote-downloads/:id/cancel", handlers.CancelRemoteDownload)
+	v2.POST("/remote-downloads/:id/retry", handlers.RetryRemoteDownload)
+	v2.DELETE("/remote-downloads/:id", handlers.DeleteRemoteDownload)
 	v2.DELETE("/file", handlers.DeleteFileController)
 	v2.DELETE("/files", handlers.DeleteFilesController)
 	v2.DELETE("/folder", handlers.DeleteFolder)
@@ -68,10 +73,10 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	adminV2.GET("/task-runtime", handlers.GetAdminBackgroundRuntime)
 	protectedApi.POST("/folder", handlers.CreateFolder)
 	protectedApi.PUT("/folder", handlers.UpdateFolder)
-	protectedApi.DELETE("/folder", handlers.DeleteFolder)
+	protectedApi.DELETE("/folder", handlers.DeleteFolderLegacy)
 	protectedApi.PUT("/move", handlers.MoveItems)
 	protectedApi.GET("/folders", handlers.ListFolders)
-	protectedApi.DELETE("/folders", handlers.DeleteFolders)
+	protectedApi.DELETE("/folders", handlers.DeleteFoldersLegacy)
 
 	protectedApi.POST("/file", handlers.CreateFile)
 	protectedApi.POST("/file/clone", handlers.CloneFile)
@@ -79,13 +84,13 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	protectedApi.PUT("/file", handlers.UpdateFile)
 	protectedApi.PUT("/file/thumbnail", handlers.UpdateFileThumbnail)
 	protectedApi.DELETE("/file/thumbnail", handlers.DeleteFileThumbnail)
-	protectedApi.DELETE("/file", handlers.DeleteFileController)
+	protectedApi.DELETE("/file", handlers.DeleteFileLegacy)
 	protectedApi.GET("/files/search", handlers.SearchFiles)
 	protectedApi.GET("/files", handlers.ListFiles)
-	protectedApi.DELETE("/files", handlers.DeleteFilesController)
+	protectedApi.DELETE("/files", handlers.DeleteFilesLegacy)
 	protectedApi.POST("/file/tag", handlers.CreateTagController)
 	protectedApi.DELETE("/file/tag", handlers.DeleteTagController)
-	protectedApi.POST("/file/upload", handlers.SimpleUploadController,
+	protectedApi.POST("/file/upload", handlers.SimpleUploadLegacy,
 		middleware.BodyLimit(fmt.Sprintf("%dk", cfg.MaxUploadFilesize/1024+1024)))
 
 	protectedApi.GET("/account", handlers.GetAccount)
@@ -152,14 +157,14 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	protectedApi.GET("/encodings", handlers.GetEncodingFiles)
 
 	protectedApi.GET("/uploads/sessions", handlers.GetUploadSessions)
-	protectedApi.POST("/uploads/:upload_id/finalize", handlers.FinalizeTusUpload)
+	protectedApi.POST("/uploads/:upload_id/finalize", handlers.FinalizeTusUploadLegacy)
 
 	// Remote Download
-	protectedApi.POST("/remote/download", handlers.CreateRemoteDownload)
+	protectedApi.POST("/remote/download", handlers.CreateRemoteDownloadLegacy)
 	protectedApi.GET("/remote/downloads", handlers.ListRemoteDownloads)
 	protectedApi.DELETE("/remote/downloads", handlers.ClearRemoteDownloads)
-	protectedApi.POST("/remote/download/:id/cancel", handlers.CancelRemoteDownload)
-	protectedApi.POST("/remote/download/:id/retry", handlers.RetryRemoteDownload)
+	protectedApi.POST("/remote/download/:id/cancel", handlers.CancelRemoteDownloadLegacy)
+	protectedApi.POST("/remote/download/:id/retry", handlers.RetryRemoteDownloadLegacy)
 	protectedApi.DELETE("/remote/download/:id", handlers.DeleteRemoteDownload)
 	protectedApi.GET("/account/remote-download", handlers.GetRemoteDownloadStats)
 	protectedApi.GET("/account/remote-download/duration", handlers.GetRemoteDownloadDurationStats)

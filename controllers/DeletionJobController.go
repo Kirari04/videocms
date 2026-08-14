@@ -3,15 +3,21 @@ package controllers
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"ch/kirari04/videocms/background"
+	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/models"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
 func (h *Handlers) enqueueDeletion(c echo.Context, linkIDs, folderIDs []uint) error {
+	linkIDs = append([]uint(nil), linkIDs...)
+	folderIDs = append([]uint(nil), folderIDs...)
+	sort.Slice(linkIDs, func(i, j int) bool { return linkIDs[i] < linkIDs[j] })
+	sort.Slice(folderIDs, func(i, j int) bool { return folderIDs[i] < folderIDs[j] })
 	userID := c.Get("UserID").(uint)
 	isAdmin, _ := c.Get("Admin").(bool)
 	if len(linkIDs)+len(folderIDs) == 0 {
@@ -39,9 +45,63 @@ func (h *Handlers) enqueueDeletion(c echo.Context, linkIDs, folderIDs []uint) er
 		}},
 	})
 	if err != nil {
-		return c.String(http.StatusInternalServerError, "Failed to queue deletion")
+		return backgroundAPIError(c, err)
 	}
 	return acceptedBackgroundJob(c, job)
+}
+
+// Legacy deletion handlers preserve the synchronous v1 contract while new
+// clients use the durable /v2 endpoints.
+func (h *Handlers) DeleteFileLegacy(c echo.Context) error {
+	var validation models.LinkDeleteValidation
+	if status, err := helpers.Validate(c, &validation); err != nil {
+		return c.String(status, err.Error())
+	}
+	admin, _ := c.Get("Admin").(bool)
+	status, err := h.Logic.DeleteFiles(&models.LinksDeleteValidation{LinkIDs: []models.LinkDeleteValidation{validation}}, c.Get("UserID").(uint), admin)
+	if err != nil {
+		return c.String(status, err.Error())
+	}
+	return c.NoContent(status)
+}
+
+func (h *Handlers) DeleteFilesLegacy(c echo.Context) error {
+	var validation models.LinksDeleteValidation
+	if status, err := helpers.Validate(c, &validation); err != nil {
+		return c.String(status, err.Error())
+	}
+	admin, _ := c.Get("Admin").(bool)
+	status, err := h.Logic.DeleteFiles(&validation, c.Get("UserID").(uint), admin)
+	if err != nil {
+		return c.String(status, err.Error())
+	}
+	return c.NoContent(status)
+}
+
+func (h *Handlers) DeleteFolderLegacy(c echo.Context) error {
+	var validation models.FolderDeleteValidation
+	if status, err := helpers.Validate(c, &validation); err != nil {
+		return c.String(status, err.Error())
+	}
+	admin, _ := c.Get("Admin").(bool)
+	status, err := h.Logic.DeleteFolders(&models.FoldersDeleteValidation{FolderIDs: []models.FolderDeleteValidation{validation}}, c.Get("UserID").(uint), admin)
+	if err != nil {
+		return c.String(status, err.Error())
+	}
+	return c.NoContent(status)
+}
+
+func (h *Handlers) DeleteFoldersLegacy(c echo.Context) error {
+	var validation models.FoldersDeleteValidation
+	if status, err := helpers.Validate(c, &validation); err != nil {
+		return c.String(status, err.Error())
+	}
+	admin, _ := c.Get("Admin").(bool)
+	status, err := h.Logic.DeleteFolders(&validation, c.Get("UserID").(uint), admin)
+	if err != nil {
+		return c.String(status, err.Error())
+	}
+	return c.NoContent(status)
 }
 
 func (h *Handlers) validateDeletionSelection(userID uint, isAdmin bool, linkIDs, folderIDs []uint) error {

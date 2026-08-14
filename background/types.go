@@ -3,6 +3,7 @@ package background
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -54,7 +55,7 @@ type Job struct {
 	OwnerName         string     `gorm:"-" json:"ownerName,omitempty"`
 	SubjectType       string     `gorm:"size:64;index" json:"subjectType,omitempty"`
 	SubjectID         string     `gorm:"size:128;index" json:"subjectId,omitempty"`
-	IdempotencyKey    string     `gorm:"size:255;uniqueIndex:idx_background_job_idempotency" json:"-"`
+	IdempotencyKey    string     `gorm:"size:255;uniqueIndex:idx_background_job_idempotency,where:idempotency_key <> ''" json:"-"`
 	Label             string     `gorm:"size:255" json:"label"`
 	Phase             string     `gorm:"size:120" json:"phase,omitempty"`
 	Progress          int        `json:"progress"`
@@ -97,6 +98,7 @@ type Task struct {
 	ErrorCode         string     `gorm:"size:80" json:"errorCode,omitempty"`
 	ErrorMessage      string     `gorm:"size:512" json:"errorMessage,omitempty"`
 	CancelRequestedAt *time.Time `json:"cancelRequestedAt,omitempty"`
+	CommitStartedAt   *time.Time `gorm:"index" json:"commitStartedAt,omitempty"`
 	StartedAt         *time.Time `json:"startedAt,omitempty"`
 	FinishedAt        *time.Time `json:"finishedAt,omitempty"`
 	CreatedAt         time.Time  `gorm:"index" json:"createdAt"`
@@ -112,7 +114,7 @@ type Attempt struct {
 	TaskID       string     `gorm:"size:36;index" json:"taskId"`
 	Number       int        `json:"number"`
 	Status       string     `gorm:"size:32;index" json:"status"`
-	Worker       string     `gorm:"size:120" json:"worker"`
+	Worker       string     `gorm:"size:120" json:"worker,omitempty"`
 	ErrorCode    string     `gorm:"size:80" json:"errorCode,omitempty"`
 	ErrorMessage string     `gorm:"size:512" json:"errorMessage,omitempty"`
 	Diagnostics  string     `gorm:"type:text" json:"diagnostics,omitempty"`
@@ -221,6 +223,7 @@ type ListFilter struct {
 	Search        string
 	Limit         int
 	Before        *time.Time
+	BeforeID      string
 }
 
 type QueueSummary struct {
@@ -245,6 +248,19 @@ type ScheduleDefinition struct {
 	Interval   time.Duration
 	RunOnStart bool
 	Build      func() JobSpec
+}
+
+type LoopHealth struct {
+	Name        string     `json:"name"`
+	Status      string     `json:"status"`
+	Restarts    int        `json:"restarts"`
+	LastStartAt *time.Time `json:"lastStartAt,omitempty"`
+	LastError   string     `json:"lastError,omitempty"`
+}
+
+type RuntimeHealth struct {
+	Status string       `json:"status"`
+	Loops  []LoopHealth `json:"loops"`
 }
 
 func terminalJobStatus(status string) bool {
@@ -274,5 +290,24 @@ func marshalPayload(value any) (string, error) {
 }
 
 func Migrate(db *gorm.DB) error {
-	return db.AutoMigrate(&Job{}, &Task{}, &Attempt{}, &Event{}, &QueueState{}, &ScheduleState{}, &MigrationState{})
+	if err := db.AutoMigrate(&Job{}, &Task{}, &Attempt{}, &Event{}, &QueueState{}, &ScheduleState{}, &MigrationState{}); err != nil {
+		return err
+	}
+	if db.Dialector.Name() != "sqlite" {
+		return nil
+	}
+
+	var indexSQL string
+	if err := db.Raw("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?", "idx_background_job_idempotency").Scan(&indexSQL).Error; err != nil {
+		return err
+	}
+	if strings.Contains(strings.ToLower(indexSQL), " where ") {
+		return nil
+	}
+	if indexSQL != "" {
+		if err := db.Migrator().DropIndex(&Job{}, "idx_background_job_idempotency"); err != nil {
+			return err
+		}
+	}
+	return db.Migrator().CreateIndex(&Job{}, "idx_background_job_idempotency")
 }

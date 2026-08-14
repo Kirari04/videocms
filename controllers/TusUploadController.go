@@ -33,3 +33,15 @@ func (h *Handlers) FinalizeTusUpload(c echo.Context) error {
 	}
 	return acceptedBackgroundJob(c, job)
 }
+
+func (h *Handlers) FinalizeTusUploadLegacy(c echo.Context) error {
+	userID, ok := c.Get("UserID").(uint)
+	if !ok {
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	status, response, err := h.TUS.Finalize(c.Param("upload_id"), userID)
+	if err != nil {
+		return c.String(status, err.Error())
+	}
+	return c.JSON(status, response)
+}

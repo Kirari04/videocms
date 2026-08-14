@@ -103,6 +103,116 @@ func TestEnqueueIsIdempotentAndOwnerScoped(t *testing.T) {
 	}
 }
 
+func TestEnqueueAllowsEmptyAndNormalizesLongIdempotencyKeys(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	ownerID := uint(7)
+	for index := 0; index < 2; index++ {
+		if _, reused, err := runtime.Enqueue(context.Background(), JobSpec{
+			Kind: "test.empty", Visibility: VisibilityUser, OwnerID: &ownerID,
+			Tasks: []TaskSpec{{Kind: "test.empty", Queue: QueueStorage, Required: true}},
+		}); err != nil || reused {
+			t.Fatalf("enqueue empty key %d: reused=%v err=%v", index, reused, err)
+		}
+	}
+	longKey := strings.Repeat("long-key-", 80)
+	first, reused, err := runtime.Enqueue(context.Background(), JobSpec{
+		Kind: "test.long", Visibility: VisibilityUser, OwnerID: &ownerID, IdempotencyKey: longKey,
+		Tasks: []TaskSpec{{Kind: "test.long", Queue: QueueStorage, Payload: map[string]any{"value": 1}, Required: true}},
+	})
+	if err != nil || reused {
+		t.Fatalf("enqueue long key: reused=%v err=%v", reused, err)
+	}
+	second, reused, err := runtime.Enqueue(context.Background(), JobSpec{
+		Kind: "test.long", Visibility: VisibilityUser, OwnerID: &ownerID, IdempotencyKey: longKey,
+		Tasks: []TaskSpec{{Kind: "test.long", Queue: QueueStorage, Payload: map[string]any{"value": 1}, Required: true}},
+	})
+	if err != nil || !reused || second.ID != first.ID {
+		t.Fatalf("replay long key: reused=%v ids=%s/%s err=%v", reused, first.ID, second.ID, err)
+	}
+}
+
+func TestEnqueueRejectsChangedIdempotentPayload(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	ownerID := uint(7)
+	spec := JobSpec{Kind: "content.delete", Visibility: VisibilityUser, OwnerID: &ownerID, IdempotencyKey: "delete-request",
+		SubjectType: "selection", SubjectID: "request", Tasks: []TaskSpec{{Kind: "content.delete", Queue: QueueStorage, Payload: map[string]any{"linkIds": []uint{1}}, Required: true}}}
+	if _, _, err := runtime.Enqueue(context.Background(), spec); err != nil {
+		t.Fatal(err)
+	}
+	spec.Tasks[0].Payload = map[string]any{"linkIds": []uint{2}}
+	if _, _, err := runtime.Enqueue(context.Background(), spec); !errors.Is(err, ErrIdempotencyConflict) {
+		t.Fatalf("expected idempotency conflict, got %v", err)
+	}
+}
+
+func TestUserCannotReadOwnerAssociatedSystemJob(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	ownerID := uint(7)
+	job, _, err := runtime.Enqueue(context.Background(), JobSpec{
+		Kind: "test.system", Visibility: VisibilitySystem, OwnerID: &ownerID, IdempotencyKey: "system-owner",
+		Tasks: []TaskSpec{{Kind: "test.system", Queue: QueueAudit, Required: true}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.Job(context.Background(), job.ID, &ownerID, false); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("owner accessed system job: %v", err)
+	}
+}
+
+func TestReportProgressUpdatesParentBeforeCompletion(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	if err := runtime.Register("test.progress", func(ctx context.Context, _ Task) (Result, error) {
+		ReportProgress(ctx, 0.42, "Working")
+		close(started)
+		<-release
+		return Result{}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	startTestRuntime(t, runtime)
+	job := enqueueTestJob(t, runtime, "live-progress", "test.progress", QueueStorage, 1)
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not report progress")
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		detail, err := runtime.Job(context.Background(), job.ID, nil, true)
+		if err == nil && detail.Progress == 4200 {
+			close(release)
+			waitForJob(t, runtime, job.ID, JobSucceeded)
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	close(release)
+	t.Fatal("parent job progress was not updated while the task was running")
+}
+
+func TestOptionalChildFailureProducesUsableResultWithWarnings(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	if err := runtime.Register("test.import", func(context.Context, Task) (Result, error) {
+		return Result{ResultType: "link", ResultID: "video-1", Children: []TaskSpec{{Kind: "test.optional", Queue: QueueStorage, Required: false}}}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.Register("test.optional", func(context.Context, Task) (Result, error) {
+		return Result{}, Permanent("derived_failed", "Derived media failed", errors.New("boom"))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	startTestRuntime(t, runtime)
+	job := enqueueTestJob(t, runtime, "optional-warning", "test.import", QueueStorage, 1)
+	detail := waitForJob(t, runtime, job.ID, JobSucceededWithWarnings)
+	if detail.ResultID != "video-1" || detail.Progress != 10000 {
+		t.Fatalf("warning job lost usable result: result=%q progress=%d", detail.ResultID, detail.Progress)
+	}
+}
+
 func TestRuntimeAddsChildrenAndReducesJobResult(t *testing.T) {
 	runtime, _ := testRuntime(t)
 	if err := runtime.Register("test.parent", func(ctx context.Context, _ Task) (Result, error) {
@@ -127,6 +237,18 @@ func TestRuntimeAddsChildrenAndReducesJobResult(t *testing.T) {
 	}
 	if len(detail.Tasks) != 2 || detail.Tasks[1].ParentTaskID != detail.Tasks[0].ID {
 		t.Fatalf("expected parent and linked child tasks, got %#v", detail.Tasks)
+	}
+	ownerID := uint(7)
+	replayed, reused, err := runtime.Enqueue(context.Background(), JobSpec{
+		Kind: "test.parent", Visibility: VisibilityUser, OwnerID: &ownerID, IdempotencyKey: "parent-child", Label: "parent-child",
+		Tasks: []TaskSpec{{Kind: "test.parent", Queue: QueueStorage, Phase: "Working", DedupeKey: "test.parent", Required: true, Weight: 1, MaxAttempts: 1}},
+	})
+	if err != nil || !reused || replayed == nil || replayed.ID != job.ID {
+		gotID := ""
+		if replayed != nil {
+			gotID = replayed.ID
+		}
+		t.Fatalf("completed dynamic job did not replay: reused=%v id=%s err=%v", reused, gotID, err)
 	}
 }
 
@@ -266,6 +388,194 @@ func TestRecoverInterruptsAttemptsAndRequeuesTasks(t *testing.T) {
 	}
 	if detail.Status != JobQueued || detail.Tasks[0].Status != TaskQueued || detail.Tasks[0].Attempts[0].Status != AttemptInterrupted {
 		t.Fatalf("unexpected recovered state: %#v", detail)
+	}
+}
+
+func TestRecoverDoesNotAutomaticallyRepeatCommittedTask(t *testing.T) {
+	runtime, db := testRuntime(t)
+	job := enqueueTestJob(t, runtime, "recover-committed", "test.recover", QueueStorage, 2)
+	commitStartedAt := time.Now().Add(-time.Minute)
+	if err := db.Model(&Job{}).Where("id = ?", job.ID).Update("status", JobRunning).Error; err != nil {
+		t.Fatal(err)
+	}
+	var task Task
+	if err := db.First(&task, "job_id = ?", job.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&task).Updates(map[string]any{
+		"status": TaskRunning, "attempt_count": 1, "heartbeat_at": &commitStartedAt, "commit_started_at": &commitStartedAt,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	attempt := Attempt{ID: "committed-attempt", TaskID: task.ID, Number: 1, Status: AttemptRunning, Worker: "dead-worker", StartedAt: commitStartedAt}
+	if err := db.Create(&attempt).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.Recover(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := runtime.Job(context.Background(), job.ID, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Status != JobFailed || detail.Tasks[0].Status != TaskFailed || detail.Tasks[0].ErrorCode != "commit_interrupted" || detail.Tasks[0].CommitStartedAt == nil {
+		t.Fatalf("committed task was not held for review: %#v", detail)
+	}
+}
+
+func TestStaleRunningTaskIsRecoveredWithoutRestart(t *testing.T) {
+	runtime, db := testRuntime(t)
+	job := enqueueTestJob(t, runtime, "stale", "test.stale", QueueStorage, 2)
+	var task Task
+	if err := db.First(&task, "job_id = ?", job.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	staleAt := time.Now().Add(-time.Minute)
+	if err := db.Model(&task).Updates(map[string]any{"status": TaskRunning, "attempt_count": 1, "heartbeat_at": &staleAt}).Error; err != nil {
+		t.Fatal(err)
+	}
+	attempt := Attempt{ID: "stale-attempt", TaskID: task.ID, Number: 1, Status: AttemptRunning, Worker: "lost-worker", StartedAt: staleAt}
+	if err := db.Create(&attempt).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.recoverStaleTasks(context.Background(), time.Now().Add(-30*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := runtime.Job(context.Background(), job.ID, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Status != JobQueued || detail.Tasks[0].Status != TaskQueued || detail.Tasks[0].Attempts[0].Status != AttemptInterrupted {
+		t.Fatalf("unexpected stale recovery state: %#v", detail)
+	}
+}
+
+func TestStaleCommittedTaskRequiresExplicitRetry(t *testing.T) {
+	runtime, db := testRuntime(t)
+	job := enqueueTestJob(t, runtime, "stale-committed", "test.stale", QueueStorage, 2)
+	var task Task
+	if err := db.First(&task, "job_id = ?", job.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	staleAt := time.Now().Add(-time.Minute)
+	if err := db.Model(&task).Updates(map[string]any{
+		"status": TaskRunning, "attempt_count": 1, "heartbeat_at": &staleAt, "commit_started_at": &staleAt,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	attempt := Attempt{ID: "stale-committed-attempt", TaskID: task.ID, Number: 1, Status: AttemptRunning, Worker: "lost-worker", StartedAt: staleAt}
+	if err := db.Create(&attempt).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.recoverStaleTasks(context.Background(), time.Now().Add(-30*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := runtime.Job(context.Background(), job.ID, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Status != JobFailed || detail.Tasks[0].Status != TaskFailed || detail.Tasks[0].ErrorCode != "commit_interrupted" || detail.Tasks[0].CommitStartedAt == nil {
+		t.Fatalf("stale committed task was not held for review: %#v", detail)
+	}
+}
+
+func TestFinishRetriesTransientDatabaseFailure(t *testing.T) {
+	runtime, db := testRuntime(t)
+	job := enqueueTestJob(t, runtime, "finish-retry", "test.finish", QueueStorage, 1)
+	var task Task
+	if err := db.First(&task, "job_id = ?", job.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := db.Model(&task).Updates(map[string]any{"status": TaskRunning, "attempt_count": 1, "heartbeat_at": &now}).Error; err != nil {
+		t.Fatal(err)
+	}
+	attempt := Attempt{ID: "finish-retry-attempt", TaskID: task.ID, Number: 1, Status: AttemptRunning, Worker: "test", StartedAt: now}
+	if err := db.Create(&attempt).Error; err != nil {
+		t.Fatal(err)
+	}
+	var failures atomic.Int32
+	callbackName := "test:finish_retry"
+	if err := db.Callback().Update().Before("gorm:update").Register(callbackName, func(tx *gorm.DB) {
+		if tx.Statement.Table == "background_task_attempts" && failures.Add(1) <= 2 {
+			tx.AddError(errors.New("forced finish failure"))
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Callback().Update().Remove(callbackName) })
+	if err := runtime.finishWithRetry(task, attempt, Result{}, nil); err != nil {
+		t.Fatalf("finish did not recover: %v", err)
+	}
+	detail, err := runtime.Job(context.Background(), job.ID, nil, true)
+	if err != nil || detail.Status != JobSucceeded {
+		t.Fatalf("finish result status=%v err=%v failures=%d", detail.Status, err, failures.Load())
+	}
+}
+
+func TestStartCanRetryAfterInitializationFailure(t *testing.T) {
+	runtime, db := testRuntime(t)
+	var failed atomic.Bool
+	callbackName := "test:start_failure"
+	if err := db.Callback().Query().Before("gorm:query").Register(callbackName, func(tx *gorm.DB) {
+		if failed.CompareAndSwap(false, true) {
+			tx.AddError(errors.New("forced startup failure"))
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.Start(context.Background()); err == nil {
+		t.Fatal("expected first start to fail")
+	}
+	if runtime.started || runtime.starting {
+		t.Fatal("failed start left runtime marked started")
+	}
+	if err := db.Callback().Query().Remove(callbackName); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.Start(context.Background()); err != nil {
+		t.Fatalf("second start failed: %v", err)
+	}
+	if !runtime.Stop(2 * time.Second) {
+		t.Fatal("runtime did not stop")
+	}
+}
+
+func TestCompoundCursorDoesNotSkipEqualTimestamps(t *testing.T) {
+	runtime, db := testRuntime(t)
+	first := enqueueTestJob(t, runtime, "cursor-a", "test.cursor", QueueStorage, 1)
+	second := enqueueTestJob(t, runtime, "cursor-b", "test.cursor", QueueStorage, 1)
+	createdAt := time.Now().UTC().Truncate(time.Second)
+	if err := db.Model(&Job{}).Where("id IN ?", []string{first.ID, second.ID}).Update("created_at", createdAt).Error; err != nil {
+		t.Fatal(err)
+	}
+	page, err := runtime.ListJobs(context.Background(), ListFilter{IncludeSystem: true, Limit: 1})
+	if err != nil || len(page) != 1 {
+		t.Fatalf("first page: jobs=%d err=%v", len(page), err)
+	}
+	next, err := runtime.ListJobs(context.Background(), ListFilter{IncludeSystem: true, Limit: 1, Before: &page[0].CreatedAt, BeforeID: page[0].ID})
+	if err != nil || len(next) != 1 || next[0].ID == page[0].ID {
+		t.Fatalf("second page: %#v err=%v", next, err)
+	}
+}
+
+func TestScheduleSuccessUsesJobFinishTime(t *testing.T) {
+	runtime, db := testRuntime(t)
+	finishedAt := time.Now().Add(-time.Hour).UTC()
+	job := Job{ID: "schedule-job", Kind: "maintenance.test", Status: JobSucceeded, Visibility: VisibilitySystem, Label: "test", FinishedAt: &finishedAt}
+	if err := db.Create(&job).Error; err != nil {
+		t.Fatal(err)
+	}
+	state := ScheduleState{Key: "test", Kind: job.Kind, Queue: QueueMaintenance, Enabled: true, LastJobID: job.ID}
+	if err := db.Create(&state).Error; err != nil {
+		t.Fatal(err)
+	}
+	runtime.refreshScheduleOutcomes()
+	if err := db.First(&state, "key = ?", state.Key).Error; err != nil {
+		t.Fatal(err)
+	}
+	if state.LastSuccessAt == nil || !state.LastSuccessAt.Equal(finishedAt) {
+		t.Fatalf("last success = %v, want %v", state.LastSuccessAt, finishedAt)
 	}
 }
 

@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,10 +19,14 @@ func (r *Runtime) Enqueue(ctx context.Context, spec JobSpec) (*Job, bool, error)
 	}
 	var job Job
 	reused := false
+	spec.IdempotencyKey = normalizeIdempotencyKey(spec.IdempotencyKey)
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if spec.IdempotencyKey != "" {
 			err := tx.Where("idempotency_key = ?", spec.IdempotencyKey).First(&job).Error
 			if err == nil {
+				if err := validateIdempotentReuse(tx, job, spec); err != nil {
+					return err
+				}
 				reused = true
 				return nil
 			}
@@ -42,13 +47,16 @@ func (r *Runtime) Enqueue(ctx context.Context, spec JobSpec) (*Job, bool, error)
 			OwnerID:        spec.OwnerID,
 			SubjectType:    boundedMessage(spec.SubjectType, 64),
 			SubjectID:      boundedMessage(spec.SubjectID, 128),
-			IdempotencyKey: boundedMessage(spec.IdempotencyKey, 255),
+			IdempotencyKey: spec.IdempotencyKey,
 			Label:          boundedMessage(spec.Label, 255),
 			Progress:       0,
 		}
 		if err := tx.Create(&job).Error; err != nil {
 			if spec.IdempotencyKey != "" && strings.Contains(strings.ToLower(err.Error()), "unique") {
 				if loadErr := tx.Where("idempotency_key = ?", spec.IdempotencyKey).First(&job).Error; loadErr == nil {
+					if matchErr := validateIdempotentReuse(tx, job, spec); matchErr != nil {
+						return matchErr
+					}
 					reused = true
 					return nil
 				}
@@ -70,6 +78,46 @@ func (r *Runtime) Enqueue(ctx context.Context, spec JobSpec) (*Job, bool, error)
 	}
 	r.Wake()
 	return &job, reused, nil
+}
+
+func normalizeIdempotencyKey(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= 255 {
+		return value
+	}
+	sum := sha256.Sum256([]byte(value))
+	return fmt.Sprintf("sha256:%x", sum)
+}
+
+func validateIdempotentReuse(tx *gorm.DB, job Job, spec JobSpec) error {
+	visibility := spec.Visibility
+	if visibility == "" {
+		visibility = VisibilityUser
+	}
+	ownerMatches := (job.OwnerID == nil && spec.OwnerID == nil) ||
+		(job.OwnerID != nil && spec.OwnerID != nil && *job.OwnerID == *spec.OwnerID)
+	if job.Kind != spec.Kind || job.Visibility != visibility || !ownerMatches ||
+		job.SubjectType != boundedMessage(spec.SubjectType, 64) || job.SubjectID != boundedMessage(spec.SubjectID, 128) {
+		return ErrIdempotencyConflict
+	}
+	var tasks []Task
+	if err := tx.Where("job_id = ? AND parent_task_id = ''", job.ID).Order("created_at ASC, id ASC").Find(&tasks).Error; err != nil {
+		return err
+	}
+	if len(tasks) != len(spec.Tasks) {
+		return ErrIdempotencyConflict
+	}
+	for index, taskSpec := range spec.Tasks {
+		payload, err := marshalPayload(taskSpec.Payload)
+		if err != nil {
+			return err
+		}
+		if tasks[index].Kind != taskSpec.Kind || tasks[index].Queue != taskSpec.Queue ||
+			tasks[index].Payload != payload {
+			return ErrIdempotencyConflict
+		}
+	}
+	return nil
 }
 
 func validateJobSpec(spec JobSpec) error {
@@ -139,7 +187,7 @@ func (r *Runtime) Job(ctx context.Context, id string, ownerID *uint, admin bool)
 		if ownerID == nil {
 			return nil, gorm.ErrRecordNotFound
 		}
-		query = query.Where("owner_id = ?", *ownerID)
+		query = query.Where("owner_id = ? AND visibility = ?", *ownerID, VisibilityUser)
 	}
 	if err := query.First(&job).Error; err != nil {
 		return nil, err
@@ -187,7 +235,11 @@ func (r *Runtime) ListJobs(ctx context.Context, filter ListFilter) ([]Job, error
 		query = query.Where("LOWER(label) LIKE ? OR LOWER(subject_id) LIKE ? OR LOWER(id) LIKE ?", needle, needle, needle)
 	}
 	if filter.Before != nil {
-		query = query.Where("created_at < ?", *filter.Before)
+		if filter.BeforeID != "" {
+			query = query.Where("created_at < ? OR (created_at = ? AND id < ?)", *filter.Before, *filter.Before, filter.BeforeID)
+		} else {
+			query = query.Where("created_at < ?", *filter.Before)
+		}
 	}
 	var jobs []Job
 	if err := query.Order("created_at DESC, id DESC").Limit(limit).Find(&jobs).Error; err != nil {

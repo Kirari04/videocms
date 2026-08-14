@@ -244,6 +244,11 @@ func (w *WorkerGroup) processDownload(parentCtx context.Context, task models.Rem
 	task.Status = models.RemoteDownloadStatusImporting
 	task.Progress = 0.95
 
+	if !background.BeginCommit(downloadCtx, "Importing remote video") {
+		cleanupRemoteTemp(tempPath, fileName)
+		w.finishCanceled(&task, "Download canceled")
+		return
+	}
 	w.importRemoteTemp(downloadCtx, &task, tempPath, fileName)
 }
 

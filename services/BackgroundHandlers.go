@@ -172,11 +172,17 @@ func (w *WorkerGroup) encodingHandler(ctx context.Context, task background.Task)
 	if err := w.markEncodingStarted(payload.Type, payload.ID, task.ID); err != nil {
 		return background.Result{}, background.Transient("state_update_failed", "The encoding state could not be updated", err)
 	}
-	background.ReportProgress(ctx, 0, "Starting encoder")
-	err := w.runEncode(ctx, legacyTask)
-	if ctx.Err() != nil {
+	encodeCtx, cancel := context.WithCancel(ctx)
+	w.addActiveEncoding(ActiveEncoding{Task: legacyTask, Cancel: cancel})
+	defer func() {
+		cancel()
+		w.deleteActiveEncoding(legacyTask)
+	}()
+	background.ReportProgress(encodeCtx, 0, "Starting encoder")
+	err := w.runEncode(encodeCtx, legacyTask)
+	if encodeCtx.Err() != nil {
 		_ = w.resetEncodingProjection(payload.Type, payload.ID)
-		return background.Result{}, ctx.Err()
+		return background.Result{}, encodeCtx.Err()
 	}
 	if err != nil {
 		message := strings.ToLower(err.Error())
@@ -238,6 +244,9 @@ func (w *WorkerGroup) thumbnailHandler(ctx context.Context, task background.Task
 		return background.Result{}, background.Transient("storage_unavailable", "The thumbnail source is temporarily unavailable", err)
 	}
 	defer cleanup()
+	if !background.BeginCommit(ctx, "Publishing thumbnail") {
+		return background.Result{}, context.Canceled
+	}
 	if _, err := w.logic.CreateThumbnailInStoreContext(ctx, 4, materialized, 1080, file.Thumbnail, file.UUID, file.StorageID, file.Duration, file.AvgFrameRate); err != nil {
 		if ctx.Err() != nil {
 			return background.Result{}, ctx.Err()
@@ -321,6 +330,9 @@ func (w *WorkerGroup) finalizeSimpleSession(ctx context.Context, session *models
 		}
 	}
 	background.ReportProgress(ctx, 0.1, "Inspecting uploaded video")
+	if !background.BeginCommit(ctx, "Importing uploaded video") {
+		return nil, background.Canceled(context.Canceled)
+	}
 	originalPath := session.StoragePath
 	status, link, cloned, err := w.logic.CreateFileContext(ctx, &session.StoragePath, session.ParentFolderID, session.Name, session.UUID, session.Size, session.UserID, session.ClientUploadUUID)
 	if session.StoragePath != originalPath {
@@ -370,7 +382,7 @@ func (w *WorkerGroup) mediaProcessingTasks(fileID uint, totalWeight int) ([]back
 	}
 	tasks := make([]background.TaskSpec, 0, count)
 	if file.AvgFrameRate > 0 && file.SourceKey != "" {
-		tasks = append(tasks, background.TaskSpec{Kind: taskMediaThumbnail, Queue: background.QueueFFmpeg, Phase: "Generating thumbnail", Payload: thumbnailPayload{FileID: file.ID}, DedupeKey: fmt.Sprintf("thumbnail:%d", file.ID), Priority: 30, Required: true, Weight: weight})
+		tasks = append(tasks, background.TaskSpec{Kind: taskMediaThumbnail, Queue: background.QueueFFmpeg, Phase: "Generating thumbnail", Payload: thumbnailPayload{FileID: file.ID}, DedupeKey: fmt.Sprintf("thumbnail:%d", file.ID), Priority: 30, Required: false, Weight: weight})
 	}
 	if encodingEnabled(w.Config()) {
 		for _, item := range file.Subtitles {
@@ -393,7 +405,7 @@ func (w *WorkerGroup) mediaProcessingTasks(fileID uint, totalWeight int) ([]back
 }
 
 func encodingSpec(kind string, id, fileID uint, name string, priority, weight int) background.TaskSpec {
-	return background.TaskSpec{Kind: "media.encode." + kind, Queue: background.QueueFFmpeg, Phase: "Encoding " + name, Payload: encodingTaskPayload{Type: kind, ID: id, FileID: fileID}, DedupeKey: fmt.Sprintf("%s:%d", kind, id), Priority: priority, Required: true, Weight: weight}
+	return background.TaskSpec{Kind: "media.encode." + kind, Queue: background.QueueFFmpeg, Phase: "Encoding " + name, Payload: encodingTaskPayload{Type: kind, ID: id, FileID: fileID}, DedupeKey: fmt.Sprintf("%s:%d", kind, id), Priority: priority, Required: false, Weight: weight}
 }
 
 func (w *WorkerGroup) remoteFetchHandler(ctx context.Context, task background.Task) (background.Result, error) {
@@ -476,10 +488,16 @@ func (w *WorkerGroup) downloadPreparationHandler(ctx context.Context, task backg
 		return background.Result{}, background.Transient("state_update_failed", "The download preparation could not start", err)
 	}
 	job.Status, job.StartedAt = models.DownloadJobStatusPreparing, &now
-	w.processDownloadPreparation(ctx, job)
-	if ctx.Err() != nil {
+	preparationCtx, cancel := context.WithCancel(ctx)
+	w.registerDownloadPreparation(job, cancel)
+	defer func() {
+		cancel()
+		w.unregisterDownloadPreparation(job.ID)
+	}()
+	w.processDownloadPreparation(preparationCtx, job)
+	if preparationCtx.Err() != nil {
 		w.cancelDownloadJob(&job, "canceled", "Download preparation canceled")
-		return background.Result{}, ctx.Err()
+		return background.Result{}, preparationCtx.Err()
 	}
 	if err := w.deps.DB.First(&job, job.ID).Error; err != nil {
 		return background.Result{}, background.Transient("state_load_failed", "The prepared download result could not be loaded", err)
@@ -504,12 +522,6 @@ func (w *WorkerGroup) contentDeleteHandler(ctx context.Context, task background.
 		return background.Result{}, err
 	}
 	background.ReportProgress(ctx, 0.05, "Validating content")
-	if !background.BeginPhase(ctx, "Deleting content") {
-		if ctx.Err() != nil {
-			return background.Result{}, ctx.Err()
-		}
-		return background.Result{}, background.Canceled(errors.New("deletion canceled before side effects"))
-	}
 	linkIDs, err := w.remainingDeletionIDs(ctx, "links", payload.LinkIDs, payload.UserID, payload.Admin)
 	if err != nil {
 		return background.Result{}, background.Transient("deletion_reconciliation_failed", "The deletion state could not be checked", err)
@@ -517,6 +529,12 @@ func (w *WorkerGroup) contentDeleteHandler(ctx context.Context, task background.
 	folderIDs, err := w.remainingDeletionIDs(ctx, "folders", payload.FolderIDs, payload.UserID, payload.Admin)
 	if err != nil {
 		return background.Result{}, background.Transient("deletion_reconciliation_failed", "The deletion state could not be checked", err)
+	}
+	if !background.BeginCommit(ctx, "Deleting content") {
+		if ctx.Err() != nil {
+			return background.Result{}, ctx.Err()
+		}
+		return background.Result{}, background.Canceled(errors.New("deletion canceled before side effects"))
 	}
 	if len(linkIDs) > 0 {
 		items := make([]models.LinkDeleteValidation, 0, len(linkIDs))
@@ -538,13 +556,10 @@ func (w *WorkerGroup) contentDeleteHandler(ctx context.Context, task background.
 			return background.Result{}, classifiedHTTPError(status, "delete_failed", "The selected folders could not be deleted", err)
 		}
 	}
-	background.ReportProgress(ctx, 0.5, "Removing unreferenced media")
-	if err := w.runDeleter(); err != nil {
-		return background.Result{}, background.Transient("deletion_cleanup_failed", "Deleted content is awaiting storage cleanup", err)
-	}
-	if ctx.Err() != nil {
-		return background.Result{}, ctx.Err()
-	}
+	// Logical deletion is the user-visible operation. Physical storage cleanup
+	// is reconciled independently by the maintenance schedule, so an unrelated
+	// broken storage object cannot fail this user's deletion job.
+	background.ReportProgress(ctx, 0.99, "Deletion recorded; storage cleanup scheduled")
 	return background.Result{Phase: "Deletion complete"}, nil
 }
 

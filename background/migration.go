@@ -26,20 +26,25 @@ func BackfillLegacy(db *gorm.DB, now time.Time) error {
 		return err
 	}
 	cutoff := now.AddDate(0, 0, -30)
+	steps := []struct {
+		name string
+		run  func(*gorm.DB, time.Time, time.Time) error
+	}{
+		{"encodings", backfillEncodingJobs},
+		{"remote downloads", backfillRemoteJobs},
+		{"prepared downloads", backfillPreparedJobs},
+		{"uploads", backfillUploadJobs},
+	}
+	// Commit each independent legacy domain separately. A large installation
+	// therefore does not hold one write transaction across the whole cutover,
+	// while stable legacy keys make a partially completed run safe to resume.
+	for _, step := range steps {
+		if err := db.Transaction(func(tx *gorm.DB) error { return step.run(tx, cutoff, now) }); err != nil {
+			return fmt.Errorf("backfill %s: %w", step.name, err)
+		}
+	}
 	return db.Transaction(func(tx *gorm.DB) error {
-		if err := backfillEncodingJobs(tx, cutoff, now); err != nil {
-			return fmt.Errorf("backfill encodings: %w", err)
-		}
-		if err := backfillRemoteJobs(tx, cutoff, now); err != nil {
-			return fmt.Errorf("backfill remote downloads: %w", err)
-		}
-		if err := backfillPreparedJobs(tx, cutoff, now); err != nil {
-			return fmt.Errorf("backfill prepared downloads: %w", err)
-		}
-		if err := backfillUploadJobs(tx, cutoff, now); err != nil {
-			return fmt.Errorf("backfill uploads: %w", err)
-		}
-		return tx.Create(&MigrationState{Key: legacyCutoverMigration, CompletedAt: now}).Error
+		return tx.Where("key = ?", legacyCutoverMigration).FirstOrCreate(&MigrationState{Key: legacyCutoverMigration, CompletedAt: now}).Error
 	})
 }
 
@@ -120,7 +125,7 @@ func backfillEncodingJobs(tx *gorm.DB, cutoff, now time.Time) error {
 			task, err := createTask(tx, job.ID, TaskSpec{
 				Kind: "media.encode." + artifact.kind, Queue: QueueFFmpeg, Phase: "Encoding " + artifact.name,
 				Payload:   map[string]any{"type": artifact.kind, "id": artifact.id, "fileId": artifact.fileID},
-				DedupeKey: fmt.Sprintf("%s:%d", artifact.kind, artifact.id), Priority: encodingPriority(artifact.kind), Required: true, Weight: 1,
+				DedupeKey: fmt.Sprintf("%s:%d", artifact.kind, artifact.id), Priority: encodingPriority(artifact.kind), Required: false, Weight: 1,
 			})
 			if err != nil {
 				return err

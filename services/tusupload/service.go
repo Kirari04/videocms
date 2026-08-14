@@ -1006,6 +1006,9 @@ importFile:
 		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
 
+	if !background.BeginCommit(ctx, "Importing uploaded video") {
+		return http.StatusConflict, nil, context.Canceled
+	}
 	status, link, cloned, err := s.Logic.CreateFileContext(ctx, &destinationPath, session.ParentFolderID, session.Name, fileUUID, session.Size, userID, session.ClientUploadUUID)
 	if err != nil {
 		s.failFinalize(&session, err.Error())

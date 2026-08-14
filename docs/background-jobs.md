@@ -25,9 +25,11 @@ FFmpeg work shares one global capacity limit. Higher task priority is combined w
 
 Tasks are claimed with a conditional database update. A transient failure is attempted up to four times total, normally after 5 seconds, 30 seconds, and 2 minutes. A handler can supply a shorter retry-after value for a known condition. Permanent failures stop immediately. Manual retry grants a fresh four-attempt budget while preserving the old attempts.
 
-On process startup, running attempts become `interrupted` and their tasks return to the queue. Tasks already awaiting cancellation become canceled. Imports use stable creation keys and staging paths, making retries safe across both filesystem moves and database commits.
+Progress updates are reduced into the parent job while work is running. Finishing a task is retried on transient database errors, and a heartbeat reaper reclaims stale `running` tasks without requiring an application restart. On process startup, running attempts become `interrupted` and their tasks return to the queue. A task interrupted after crossing its commit fence is failed for explicit review instead of being automatically repeated. Tasks already awaiting cancellation become canceled. Imports use stable creation keys and staging paths, making retries safe across both filesystem moves and database commits.
 
-Cancellation propagates through Go contexts to downloads, FFmpeg, storage operations, and import probes. Disabling encoding, remote downloads, or prepared downloads cancels related queued and running jobs. Encoding reconciliation recreates canceled, unfinished artifacts once the feature is enabled again.
+Cancellation propagates through Go contexts to downloads, FFmpeg, storage operations, and import probes. Before publishing an irreversible result, a task records a commit fence: cancellation wins before that fence or the successful commit wins afterward. Disabling encoding, remote downloads, or prepared downloads cancels related queued and running jobs. Encoding reconciliation recreates canceled, unfinished artifacts once the feature is enabled again.
+
+Import and remote-fetch tasks are required. Thumbnail and encoding children are optional derived work: their failure produces `succeeded_with_warnings` while preserving the usable video result. Logical content deletion completes independently; physical storage cleanup is handled by the deletion-reconciliation schedule so one unrelated storage failure cannot fail another user's deletion.
 
 ## Task center
 
@@ -54,6 +56,9 @@ POST /api/v2/jobs/:id/retry
 POST   /api/v2/uploads/simple
 POST   /api/v2/uploads/:upload_id/finalize
 POST   /api/v2/remote-downloads
+GET    /api/v2/remote-downloads
+POST   /api/v2/remote-downloads/:id/cancel
+POST   /api/v2/remote-downloads/:id/retry
 DELETE /api/v2/file
 DELETE /api/v2/files
 DELETE /api/v2/folder
@@ -62,7 +67,9 @@ DELETE /api/v2/folders
 
 Admin-only operations live below `/api/v2/admin` and include job/task controls, `/task-queues`, `/task-schedules`, and `/task-runtime`.
 
-Clients should send an `Idempotency-Key` for simple uploads, remote-download batches, and deletions. Replaying the same key returns or reconnects to the same durable work; reusing it with a different upload or remote-download request returns `409 Conflict`.
+Clients should send an `Idempotency-Key` for simple uploads, remote-download batches, and deletions. Replaying the same key returns or reconnects to the same durable work; reusing it with a different request payload returns `409 Conflict`. Oversized keys are normalized to a stable SHA-256 key before lookup and storage.
+
+The original unversioned upload-finalize, remote-download, and deletion endpoints retain their previous response contracts for existing integrations. The VideoCMS frontend uses `/api/v2` for durable submissions and job tracking.
 
 ## Maintenance and retention
 
@@ -72,4 +79,4 @@ Terminal job history is retained for 30 days. Successful API-audit jobs are reta
 
 ## Upgrade cutover
 
-The `unified-background-work-v1` migration runs once. It imports active legacy encodes, remote downloads, prepared downloads, and uploads plus terminal records updated within the previous 30 days. Work that was active at shutdown receives an interrupted attempt and is safely re-queued. Stable migration idempotency keys and a completion marker prevent duplicate backfills.
+Before deploying the cutover, stop the old application process and take a copy of the SQLite database. The `unified-background-work-v1` migration then runs once. It imports active legacy encodes, remote downloads, prepared downloads, and uploads plus terminal records updated within the previous 30 days. Each legacy domain commits independently to limit the write-lock window. Work that was active at shutdown receives an interrupted attempt and is safely re-queued. Stable migration idempotency keys and a completion marker make an interrupted backfill safe to resume.

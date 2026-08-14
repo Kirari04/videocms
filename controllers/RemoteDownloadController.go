@@ -21,6 +21,18 @@ import (
 )
 
 func (h *Handlers) CreateRemoteDownload(c echo.Context) error {
+	return h.createRemoteDownload(c, http.StatusAccepted)
+}
+
+func (h *Handlers) CreateRemoteDownloadLegacy(c echo.Context) error {
+	return h.createRemoteDownload(c, http.StatusCreated)
+}
+
+func (h *Handlers) CreateRemoteDownloadV2(c echo.Context) error {
+	return h.CreateRemoteDownload(c)
+}
+
+func (h *Handlers) createRemoteDownload(c echo.Context, responseStatus int) error {
 	userId := c.Get("UserID").(uint)
 
 	if !h.globalRemoteDownloadsEnabled() {
@@ -137,7 +149,7 @@ func (h *Handlers) CreateRemoteDownload(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusAccepted, created)
+	return c.JSON(responseStatus, created)
 }
 
 func (h *Handlers) ListRemoteDownloads(c echo.Context) error {
@@ -173,6 +185,14 @@ func (h *Handlers) ListRemoteDownloads(c echo.Context) error {
 }
 
 func (h *Handlers) CancelRemoteDownload(c echo.Context) error {
+	return h.cancelRemoteDownload(c, http.StatusAccepted)
+}
+
+func (h *Handlers) CancelRemoteDownloadLegacy(c echo.Context) error {
+	return h.cancelRemoteDownload(c, http.StatusOK)
+}
+
+func (h *Handlers) cancelRemoteDownload(c echo.Context, backgroundStatus int) error {
 	downloadID, err := parseRemoteDownloadID(c)
 	if err != nil {
 		return c.String(http.StatusBadRequest, "Invalid download ID")
@@ -190,7 +210,7 @@ func (h *Handlers) CancelRemoteDownload(c echo.Context) error {
 		}
 		now := time.Now()
 		_ = h.Deps.DB.Model(&download).Updates(map[string]any{"status": models.RemoteDownloadStatusCanceled, "error": "Download canceled", "finished_at": &now, "canceled_at": &now}).Error
-		return c.String(http.StatusAccepted, "ok")
+		return c.String(backgroundStatus, "ok")
 	}
 	status, err := h.Workers.CancelRemoteDownload(userID, downloadID)
 	if err != nil {
@@ -200,6 +220,14 @@ func (h *Handlers) CancelRemoteDownload(c echo.Context) error {
 }
 
 func (h *Handlers) RetryRemoteDownload(c echo.Context) error {
+	return h.retryRemoteDownloadController(c, http.StatusAccepted)
+}
+
+func (h *Handlers) RetryRemoteDownloadLegacy(c echo.Context) error {
+	return h.retryRemoteDownloadController(c, http.StatusOK)
+}
+
+func (h *Handlers) retryRemoteDownloadController(c echo.Context, backgroundStatus int) error {
 	userID := c.Get("UserID").(uint)
 	downloadID, err := parseRemoteDownloadID(c)
 	if err != nil {
@@ -216,7 +244,7 @@ func (h *Handlers) RetryRemoteDownload(c echo.Context) error {
 			return backgroundAPIError(c, err)
 		}
 		h.Deps.Background.Wake()
-		status = http.StatusAccepted
+		status = backgroundStatus
 	}
 	return c.JSON(status, download)
 }

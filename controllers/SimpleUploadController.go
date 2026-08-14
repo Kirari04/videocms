@@ -99,3 +99,34 @@ func (h *Handlers) SimpleUploadController(c echo.Context) error {
 	}
 	return acceptedBackgroundJob(c, job)
 }
+
+func (h *Handlers) SimpleUploadLegacy(c echo.Context) error {
+	if !*h.Config().UploadEnabled {
+		return c.String(http.StatusForbidden, "Uploads are disabled")
+	}
+	userID, ok := c.Get("UserID").(uint)
+	if !ok {
+		return c.String(http.StatusInternalServerError, "Failed to catch UserID")
+	}
+	var validation models.SimpleUploadValidation
+	if status, err := helpers.Validate(c, &validation); err != nil {
+		return c.String(status, err.Error())
+	}
+	file, err := c.FormFile("file")
+	if err != nil {
+		return c.String(http.StatusBadRequest, "No file uploaded")
+	}
+	if file.Size > h.Config().MaxUploadFilesize {
+		return c.String(http.StatusRequestEntityTooLarge, fmt.Sprintf("Exceeded max upload filesize: %v", h.Config().MaxUploadFilesize))
+	}
+	src, err := file.Open()
+	if err != nil {
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	defer src.Close()
+	status, response, err := h.Logic.SimpleUpload(validation.ParentFolderID, validation.Name, src, file.Size, userID)
+	if err != nil {
+		return c.String(status, err.Error())
+	}
+	return c.JSON(status, response)
+}

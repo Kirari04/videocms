@@ -46,6 +46,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY *.go ./
 COPY app ./app
 COPY auth ./auth
+COPY background ./background
 COPY cmd ./cmd
 COPY config ./config
 COPY configdb ./configdb
