@@ -83,6 +83,9 @@ func waitForJob(t *testing.T, runtime *Runtime, id string, want ...string) *JobD
 func TestEnqueueIsIdempotentAndOwnerScoped(t *testing.T) {
 	runtime, _ := testRuntime(t)
 	first := enqueueTestJob(t, runtime, "same-request", "test.noop", QueueStorage, 1)
+	if !first.CanCancel {
+		t.Fatal("newly queued job should advertise cancellation")
+	}
 	ownerID := uint(7)
 	second, reused, err := runtime.Enqueue(context.Background(), JobSpec{
 		Kind: "test.noop", Visibility: VisibilityUser, OwnerID: &ownerID, IdempotencyKey: "same-request", Label: "duplicate",
@@ -342,8 +345,22 @@ func TestDeletionCancellationStopsAtIrreversiblePhase(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("deletion did not enter irreversible phase")
 	}
-	if err := runtime.CancelJob(context.Background(), job.ID, 1, "admin"); !errors.Is(err, ErrConflict) {
-		t.Fatalf("expected cancellation conflict after deletion began, got %v", err)
+	detail, err := runtime.Job(context.Background(), job.ID, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.CanCancel {
+		t.Fatal("job in an irreversible phase advertised cancellation")
+	}
+	listed, err := runtime.ListJobs(context.Background(), ListFilter{IncludeSystem: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].CanCancel {
+		t.Fatalf("job list cancellation capability = %#v", listed)
+	}
+	if err := runtime.CancelJob(context.Background(), job.ID, 1, "admin"); !errors.Is(err, ErrCommitStarted) || !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected commit-started cancellation conflict after deletion began, got %v", err)
 	}
 	close(release)
 	waitForJob(t, runtime, job.ID, JobSucceeded)
@@ -356,6 +373,9 @@ func TestQueuedDeletionCanBeCanceled(t *testing.T) {
 		t.Fatalf("cancel queued deletion: %v", err)
 	}
 	detail := waitForJob(t, runtime, job.ID, JobCanceled)
+	if detail.CanCancel {
+		t.Fatal("canceled job advertised cancellation")
+	}
 	if detail.Tasks[0].Status != TaskCanceled {
 		t.Fatalf("queued deletion task status = %s", detail.Tasks[0].Status)
 	}

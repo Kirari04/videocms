@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -41,5 +43,24 @@ func TestBackgroundCursorRoundTripIncludesTieBreaker(t *testing.T) {
 	decodedAt, decodedID, err := decodeBackgroundCursor(encoded)
 	if err != nil || !decodedAt.Equal(createdAt) || decodedID != "job-tie-breaker" {
 		t.Fatalf("cursor round trip: at=%v id=%q err=%v", decodedAt, decodedID, err)
+	}
+}
+
+func TestBackgroundAPIReportsIrreversibleCommitConflict(t *testing.T) {
+	e := echo.New()
+	recorder := httptest.NewRecorder()
+	ctx := e.NewContext(httptest.NewRequest(http.MethodPost, "/api/v2/jobs/job-1/cancel", nil), recorder)
+	if err := backgroundAPIError(ctx, background.ErrCommitStarted); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusConflict)
+	}
+	var response map[string]string
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response["error"] != "commit_in_progress" {
+		t.Fatalf("error = %q", response["error"])
 	}
 }

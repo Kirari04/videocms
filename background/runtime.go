@@ -21,6 +21,8 @@ var (
 	errRuntimeStopping     = errors.New("background runtime stopping")
 	errUserCanceled        = errors.New("background job canceled")
 	ErrIdempotencyConflict = errors.New("idempotency key was already used for a different request")
+	ErrConflict            = errors.New("background operation conflicts with its current state")
+	ErrCommitStarted       = fmt.Errorf("%w: irreversible task commit has started", ErrConflict)
 )
 
 type Options struct {
@@ -1262,7 +1264,7 @@ func (r *Runtime) CancelJob(ctx context.Context, jobID string, actorID uint, act
 			return err
 		}
 		if committing > 0 {
-			return ErrConflict
+			return ErrCommitStarted
 		}
 		if err := tx.Model(&job).Updates(map[string]any{"status": JobCancelRequested, "cancel_requested_at": &now}).Error; err != nil {
 			return err
@@ -1345,7 +1347,7 @@ func (r *Runtime) CancelTask(ctx context.Context, taskID string, actorID uint, a
 			return ErrConflict
 		}
 		if loaded.CommitStartedAt != nil {
-			return ErrConflict
+			return ErrCommitStarted
 		}
 		updates := map[string]any{"status": TaskCanceled, "finished_at": &now, "error_code": "canceled", "error_message": "Canceled by administrator"}
 		if loaded.Status == TaskRunning || loaded.Status == TaskCancelRequested {
@@ -1431,7 +1433,9 @@ func (r *Runtime) CancelKinds(ctx context.Context, kindPrefixes []string, actorI
 			return err
 		}
 		if reason != "" {
-			_ = addEvent(r.db.WithContext(ctx), Event{JobID: jobID, Type: "feature_disabled", ActorID: optionalActor(actorID), ActorName: actorName, Message: boundedMessage(reason, 512)})
+			if err := addEvent(r.db.WithContext(ctx), Event{JobID: jobID, Type: "feature_disabled", ActorID: optionalActor(actorID), ActorName: actorName, Message: boundedMessage(reason, 512)}); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -1477,8 +1481,6 @@ func (r *Runtime) Retain(ctx context.Context, before time.Time) (int64, error) {
 	})
 	return int64(len(jobs)), err
 }
-
-var ErrConflict = errors.New("background operation conflicts with its current state")
 
 func sortedKeys[K ~string, V any](values map[K]V) []K {
 	keys := make([]K, 0, len(values))

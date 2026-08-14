@@ -304,7 +304,9 @@ func (w *WorkerGroup) mediaImportHandler(tus *tusupload.Service) background.Hand
 		if err != nil {
 			return background.Result{}, background.Transient("processing_queue_failed", "The video was imported but processing could not be queued", err)
 		}
-		_ = w.deps.DB.Model(&models.File{}).Where("id = ?", link.FileID).Update("background_job_id", task.JobID).Error
+		if err := w.deps.DB.WithContext(context.WithoutCancel(ctx)).Model(&models.File{}).Where("id = ?", link.FileID).Update("background_job_id", task.JobID).Error; err != nil {
+			return background.Result{}, background.Transient("state_update_failed", "The imported video could not be linked to its background job", err)
+		}
 		return background.Result{ResultType: "link", ResultID: link.UUID, Phase: "Import complete", Children: children}, nil
 	}
 }
@@ -336,10 +338,14 @@ func (w *WorkerGroup) finalizeSimpleSession(ctx context.Context, session *models
 	originalPath := session.StoragePath
 	status, link, cloned, err := w.logic.CreateFileContext(ctx, &session.StoragePath, session.ParentFolderID, session.Name, session.UUID, session.Size, session.UserID, session.ClientUploadUUID)
 	if session.StoragePath != originalPath {
-		_ = w.deps.DB.Model(session).Update("storage_path", session.StoragePath).Error
+		if updateErr := w.deps.DB.WithContext(context.WithoutCancel(ctx)).Model(session).Update("storage_path", session.StoragePath).Error; updateErr != nil {
+			return nil, background.Transient("state_update_failed", "The upload storage state could not be updated", updateErr)
+		}
 	}
 	if err != nil {
-		_ = w.deps.DB.Model(session).Updates(map[string]any{"status": models.UploadStatusFailed, "error": boundedServiceError(err.Error())}).Error
+		if updateErr := w.deps.DB.WithContext(context.WithoutCancel(ctx)).Model(session).Updates(map[string]any{"status": models.UploadStatusFailed, "error": boundedServiceError(err.Error())}).Error; updateErr != nil {
+			return nil, background.Transient("state_update_failed", "The failed upload state could not be recorded", updateErr)
+		}
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -432,16 +438,22 @@ func (w *WorkerGroup) remoteFetchHandler(ctx context.Context, task background.Ta
 	}
 	if remote.Status != models.RemoteDownloadStatusImporting {
 		now := time.Now()
-		_ = w.deps.DB.Model(&remote).Updates(map[string]any{"status": models.RemoteDownloadStatusDownloading, "started_at": &now, "finished_at": nil, "error": "", "progress": 0, "background_job_id": task.JobID}).Error
+		if err := w.deps.DB.WithContext(ctx).Model(&remote).Updates(map[string]any{"status": models.RemoteDownloadStatusDownloading, "started_at": &now, "finished_at": nil, "error": "", "progress": 0, "background_job_id": task.JobID}).Error; err != nil {
+			return background.Result{}, background.Transient("state_update_failed", "The download state could not be updated", err)
+		}
 		remote.Status, remote.StartedAt = models.RemoteDownloadStatusDownloading, &now
 	} else {
-		_ = w.deps.DB.Model(&remote).Update("background_job_id", task.JobID).Error
+		if err := w.deps.DB.WithContext(ctx).Model(&remote).Update("background_job_id", task.JobID).Error; err != nil {
+			return background.Result{}, background.Transient("state_update_failed", "The download could not be linked to its background job", err)
+		}
 		background.ReportProgress(ctx, 0.95, "Resuming remote import")
 	}
 	w.processDownload(ctx, remote)
 	if ctx.Err() != nil {
 		finish := time.Now()
-		_ = w.deps.DB.Model(&remote).Updates(map[string]any{"status": models.RemoteDownloadStatusCanceled, "error": "Download canceled", "finished_at": &finish, "canceled_at": &finish, "temp_path": ""}).Error
+		if err := w.deps.DB.WithContext(context.WithoutCancel(ctx)).Model(&remote).Updates(map[string]any{"status": models.RemoteDownloadStatusCanceled, "error": "Download canceled", "finished_at": &finish, "canceled_at": &finish, "temp_path": ""}).Error; err != nil {
+			return background.Result{}, background.Transient("state_update_failed", "The canceled download state could not be recorded", err)
+		}
 		return background.Result{}, ctx.Err()
 	}
 	if err := w.deps.DB.First(&remote, remote.ID).Error; err != nil {

@@ -64,6 +64,7 @@ type Job struct {
 	ErrorCode         string     `gorm:"size:80" json:"errorCode,omitempty"`
 	ErrorMessage      string     `gorm:"size:512" json:"errorMessage,omitempty"`
 	CancelRequestedAt *time.Time `json:"cancelRequestedAt,omitempty"`
+	CanCancel         bool       `gorm:"-" json:"canCancel"`
 	StartedAt         *time.Time `json:"startedAt,omitempty"`
 	FinishedAt        *time.Time `gorm:"index" json:"finishedAt,omitempty"`
 	CreatedAt         time.Time  `gorm:"index" json:"createdAt"`

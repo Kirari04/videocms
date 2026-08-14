@@ -231,7 +231,9 @@ func backfillRemoteJobs(tx *gorm.DB, cutoff, now time.Time) error {
 			return err
 		}
 		if row.LinkUUID != "" {
-			_ = tx.Model(job).Updates(map[string]any{"result_type": "link", "result_id": row.LinkUUID}).Error
+			if err := tx.Model(job).Updates(map[string]any{"result_type": "link", "result_id": row.LinkUUID}).Error; err != nil {
+				return err
+			}
 		}
 		if err := recomputeJob(tx, job, now); err != nil {
 			return err
@@ -328,7 +330,9 @@ func backfillUploadJobs(tx *gorm.DB, cutoff, now time.Time) error {
 			if err := tx.Unscoped().First(&link, row.LinkID).Error; err == nil && link.UUID != "" {
 				resultID = link.UUID
 			}
-			_ = tx.Model(job).Updates(map[string]any{"result_type": "link", "result_id": resultID}).Error
+			if err := tx.Model(job).Updates(map[string]any{"result_type": "link", "result_id": resultID}).Error; err != nil {
+				return err
+			}
 		}
 		if err := recomputeJob(tx, job, now); err != nil {
 			return err

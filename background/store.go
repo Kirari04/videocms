@@ -76,6 +76,11 @@ func (r *Runtime) Enqueue(ctx context.Context, spec JobSpec) (*Job, bool, error)
 	if err != nil {
 		return nil, false, err
 	}
+	jobs := []Job{job}
+	if err := r.populateCancellationCapabilities(ctx, jobs); err != nil {
+		return nil, false, err
+	}
+	job = jobs[0]
 	r.Wake()
 	return &job, reused, nil
 }
@@ -199,6 +204,15 @@ func (r *Runtime) Job(ctx context.Context, id string, ownerID *uint, admin bool)
 		Find(&job.Tasks).Error; err != nil {
 		return nil, err
 	}
+	job.CanCancel = cancellableJobStatus(job.Status)
+	if job.CanCancel {
+		for _, task := range job.Tasks {
+			if task.CommitStartedAt != nil && (task.Status == TaskRunning || task.Status == TaskCancelRequested) {
+				job.CanCancel = false
+				break
+			}
+		}
+	}
 	var events []Event
 	if err := r.db.WithContext(ctx).Where("job_id = ?", job.ID).Order("created_at ASC, id ASC").Find(&events).Error; err != nil {
 		return nil, err
@@ -248,6 +262,9 @@ func (r *Runtime) ListJobs(ctx context.Context, filter ListFilter) ([]Job, error
 	if len(jobs) == 0 {
 		return jobs, nil
 	}
+	if err := r.populateCancellationCapabilities(ctx, jobs); err != nil {
+		return nil, err
+	}
 	ownerIDs := make([]uint, 0)
 	for _, job := range jobs {
 		if job.OwnerID != nil {
@@ -259,7 +276,9 @@ func (r *Runtime) ListJobs(ctx context.Context, filter ListFilter) ([]Job, error
 			ID       uint
 			Username string
 		}
-		_ = r.db.WithContext(ctx).Table("users").Select("id", "username").Where("id IN ?", ownerIDs).Find(&users).Error
+		if err := r.db.WithContext(ctx).Table("users").Select("id", "username").Where("id IN ?", ownerIDs).Find(&users).Error; err != nil {
+			r.options.Logger.Printf("component=background event=owner_enrichment_failed error=%q", err)
+		}
 		byID := make(map[uint]string, len(users))
 		for _, user := range users {
 			byID[user.ID] = user.Username
@@ -271,6 +290,45 @@ func (r *Runtime) ListJobs(ctx context.Context, filter ListFilter) ([]Job, error
 		}
 	}
 	return jobs, nil
+}
+
+func cancellableJobStatus(status string) bool {
+	switch status {
+	case JobQueued, JobRunning, JobRetryWait:
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *Runtime) populateCancellationCapabilities(ctx context.Context, jobs []Job) error {
+	jobIDs := make([]string, 0, len(jobs))
+	for index := range jobs {
+		jobs[index].CanCancel = cancellableJobStatus(jobs[index].Status)
+		if jobs[index].CanCancel {
+			jobIDs = append(jobIDs, jobs[index].ID)
+		}
+	}
+	if len(jobIDs) == 0 {
+		return nil
+	}
+	var committingJobIDs []string
+	if err := r.db.WithContext(ctx).Model(&Task{}).
+		Distinct("job_id").
+		Where("job_id IN ? AND commit_started_at IS NOT NULL AND status IN ?", jobIDs, []string{TaskRunning, TaskCancelRequested}).
+		Pluck("job_id", &committingJobIDs).Error; err != nil {
+		return err
+	}
+	committing := make(map[string]struct{}, len(committingJobIDs))
+	for _, jobID := range committingJobIDs {
+		committing[jobID] = struct{}{}
+	}
+	for index := range jobs {
+		if _, exists := committing[jobs[index].ID]; exists {
+			jobs[index].CanCancel = false
+		}
+	}
+	return nil
 }
 
 func (r *Runtime) Summary(ctx context.Context) (Summary, error) {

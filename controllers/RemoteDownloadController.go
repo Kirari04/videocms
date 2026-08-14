@@ -209,7 +209,26 @@ func (h *Handlers) cancelRemoteDownload(c echo.Context, backgroundStatus int) er
 			return backgroundAPIError(c, err)
 		}
 		now := time.Now()
-		_ = h.Deps.DB.Model(&download).Updates(map[string]any{"status": models.RemoteDownloadStatusCanceled, "error": "Download canceled", "finished_at": &now, "canceled_at": &now}).Error
+		updates := map[string]any{
+			"status":              models.RemoteDownloadStatusCanceling,
+			"error":               "Cancellation requested",
+			"cancel_requested_at": &now,
+		}
+		projection := h.Deps.DB.WithContext(c.Request().Context()).Model(&models.RemoteDownload{}).
+			Where("id = ? AND user_id = ? AND status IN ?", download.ID, userID, []string{models.RemoteDownloadStatusDownloading, models.RemoteDownloadStatusImporting, models.RemoteDownloadStatusCanceling})
+		if download.Status == models.RemoteDownloadStatusPending {
+			updates = map[string]any{
+				"status":      models.RemoteDownloadStatusCanceled,
+				"error":       "Download canceled",
+				"finished_at": &now,
+				"canceled_at": &now,
+			}
+			projection = h.Deps.DB.WithContext(c.Request().Context()).Model(&models.RemoteDownload{}).
+				Where("id = ? AND user_id = ? AND status = ?", download.ID, userID, models.RemoteDownloadStatusPending)
+		}
+		if err := projection.Updates(updates).Error; err != nil {
+			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "download_state_update_failed"})
+		}
 		return c.String(backgroundStatus, "ok")
 	}
 	status, err := h.Workers.CancelRemoteDownload(userID, downloadID)

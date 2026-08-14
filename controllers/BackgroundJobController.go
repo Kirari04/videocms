@@ -302,6 +302,8 @@ func backgroundAPIError(c echo.Context, err error) error {
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		return c.JSON(http.StatusNotFound, echo.Map{"error": "job_not_found"})
+	case errors.Is(err, background.ErrCommitStarted):
+		return c.JSON(http.StatusConflict, echo.Map{"error": "commit_in_progress"})
 	case errors.Is(err, background.ErrConflict):
 		return c.JSON(http.StatusConflict, echo.Map{"error": "invalid_job_state"})
 	case errors.Is(err, background.ErrIdempotencyConflict):
