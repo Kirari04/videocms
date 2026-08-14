@@ -13,18 +13,19 @@ const (
 
 type DownloadJob struct {
 	Model
-	UUID          string `gorm:"size:36;uniqueIndex"`
-	LinkID        uint   `gorm:"index"`
-	LinkUUID      string `gorm:"size:64;index"`
-	FileID        uint   `gorm:"index"`
-	UserID        uint   `gorm:"index"`
-	QualityID     uint   `gorm:"index"`
-	QualityName   string `gorm:"size:20"`
-	Container     string `gorm:"size:8"`
-	AudioUUIDs    string `gorm:"type:text"`
-	SubtitleUUIDs string `gorm:"type:text"`
-	SelectionHash string `gorm:"size:64;index"`
-	MediaDuration float64
+	BackgroundJobID string `gorm:"size:36;index" json:"backgroundJobId,omitempty"`
+	UUID            string `gorm:"size:36;uniqueIndex"`
+	LinkID          uint   `gorm:"index"`
+	LinkUUID        string `gorm:"size:64;index"`
+	FileID          uint   `gorm:"index"`
+	UserID          uint   `gorm:"index"`
+	QualityID       uint   `gorm:"index"`
+	QualityName     string `gorm:"size:20"`
+	Container       string `gorm:"size:8"`
+	AudioUUIDs      string `gorm:"type:text"`
+	SubtitleUUIDs   string `gorm:"type:text"`
+	SelectionHash   string `gorm:"size:64;index"`
+	MediaDuration   float64
 
 	Status       string `gorm:"size:24;index"`
 	Progress     float64

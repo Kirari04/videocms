@@ -14,13 +14,9 @@ func (h *Handlers) DeleteFolders(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	// Determine admin status
-	isAdmin, _ := c.Get("Admin").(bool)
-
-	// Business logic
-	status, err := h.Logic.DeleteFolders(&folderValidation, c.Get("UserID").(uint), isAdmin)
-	if err != nil {
-		return c.String(status, err.Error())
+	ids := make([]uint, 0, len(folderValidation.FolderIDs))
+	for _, item := range folderValidation.FolderIDs {
+		ids = append(ids, item.FolderID)
 	}
-	return c.NoContent(status)
+	return h.enqueueDeletion(c, nil, ids)
 }

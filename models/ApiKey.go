@@ -29,9 +29,10 @@ type CreateApiKeyResponse struct {
 
 type ApiKeyAuditLog struct {
 	Model
-	ApiKeyID uint   `gorm:"index"`
-	UserID   uint   `gorm:"index"`
-	Method   string `gorm:"size:8"`
-	Path     string `gorm:"size:255"`
-	IP       string `gorm:"size:45"`
+	BackgroundTaskID string `gorm:"size:36;uniqueIndex:idx_api_key_audit_task,where:background_task_id <> ''" json:"-"`
+	ApiKeyID         uint   `gorm:"index"`
+	UserID           uint   `gorm:"index"`
+	Method           string `gorm:"size:8"`
+	Path             string `gorm:"size:255"`
+	IP               string `gorm:"size:45"`
 }

@@ -2,10 +2,11 @@ package models
 
 type RemoteDownloadLog struct {
 	Model
-	UserID  uint   `gorm:"index"`
-	Domain  string `gorm:"index;size:255;"`
-	Bytes   uint64
-	Seconds float64
+	RemoteDownloadID uint   `gorm:"uniqueIndex:idx_remote_download_log_source,where:remote_download_id > 0" json:"-"`
+	UserID           uint   `gorm:"index"`
+	Domain           string `gorm:"index;size:255;"`
+	Bytes            uint64
+	Seconds          float64
 }
 
 type RemoteDownloadStatsGetValidation struct {

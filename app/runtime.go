@@ -1,6 +1,7 @@
 package app
 
 import (
+	"ch/kirari04/videocms/background"
 	"sync"
 	"sync/atomic"
 
@@ -62,6 +63,7 @@ type Deps struct {
 	Storage          *storage.Service
 	StorageCipher    *storage.CredentialCipher
 	StorageLifecycle StorageLifecycle
+	Background       *background.Runtime
 }
 
 func (d *Deps) Config() config.Config {

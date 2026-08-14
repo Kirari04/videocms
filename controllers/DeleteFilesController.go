@@ -14,14 +14,9 @@ func (h *Handlers) DeleteFilesController(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	// Determine admin status
-	isAdmin, _ := c.Get("Admin").(bool)
-
-	// Business logic
-	status, err := h.Logic.DeleteFiles(&fileValidation, c.Get("UserID").(uint), isAdmin)
-
-	if err != nil {
-		return c.String(status, err.Error())
+	ids := make([]uint, 0, len(fileValidation.LinkIDs))
+	for _, item := range fileValidation.LinkIDs {
+		ids = append(ids, item.LinkID)
 	}
-	return c.NoContent(status)
+	return h.enqueueDeletion(c, ids, nil)
 }

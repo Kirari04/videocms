@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"ch/kirari04/videocms/background"
 	downloadsvc "ch/kirari04/videocms/download"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/middlewares"
@@ -70,6 +71,7 @@ type downloadJobResponse struct {
 	StartedAt                 *time.Time          `json:"startedAt"`
 	ReadyAt                   *time.Time          `json:"readyAt"`
 	ExpiresAt                 *time.Time          `json:"expiresAt"`
+	BackgroundJobID           string              `json:"backgroundJobId,omitempty"`
 }
 
 type cachedDownloadPreparationRatio struct {
@@ -195,6 +197,26 @@ func (h *Handlers) CreateDownloadJob(c echo.Context) error {
 		c.Response().Header().Set("Retry-After", "30")
 		c.Logger().Warnf("download_preparation event=queue_full link=%s", link.UUID)
 		return downloadJobJSONError(c, http.StatusTooManyRequests, "queue_full", "The download preparation queue is full. Try again shortly.")
+	}
+	if job.Status != models.DownloadJobStatusReady && job.BackgroundJobID == "" && h.Deps.Background != nil {
+		ownerID := job.UserID
+		backgroundJob, _, enqueueErr := h.background().Enqueue(c.Request().Context(), background.JobSpec{
+			Kind: "download.prepare", Visibility: background.VisibilityUser, OwnerID: &ownerID,
+			SubjectType: "download_preparation", SubjectID: job.UUID,
+			IdempotencyKey: "prepared:" + job.UUID, Label: "Prepare " + job.OutputName,
+			Tasks: []background.TaskSpec{{
+				Kind: "download.prepare", Queue: background.QueueFFmpeg, Phase: "Preparing download",
+				Payload: map[string]any{"downloadJobId": job.ID}, DedupeKey: fmt.Sprintf("prepared:%d", job.ID),
+				Priority: 50, Required: true, Weight: 100,
+			}},
+		})
+		if enqueueErr != nil {
+			return downloadJobJSONError(c, http.StatusInternalServerError, "job_create_failed", "The server could not queue this download.")
+		}
+		job.BackgroundJobID = backgroundJob.ID
+		if err := h.Deps.DB.Model(&job).Update("background_job_id", backgroundJob.ID).Error; err != nil {
+			return downloadJobJSONError(c, http.StatusInternalServerError, "job_create_failed", "The server could not link this download.")
+		}
 	}
 
 	statusURL := h.downloadJobStatusURL(job.LinkUUID, job.UUID)
@@ -374,6 +396,7 @@ func (h *Handlers) buildDownloadJobResponse(
 		StartedAt:         job.StartedAt,
 		ReadyAt:           job.ReadyAt,
 		ExpiresAt:         job.ExpiresAt,
+		BackgroundJobID:   job.BackgroundJobID,
 	}
 	if models.IsDownloadJobTerminal(job.Status) {
 		response.RetryAfterSeconds = 0

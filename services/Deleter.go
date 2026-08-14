@@ -4,6 +4,7 @@ import (
 	"ch/kirari04/videocms/models"
 	"ch/kirari04/videocms/storage"
 	"context"
+	"errors"
 	"log"
 	"os"
 	"time"
@@ -16,14 +17,15 @@ func (w *WorkerGroup) Deleter(ctx context.Context) {
 		ctx = context.Background()
 	}
 	for {
-		w.runDeleter()
+		_ = w.runDeleter()
 		if !sleepContext(ctx, time.Second*20) {
 			return
 		}
 	}
 }
 
-func (w *WorkerGroup) runDeleter() {
+func (w *WorkerGroup) runDeleter() error {
+	var deletionErrors []error
 	var notReferencedFiles []uint
 	if res := w.deps.DB.
 		Raw(`
@@ -33,13 +35,13 @@ func (w *WorkerGroup) runDeleter() {
 		HAVING COUNT(links.id) = SUM(CASE WHEN links.deleted_at IS NULL THEN 0 ELSE 1 END);
 		`).Scan(&notReferencedFiles); res.Error != nil {
 		log.Printf("Failed to query unreferenced files: %v", res.Error)
-		return
+		return res.Error
 	}
 
 	if len(notReferencedFiles) > 0 {
 		if res := w.deps.DB.Delete(&models.File{}, notReferencedFiles); res.Error != nil {
 			log.Printf("Failed to delete unreferenced files: %v", res.Error)
-			return
+			return res.Error
 		}
 	}
 
@@ -54,7 +56,7 @@ func (w *WorkerGroup) runDeleter() {
 		Where("deleted_at IS NOT NULL").
 		Find(&todos, todos); res.Error != nil {
 		log.Printf("Failed to query deleted files: %v", res.Error)
-		return
+		return res.Error
 	}
 
 	if len(todos) > 0 {
@@ -101,6 +103,7 @@ func (w *WorkerGroup) runDeleter() {
 
 		if err := w.deleteStoredFile(todo); err != nil {
 			log.Printf("Failed to delete stored data for file %d: %v", todo.ID, err)
+			deletionErrors = append(deletionErrors, err)
 			skippingDeletion++
 			continue
 		}
@@ -118,6 +121,7 @@ func (w *WorkerGroup) runDeleter() {
 			return tx.Unscoped().Delete(&todo).Error
 		}); err != nil {
 			log.Printf("Failed to delete file %d from database: %v", todo.ID, err)
+			deletionErrors = append(deletionErrors, err)
 			continue
 		}
 		successDeletion++
@@ -128,6 +132,7 @@ func (w *WorkerGroup) runDeleter() {
 	if successDeletion > 0 {
 		log.Printf("Successfully deleted %d files", successDeletion)
 	}
+	return errors.Join(deletionErrors...)
 }
 
 func (w *WorkerGroup) deleteStoredFile(file models.File) error {
