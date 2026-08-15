@@ -14,13 +14,13 @@ A self-hosted Content Management System for your videos. 🎞️
 - **🔊 Multi-Audio:** The player supports multiple audio tracks that are not stored inside the video, saving storage space.
 - **🚀 Fast Chunked Upload:** Allows the server to be behind a proxy without requiring high maximum post limits.
 - **📦 Configurable Downloads:** Viewers can choose a ready quality and download MP4 with one audio track, or MKV with selectable audio and subtitle tracks. The server assembles the result without re-encoding.
-- **🗄️ Storage Pools:** Keep local storage as the default or route new uploads across multiple S3-compatible mounts from the admin UI.
+- **🗄️ Storage Pools:** Keep local storage as the default or route new uploads across S3-compatible buckets and SFTP folders from the admin UI.
 
 ## Documentation 📚
 
 Follow the documentation to setup VideoCMS: [https://videocms-docs.vercel.app/](https://videocms-docs.vercel.app/)
 
-Storage mounts, pool routing, upgrade behavior, and reconnecting migrated buckets are described in [the storage guide](https://videocms-docs.vercel.app/operations/storage).
+Storage mounts, pool routing, upgrade behavior, and reconnecting migrated storage are described in [the storage guide](https://videocms-docs.vercel.app/operations/storage).
 
 Monitoring, canceling, retrying, and troubleshooting background work are described in [the background-jobs guide](https://videocms-docs.vercel.app/operations/background-jobs).
 
