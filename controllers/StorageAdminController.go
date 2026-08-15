@@ -85,6 +85,18 @@ func (h *Handlers) UnmountStorageMount(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]int64{"unavailable_files": unavailable})
 }
 
+func (h *Handlers) DeleteStorageMount(c echo.Context) error {
+	mountID, err := storageResourceID(c)
+	if err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
+	unavailable, err := h.Logic.DeleteStorageMount(mountID)
+	if err != nil {
+		return storageAdminError(c, err)
+	}
+	return c.JSON(http.StatusOK, map[string]int64{"unavailable_files": unavailable})
+}
+
 func (h *Handlers) RemountStorageMount(c echo.Context) error {
 	mountID, err := storageResourceID(c)
 	if err != nil {

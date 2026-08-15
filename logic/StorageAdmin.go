@@ -52,6 +52,9 @@ type StoragePoolResponse struct {
 
 type StorageAdminOverview struct {
 	EncryptionConfigured bool
+	UsedBytes            int64
+	FileCount            int64
+	UnavailableFileCount int64
 	Mounts               []StorageMountResponse
 	Pools                []StoragePoolResponse
 }
@@ -96,8 +99,14 @@ func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
 		return StorageAdminOverview{}, err
 	}
 	usageByMount := make(map[string]storageMountUsage, len(usages))
+	var totalUsedBytes int64
+	var totalFileCount int64
+	var totalUnavailableFileCount int64
 	for _, usage := range usages {
 		usageByMount[usage.StorageID] = usage
+		totalUsedBytes += usage.UsedBytes
+		totalFileCount += usage.FileCount
+		totalUnavailableFileCount += usage.UnavailableFileCount
 	}
 	mountResponses := make([]StorageMountResponse, 0, len(mounts))
 	for _, mount := range mounts {
@@ -160,6 +169,9 @@ func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
 	}
 	return StorageAdminOverview{
 		EncryptionConfigured: s.Deps.StorageCipher != nil,
+		UsedBytes:            totalUsedBytes,
+		FileCount:            totalFileCount,
+		UnavailableFileCount: totalUnavailableFileCount,
 		Mounts:               mountResponses,
 		Pools:                poolResponses,
 	}, nil
@@ -342,6 +354,48 @@ func (s *Service) UnmountStorageMount(mountID uint) (int64, error) {
 		return unavailable, err
 	}
 	return unavailable, nil
+}
+
+// DeleteStorageMount permanently removes a detached mount's saved
+// configuration. File records retain the old storage UUID and stay
+// unavailable so an administrator can reconnect them from a replacement
+// mount without keeping credentials for storage that is no longer used.
+func (s *Service) DeleteStorageMount(mountID uint) (int64, error) {
+	var mount models.StorageMount
+	if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
+		return 0, err
+	}
+	if mount.System {
+		return 0, errors.New("built-in local storage cannot be deleted")
+	}
+
+	releaseMount := s.Deps.StorageLifecycle.WriteLock(mount.UUID)
+	defer releaseMount()
+	if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
+		return 0, err
+	}
+	if mount.Mounted {
+		return 0, errors.New("detach the storage mount before deleting it")
+	}
+
+	var unavailable int64
+	err := s.Deps.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.File{}).
+			Where("storage_id = ? AND storage_state <> ?", mount.UUID, models.FileStorageUnavailable).
+			Update("storage_state", models.FileStorageUnavailable).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&models.File{}).
+			Where("storage_id = ? AND storage_state = ?", mount.UUID, models.FileStorageUnavailable).
+			Count(&unavailable).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("storage_mount_id = ?", mount.ID).Delete(&models.StoragePoolMount{}).Error; err != nil {
+			return err
+		}
+		return tx.Unscoped().Delete(&mount).Error
+	})
+	return unavailable, err
 }
 
 func (s *Service) RemountStorageMount(ctx context.Context, mountID uint) (StorageReconnectResult, error) {

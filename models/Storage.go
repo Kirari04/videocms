@@ -14,8 +14,8 @@ const (
 )
 
 // StorageMount is a durable identity for a configured storage backend. A
-// mount record remains as a tombstone when it is unmounted so files can retain
-// their original storage ID and be reconnected later.
+// detached mount remains available for reconnection until an administrator
+// explicitly deletes its saved configuration.
 type StorageMount struct {
 	Model
 	UUID                 string `gorm:"uniqueIndex;size:64"`
