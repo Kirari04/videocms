@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -14,9 +15,10 @@ import (
 )
 
 type storageMountRequest struct {
-	Name          string                       `json:"name" validate:"required,min=1,max=120"`
-	Configuration storage.S3MountConfiguration `json:"configuration" validate:"required"`
-	Credentials   *storage.S3MountCredentials  `json:"credentials"`
+	Name          string           `json:"name" validate:"required,min=1,max=120"`
+	Provider      string           `json:"provider"`
+	Configuration json.RawMessage  `json:"configuration" validate:"required"`
+	Credentials   *json.RawMessage `json:"credentials"`
 }
 
 type storagePoolRequest struct {
@@ -42,8 +44,9 @@ func (h *Handlers) CreateStorageMount(c echo.Context) error {
 	if status, err := helpers.Validate(c, request); err != nil {
 		return c.String(status, err.Error())
 	}
-	mount, reconnect, err := h.Logic.CreateS3StorageMount(c.Request().Context(), logic.S3StorageMountInput{
+	mount, reconnect, err := h.Logic.CreateStorageMount(c.Request().Context(), logic.StorageMountInput{
 		Name:          request.Name,
+		Provider:      request.Provider,
 		Configuration: request.Configuration,
 		Credentials:   request.Credentials,
 	})
@@ -62,8 +65,9 @@ func (h *Handlers) UpdateStorageMount(c echo.Context) error {
 	if status, err := helpers.Validate(c, request); err != nil {
 		return c.String(status, err.Error())
 	}
-	mount, err := h.Logic.UpdateS3StorageMount(c.Request().Context(), mountID, logic.S3StorageMountInput{
+	mount, err := h.Logic.UpdateStorageMount(c.Request().Context(), mountID, logic.StorageMountInput{
 		Name:          request.Name,
+		Provider:      request.Provider,
 		Configuration: request.Configuration,
 		Credentials:   request.Credentials,
 	})

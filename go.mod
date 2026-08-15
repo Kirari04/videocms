@@ -16,6 +16,7 @@ require (
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/patrickmn/go-cache v2.1.0+incompatible
+	github.com/pkg/sftp v1.13.11
 	github.com/thatisuday/commando v1.0.4
 	github.com/tus/tusd/v2 v2.10.0
 	github.com/xyproto/randomstring v1.2.0
@@ -62,6 +63,7 @@ require (
 	github.com/icholy/digest v1.2.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/klauspost/compress v1.19.2 // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260802145828-341c2f0c90b5 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
