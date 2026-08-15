@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -22,6 +23,13 @@ type S3StorageMountInput struct {
 	Credentials   *storage.S3MountCredentials
 }
 
+type StorageMountInput struct {
+	Name          string
+	Provider      string
+	Configuration json.RawMessage
+	Credentials   *json.RawMessage
+}
+
 type StorageMountResponse struct {
 	ID                    uint
 	UUID                  string
@@ -30,7 +38,7 @@ type StorageMountResponse struct {
 	Mounted               bool
 	Available             bool
 	System                bool
-	Configuration         *storage.S3MountConfiguration `json:",omitempty"`
+	Configuration         any `json:",omitempty"`
 	CredentialsConfigured bool
 	UsedBytes             int64
 	FileCount             int64
@@ -132,12 +140,12 @@ func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
 			LastCheckedAt:         mount.LastCheckedAt,
 			UnmountedAt:           mount.UnmountedAt,
 		}
-		if mount.Provider == models.StorageProviderS3 && mount.Configuration != "" {
-			configuration, err := storage.DecodeS3MountConfiguration(mount.Configuration)
+		if !mount.System && mount.Configuration != "" {
+			configuration, err := storage.DecodeMountConfiguration(mount.Provider, mount.Configuration)
 			if err != nil {
 				return StorageAdminOverview{}, fmt.Errorf("decode storage mount %s: %w", mount.UUID, err)
 			}
-			response.Configuration = &configuration
+			response.Configuration = configuration
 		}
 		mountResponses = append(mountResponses, response)
 	}
@@ -177,30 +185,34 @@ func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
 	}, nil
 }
 
-func (s *Service) CreateS3StorageMount(ctx context.Context, input S3StorageMountInput) (models.StorageMount, StorageReconnectResult, error) {
+func (s *Service) CreateStorageMount(ctx context.Context, input StorageMountInput) (models.StorageMount, StorageReconnectResult, error) {
 	if s.Deps.StorageCipher == nil {
 		return models.StorageMount{}, StorageReconnectResult{}, storage.ErrEncryptionKeyNotConfigured
-	}
-	if input.Credentials == nil {
-		input.Credentials = &storage.S3MountCredentials{}
 	}
 	input.Name = strings.TrimSpace(input.Name)
 	if input.Name == "" {
 		return models.StorageMount{}, StorageReconnectResult{}, errors.New("storage mount name is required")
 	}
+	input.Provider = strings.ToLower(strings.TrimSpace(input.Provider))
+	if input.Provider == "" {
+		input.Provider = models.StorageProviderS3
+	}
+	if input.Provider != models.StorageProviderS3 && input.Provider != models.StorageProviderSFTP {
+		return models.StorageMount{}, StorageReconnectResult{}, fmt.Errorf("unsupported storage provider %q", input.Provider)
+	}
 	mount := models.StorageMount{
 		UUID:     uuid.NewString(),
 		Name:     input.Name,
-		Provider: models.StorageProviderS3,
+		Provider: input.Provider,
 		Mounted:  true,
 	}
-	configuration, credentials, err := storage.EncodeS3Mount(input.Configuration, *input.Credentials, mount.UUID, s.Deps.StorageCipher)
+	configuration, credentials, err := storage.EncodeMount(mount.Provider, input.Configuration, input.Credentials, "", mount.UUID, s.Deps.StorageCipher)
 	if err != nil {
 		return models.StorageMount{}, StorageReconnectResult{}, err
 	}
 	mount.Configuration = configuration
 	mount.EncryptedCredentials = credentials
-	store, err := storage.NewS3StoreFromMount(ctx, mount.UUID, configuration, credentials, s.Deps.StorageCipher)
+	store, err := storage.NewStoreFromMount(ctx, mount.Provider, mount.UUID, configuration, credentials, s.Deps.StorageCipher)
 	if err != nil {
 		return models.StorageMount{}, StorageReconnectResult{}, err
 	}
@@ -226,7 +238,7 @@ func (s *Service) CreateS3StorageMount(ctx context.Context, input S3StorageMount
 	return mount, reconnect, nil
 }
 
-func (s *Service) UpdateS3StorageMount(ctx context.Context, mountID uint, input S3StorageMountInput) (models.StorageMount, error) {
+func (s *Service) UpdateStorageMount(ctx context.Context, mountID uint, input StorageMountInput) (models.StorageMount, error) {
 	if s.Deps.StorageCipher == nil {
 		return models.StorageMount{}, storage.ErrEncryptionKeyNotConfigured
 	}
@@ -234,7 +246,7 @@ func (s *Service) UpdateS3StorageMount(ctx context.Context, mountID uint, input 
 	if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
 		return models.StorageMount{}, err
 	}
-	if mount.System || mount.Provider != models.StorageProviderS3 {
+	if mount.System {
 		return models.StorageMount{}, errors.New("storage mount cannot be edited")
 	}
 	releaseMount := s.Deps.StorageLifecycle.WriteLock(mount.UUID)
@@ -246,34 +258,27 @@ func (s *Service) UpdateS3StorageMount(ctx context.Context, mountID uint, input 
 	if input.Name == "" {
 		return models.StorageMount{}, errors.New("storage mount name is required")
 	}
-	credentials := storage.S3MountCredentials{}
-	var err error
-	if input.Credentials != nil {
-		credentials = *input.Credentials
-	} else {
-		credentials, err = storage.DecodeS3MountCredentials(mount.EncryptedCredentials, mount.UUID, s.Deps.StorageCipher)
-		if err != nil {
-			return models.StorageMount{}, err
-		}
+	input.Provider = strings.ToLower(strings.TrimSpace(input.Provider))
+	if input.Provider == "" {
+		input.Provider = mount.Provider
 	}
-	configuration, encryptedCredentials, err := storage.EncodeS3Mount(input.Configuration, credentials, mount.UUID, s.Deps.StorageCipher)
+	if input.Provider != mount.Provider {
+		return models.StorageMount{}, errors.New("storage mount provider cannot be changed")
+	}
+	configuration, encryptedCredentials, err := storage.EncodeMount(mount.Provider, input.Configuration, input.Credentials, mount.EncryptedCredentials, mount.UUID, s.Deps.StorageCipher)
 	if err != nil {
 		return models.StorageMount{}, err
 	}
 	if mount.Mounted {
-		currentConfiguration, decodeErr := storage.DecodeS3MountConfiguration(mount.Configuration)
-		if decodeErr != nil {
-			return models.StorageMount{}, fmt.Errorf("decode current storage mount configuration: %w", decodeErr)
+		sameLocation, locationErr := storage.SameMountLocation(mount.Provider, mount.Configuration, configuration)
+		if locationErr != nil {
+			return models.StorageMount{}, fmt.Errorf("compare storage mount location: %w", locationErr)
 		}
-		nextConfiguration, decodeErr := storage.DecodeS3MountConfiguration(configuration)
-		if decodeErr != nil {
-			return models.StorageMount{}, decodeErr
-		}
-		if !sameS3StorageLocation(currentConfiguration, nextConfiguration) {
-			return models.StorageMount{}, errors.New("detach the storage mount before changing its bucket, region, endpoint, prefix, or path-style mode")
+		if !sameLocation {
+			return models.StorageMount{}, errors.New("detach the storage mount before changing its remote storage location")
 		}
 	}
-	store, err := storage.NewS3StoreFromMount(ctx, mount.UUID, configuration, encryptedCredentials, s.Deps.StorageCipher)
+	store, err := storage.NewStoreFromMount(ctx, mount.Provider, mount.UUID, configuration, encryptedCredentials, s.Deps.StorageCipher)
 	if err != nil {
 		return models.StorageMount{}, err
 	}
@@ -307,6 +312,48 @@ func (s *Service) UpdateS3StorageMount(ctx context.Context, mountID uint, input 
 		_ = store.Close()
 	}
 	return mount, nil
+}
+
+// CreateS3StorageMount is retained for internal callers while the public
+// storage API is provider-neutral.
+func (s *Service) CreateS3StorageMount(ctx context.Context, input S3StorageMountInput) (models.StorageMount, StorageReconnectResult, error) {
+	configuration, err := json.Marshal(input.Configuration)
+	if err != nil {
+		return models.StorageMount{}, StorageReconnectResult{}, err
+	}
+	var credentials *json.RawMessage
+	if input.Credentials != nil {
+		encoded, err := json.Marshal(input.Credentials)
+		if err != nil {
+			return models.StorageMount{}, StorageReconnectResult{}, err
+		}
+		raw := json.RawMessage(encoded)
+		credentials = &raw
+	}
+	return s.CreateStorageMount(ctx, StorageMountInput{
+		Name: input.Name, Provider: models.StorageProviderS3,
+		Configuration: configuration, Credentials: credentials,
+	})
+}
+
+func (s *Service) UpdateS3StorageMount(ctx context.Context, mountID uint, input S3StorageMountInput) (models.StorageMount, error) {
+	configuration, err := json.Marshal(input.Configuration)
+	if err != nil {
+		return models.StorageMount{}, err
+	}
+	var credentials *json.RawMessage
+	if input.Credentials != nil {
+		encoded, err := json.Marshal(input.Credentials)
+		if err != nil {
+			return models.StorageMount{}, err
+		}
+		raw := json.RawMessage(encoded)
+		credentials = &raw
+	}
+	return s.UpdateStorageMount(ctx, mountID, StorageMountInput{
+		Name: input.Name, Provider: models.StorageProviderS3,
+		Configuration: configuration, Credentials: credentials,
+	})
 }
 
 func (s *Service) UnmountStorageMount(mountID uint) (int64, error) {
@@ -406,7 +453,7 @@ func (s *Service) RemountStorageMount(ctx context.Context, mountID uint) (Storag
 	if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
 		return StorageReconnectResult{}, err
 	}
-	if mount.System || mount.Provider != models.StorageProviderS3 {
+	if mount.System {
 		return StorageReconnectResult{}, errors.New("storage mount cannot be remounted")
 	}
 	releaseMount := s.Deps.StorageLifecycle.WriteLock(mount.UUID)
@@ -418,7 +465,7 @@ func (s *Service) RemountStorageMount(ctx context.Context, mountID uint) (Storag
 		releaseMount()
 		return StorageReconnectResult{}, errors.New("storage mount is already mounted")
 	}
-	store, err := storage.NewS3StoreFromMount(ctx, mount.UUID, mount.Configuration, mount.EncryptedCredentials, s.Deps.StorageCipher)
+	store, err := storage.NewStoreFromMount(ctx, mount.Provider, mount.UUID, mount.Configuration, mount.EncryptedCredentials, s.Deps.StorageCipher)
 	if err != nil {
 		releaseMount()
 		return StorageReconnectResult{}, err
@@ -835,14 +882,6 @@ func checkStorageConnection(ctx context.Context, store storage.Store) error {
 	checkCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	return checker.Check(checkCtx)
-}
-
-func sameS3StorageLocation(left, right storage.S3MountConfiguration) bool {
-	return left.Bucket == right.Bucket &&
-		left.Region == right.Region &&
-		left.Endpoint == right.Endpoint &&
-		left.Prefix == right.Prefix &&
-		left.UsePathStyle == right.UsePathStyle
 }
 
 func uniqueUintValues(values []uint) []uint {

@@ -5,6 +5,7 @@ import "time"
 const (
 	StorageProviderLocal = "local"
 	StorageProviderS3    = "s3"
+	StorageProviderSFTP  = "sftp"
 
 	StorageMountLocalUUID = "local"
 	StoragePoolLocalUUID  = "local"
