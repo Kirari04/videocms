@@ -26,10 +26,11 @@ func TestStorageMountReconnectAndUnmountLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	remoteStore, err := storage.NewLocalStore(t.TempDir())
+	remoteLocal, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
+	remoteStore := &adminCloseTrackingStore{Store: remoteLocal}
 	storageService, err := storage.NewService("local", storage.LegacyMediaLayout{}, map[string]storage.Store{
 		"local":  localStore,
 		"remote": remoteStore,
@@ -110,6 +111,9 @@ func TestStorageMountReconnectAndUnmountLifecycle(t *testing.T) {
 	}
 	if _, err := storageService.Store(mount.UUID); !errors.Is(err, storage.ErrStoreNotConfigured) {
 		t.Fatalf("unmounted store error = %v", err)
+	}
+	if got := remoteStore.CloseCount(); got != 1 {
+		t.Fatalf("unmounted store close count = %d, want 1", got)
 	}
 	var membershipCount int64
 	if err := db.Model(&models.StoragePoolMount{}).Where("storage_mount_id = ?", mount.ID).Count(&membershipCount).Error; err != nil {
@@ -597,6 +601,25 @@ type delayedStatStore struct {
 	mu        sync.Mutex
 	active    int
 	maxActive int
+}
+
+type adminCloseTrackingStore struct {
+	storage.Store
+	mu         sync.Mutex
+	closeCount int
+}
+
+func (s *adminCloseTrackingStore) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closeCount++
+	return nil
+}
+
+func (s *adminCloseTrackingStore) CloseCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closeCount
 }
 
 func (s *delayedStatStore) Stat(ctx context.Context, key storage.Key) (storage.ObjectInfo, error) {
