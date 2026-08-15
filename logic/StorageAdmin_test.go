@@ -120,6 +120,102 @@ func TestStorageMountReconnectAndUnmountLifecycle(t *testing.T) {
 	}
 }
 
+func TestDeleteStorageMountRemovesConfigurationAndKeepsFilesRecoverable(t *testing.T) {
+	db := newStorageAdminTestDB(t)
+	mount := models.StorageMount{
+		UUID:                 "deleted-mount",
+		Name:                 "Archive",
+		Provider:             models.StorageProviderS3,
+		Configuration:        `{"bucket":"archive"}`,
+		EncryptedCredentials: "encrypted-secret",
+		Mounted:              false,
+	}
+	if err := db.Create(&mount).Error; err != nil {
+		t.Fatal(err)
+	}
+	pool := models.StoragePool{UUID: "archive-pool", Name: "Archive"}
+	if err := db.Create(&pool).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.StoragePoolMount{StoragePoolID: pool.ID, StorageMountID: mount.ID}).Error; err != nil {
+		t.Fatal(err)
+	}
+	files := []models.File{
+		{UUID: "available-file", StorageID: mount.UUID, StorageState: models.FileStorageAvailable, Size: 10},
+		{UUID: "unavailable-file", StorageID: mount.UUID, StorageState: models.FileStorageUnavailable, Size: 20},
+	}
+	for index := range files {
+		if err := db.Create(&files[index]).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	service := NewService(&app.Deps{DB: db})
+	unavailable, err := service.DeleteStorageMount(mount.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unavailable != 2 {
+		t.Fatalf("unavailable files = %d, want 2", unavailable)
+	}
+	if err := db.Unscoped().First(&models.StorageMount{}, mount.ID).Error; !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("deleted mount lookup error = %v, want record not found", err)
+	}
+	var membershipCount int64
+	if err := db.Model(&models.StoragePoolMount{}).Where("storage_mount_id = ?", mount.ID).Count(&membershipCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if membershipCount != 0 {
+		t.Fatalf("pool memberships = %d, want 0", membershipCount)
+	}
+	for index := range files {
+		var persisted models.File
+		if err := db.First(&persisted, files[index].ID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if persisted.StorageID != mount.UUID || persisted.StorageState != models.FileStorageUnavailable {
+			t.Fatalf("persisted file = %#v", persisted)
+		}
+	}
+
+	overview, err := service.StorageAdminOverview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.FileCount != 2 || overview.UsedBytes != 30 || overview.UnavailableFileCount != 2 {
+		t.Fatalf("overview totals = files:%d bytes:%d unavailable:%d", overview.FileCount, overview.UsedBytes, overview.UnavailableFileCount)
+	}
+	if len(overview.Mounts) != 0 {
+		t.Fatalf("deleted mount still listed: %#v", overview.Mounts)
+	}
+}
+
+func TestDeleteStorageMountRequiresDetachedNonSystemMount(t *testing.T) {
+	tests := []struct {
+		name  string
+		mount models.StorageMount
+		want  string
+	}{
+		{name: "mounted", mount: models.StorageMount{UUID: "mounted", Provider: models.StorageProviderS3, Mounted: true}, want: "detach"},
+		{name: "system", mount: models.StorageMount{UUID: models.StorageMountLocalUUID, Provider: models.StorageProviderLocal, System: true}, want: "built-in"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			db := newStorageAdminTestDB(t)
+			if err := db.Create(&test.mount).Error; err != nil {
+				t.Fatal(err)
+			}
+			service := NewService(&app.Deps{DB: db})
+			if _, err := service.DeleteStorageMount(test.mount.ID); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("DeleteStorageMount() error = %v, want %q", err, test.want)
+			}
+			if err := db.First(&models.StorageMount{}, test.mount.ID).Error; err != nil {
+				t.Fatalf("protected mount was deleted: %v", err)
+			}
+		})
+	}
+}
+
 func TestDeleteStoragePoolFallsBackToLocalAndClearsUserOverrides(t *testing.T) {
 	db := newStorageAdminTestDB(t)
 	localMount := models.StorageMount{UUID: models.StorageMountLocalUUID, Name: "Local", Provider: models.StorageProviderLocal, Mounted: true, System: true}
