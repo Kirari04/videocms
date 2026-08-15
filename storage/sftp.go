@@ -107,6 +107,13 @@ func (s *SFTPStore) Open(ctx context.Context, key Key) (*Object, error) {
 			file: file,
 			info: sftpObjectInfo(validated, fileInfo),
 		}, nil
+	}, func(connection *sftpConnection, result openResult) error {
+		if result.file == nil {
+			return nil
+		}
+		closeErr := result.file.Close()
+		s.invalidate(connection, closeErr)
+		return closeErr
 	})
 	if err != nil {
 		return nil, err
@@ -239,7 +246,7 @@ func (s *SFTPStore) Stat(ctx context.Context, key Key) (ObjectInfo, error) {
 			return ObjectInfo{}, err
 		}
 		return sftpObjectInfo(validated, fileInfo), nil
-	})
+	}, nil)
 	return info, err
 }
 
@@ -267,7 +274,7 @@ func (s *SFTPStore) Delete(ctx context.Context, key Key) error {
 		}
 		pruneSFTPDirectories(connection.client, connection.root, path.Dir(remotePath))
 		return struct{}{}, nil
-	})
+	}, nil)
 	return err
 }
 
@@ -345,11 +352,16 @@ func (s *SFTPStore) Check(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	const expectedPayload = "videocms storage check"
-	payload := strings.NewReader(expectedPayload)
-	size := int64(len(expectedPayload))
-	if _, err := s.Put(ctx, key, payload, PutOptions{ExpectedSize: &size}); err != nil {
+	const initialPayload = "videocms storage check"
+	initialSize := int64(len(initialPayload))
+	if _, err := s.Put(ctx, key, strings.NewReader(initialPayload), PutOptions{ExpectedSize: &initialSize}); err != nil {
 		return fmt.Errorf("check SFTP write access: %w", err)
+	}
+	const expectedPayload = "videocms storage replacement check"
+	replacementSize := int64(len(expectedPayload))
+	if _, err := s.Put(ctx, key, strings.NewReader(expectedPayload), PutOptions{ExpectedSize: &replacementSize}); err != nil {
+		_ = s.Delete(context.WithoutCancel(ctx), key)
+		return fmt.Errorf("check SFTP safe replacement support: %w", err)
 	}
 	object, err := s.Open(ctx, key)
 	if err != nil {
@@ -627,7 +639,7 @@ func (c *sftpConnection) close() error {
 	return result
 }
 
-func withSFTPConnection[T any](ctx context.Context, store *SFTPStore, operation func(*sftpConnection) (T, error)) (T, *sftpConnection, error) {
+func withSFTPConnection[T any](ctx context.Context, store *SFTPStore, operation func(*sftpConnection) (T, error), discard func(*sftpConnection, T) error) (T, *sftpConnection, error) {
 	var zero T
 	for attempt := 0; attempt < 2; attempt++ {
 		if err := ctx.Err(); err != nil {
@@ -640,7 +652,10 @@ func withSFTPConnection[T any](ctx context.Context, store *SFTPStore, operation 
 		result, err := operation(connection)
 		if err == nil {
 			if contextErr := ctx.Err(); contextErr != nil {
-				return zero, nil, contextErr
+				if discard == nil {
+					return zero, nil, contextErr
+				}
+				return zero, nil, errors.Join(contextErr, discard(connection, result))
 			}
 			return result, connection, nil
 		}
@@ -753,10 +768,7 @@ func publishSFTPObject(client *sftp.Client, temporaryPath, remotePath string) er
 		return nil
 	}
 	if existing, statErr := client.Lstat(remotePath); statErr == nil && existing.Mode().IsRegular() {
-		if removeErr := client.Remove(remotePath); removeErr != nil {
-			return removeErr
-		}
-		return client.Rename(temporaryPath, remotePath)
+		return fmt.Errorf("SFTP server rejected safe replacement of an existing file; atomic overwrite support is required: %w", renameErr)
 	}
 	return renameErr
 }

@@ -124,6 +124,40 @@ func TestSFTPStoreObjectLifecycle(t *testing.T) {
 	}
 }
 
+func TestWithSFTPConnectionDiscardsSuccessfulResultAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	connection := &sftpConnection{}
+	store := &SFTPStore{connection: connection}
+	cleaned := false
+
+	result, returnedConnection, err := withSFTPConnection(ctx, store, func(got *sftpConnection) (string, error) {
+		if got != connection {
+			t.Fatalf("operation connection = %p, want %p", got, connection)
+		}
+		cancel()
+		return "remote-handle", nil
+	}, func(got *sftpConnection, value string) error {
+		if got != connection {
+			t.Fatalf("discard connection = %p, want %p", got, connection)
+		}
+		if value != "remote-handle" {
+			t.Fatalf("discard value = %q", value)
+		}
+		cleaned = true
+		return nil
+	})
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("withSFTPConnection() error = %v, want context.Canceled", err)
+	}
+	if result != "" || returnedConnection != nil {
+		t.Fatalf("canceled result = %q, connection = %p", result, returnedConnection)
+	}
+	if !cleaned {
+		t.Fatal("successful result was not discarded after cancellation")
+	}
+}
+
 type cancelAfterFirstRead struct {
 	reader io.Reader
 	cancel context.CancelFunc
