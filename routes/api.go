@@ -130,6 +130,7 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	protectedApi.POST("/admin/storage/mounts", handlers.CreateStorageMount, middlewareFactory.IsAdmin())
 	protectedApi.PUT("/admin/storage/mounts/:id", handlers.UpdateStorageMount, middlewareFactory.IsAdmin())
 	protectedApi.DELETE("/admin/storage/mounts/:id", handlers.UnmountStorageMount, middlewareFactory.IsAdmin())
+	protectedApi.DELETE("/admin/storage/mounts/:id/forget", handlers.DeleteStorageMount, middlewareFactory.IsAdmin())
 	protectedApi.POST("/admin/storage/mounts/:id/remount", handlers.RemountStorageMount, middlewareFactory.IsAdmin())
 	protectedApi.POST("/admin/storage/mounts/:id/check", handlers.CheckStorageMount, middlewareFactory.IsAdmin())
 	protectedApi.POST("/admin/storage/mounts/:id/reconnect", handlers.ReconnectStorageMount, middlewareFactory.IsAdmin())
