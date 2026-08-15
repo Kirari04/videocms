@@ -72,7 +72,7 @@ func newStorageService(ctx context.Context, cfg config.Config, db *gorm.DB) (*st
 			markStorageMountLoadFailure(db, mount, err)
 			continue
 		}
-		if _, err := storageService.RegisterStore(mount.UUID, store); err != nil {
+		if err := storageService.RegisterStore(mount.UUID, store); err != nil {
 			_ = store.Close()
 			markStorageMountLoadFailure(db, mount, err)
 			continue

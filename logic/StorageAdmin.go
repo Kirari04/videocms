@@ -214,7 +214,7 @@ func (s *Service) CreateS3StorageMount(ctx context.Context, input S3StorageMount
 		_ = store.Close()
 		return models.StorageMount{}, StorageReconnectResult{}, err
 	}
-	if _, err := s.Deps.Storage.RegisterStore(mount.UUID, store); err != nil {
+	if err := s.Deps.Storage.RegisterStore(mount.UUID, store); err != nil {
 		_ = store.Close()
 		_ = s.Deps.DB.Unscoped().Delete(&mount).Error
 		return models.StorageMount{}, StorageReconnectResult{}, err
@@ -299,7 +299,7 @@ func (s *Service) UpdateS3StorageMount(ctx context.Context, mountID uint, input 
 	mount.LastCheckedAt = &now
 	mount.LastError = ""
 	if mount.Mounted {
-		if _, err := s.Deps.Storage.RegisterStore(mount.UUID, store); err != nil {
+		if err := s.Deps.Storage.RegisterStore(mount.UUID, store); err != nil {
 			_ = store.Close()
 			return models.StorageMount{}, err
 		}
@@ -350,7 +350,7 @@ func (s *Service) UnmountStorageMount(mountID uint) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if _, err := s.Deps.Storage.UnregisterStore(mount.UUID); err != nil && !errors.Is(err, storage.ErrStoreNotConfigured) {
+	if err := s.Deps.Storage.UnregisterStore(mount.UUID); err != nil && !errors.Is(err, storage.ErrStoreNotConfigured) {
 		return unavailable, err
 	}
 	return unavailable, nil
@@ -428,7 +428,7 @@ func (s *Service) RemountStorageMount(ctx context.Context, mountID uint) (Storag
 		releaseMount()
 		return StorageReconnectResult{}, err
 	}
-	if _, err := s.Deps.Storage.RegisterStore(mount.UUID, store); err != nil {
+	if err := s.Deps.Storage.RegisterStore(mount.UUID, store); err != nil {
 		_ = store.Close()
 		releaseMount()
 		return StorageReconnectResult{}, err
@@ -440,7 +440,7 @@ func (s *Service) RemountStorageMount(ctx context.Context, mountID uint) (Storag
 		"last_error":      "",
 		"last_checked_at": &now,
 	}).Error; err != nil {
-		_, _ = s.Deps.Storage.UnregisterStore(mount.UUID)
+		_ = s.Deps.Storage.UnregisterStore(mount.UUID)
 		releaseMount()
 		return StorageReconnectResult{}, err
 	}
