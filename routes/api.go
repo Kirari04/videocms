@@ -138,6 +138,8 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	protectedApi.PUT("/settings", handlers.UpdateSettings, middlewareFactory.IsAdmin())
 	protectedApi.POST("/settings/test-pgs-server", handlers.TestPgsServerConnection, middlewareFactory.IsAdmin())
 	protectedApi.GET("/admin/storage", handlers.GetStorageAdminOverview, middlewareFactory.IsAdmin())
+	protectedApi.POST("/admin/storage/sftp/host-key", handlers.ScanSFTPHostKey, middlewareFactory.IsAdmin())
+	protectedApi.POST("/admin/storage/mounts/test", handlers.TestStorageMount, middlewareFactory.IsAdmin())
 	protectedApi.POST("/admin/storage/mounts", handlers.CreateStorageMount, middlewareFactory.IsAdmin())
 	protectedApi.PUT("/admin/storage/mounts/:id", handlers.UpdateStorageMount, middlewareFactory.IsAdmin())
 	protectedApi.DELETE("/admin/storage/mounts/:id", handlers.UnmountStorageMount, middlewareFactory.IsAdmin())

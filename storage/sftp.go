@@ -41,6 +41,15 @@ type SFTPOptions struct {
 	PrivateKeyPassphrase string
 }
 
+// SFTPHostKey describes the identity presented by an SSH server. A scanned
+// key is not trusted until an administrator explicitly pins its fingerprint.
+type SFTPHostKey struct {
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+	Algorithm   string `json:"algorithm"`
+	Fingerprint string `json:"fingerprint"`
+}
+
 type SFTPStore struct {
 	options SFTPOptions
 
@@ -79,6 +88,71 @@ func NewSFTPStore(ctx context.Context, options SFTPOptions) (*SFTPStore, error) 
 		return nil, ErrStoreNotConfigured
 	}
 	return store, nil
+}
+
+// ScanSFTPHostKey reads the key presented during the SSH handshake and aborts
+// before authentication begins. The caller must independently decide whether
+// to trust and pin the returned fingerprint.
+func ScanSFTPHostKey(ctx context.Context, host string, port int) (SFTPHostKey, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	host, port, err := normalizeSFTPAddress(host, port)
+	if err != nil {
+		return SFTPHostKey{}, err
+	}
+	address := net.JoinHostPort(host, fmt.Sprintf("%d", port))
+	dialer := net.Dialer{Timeout: sftpHandshakeTimeout, KeepAlive: sftpKeepaliveInterval}
+	rawConnection, err := dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return SFTPHostKey{}, fmt.Errorf("connect to SFTP server %s: %w", address, err)
+	}
+	defer rawConnection.Close()
+
+	deadline := time.Now().Add(sftpHandshakeTimeout)
+	if contextDeadline, ok := ctx.Deadline(); ok && contextDeadline.Before(deadline) {
+		deadline = contextDeadline
+	}
+	if err := rawConnection.SetDeadline(deadline); err != nil {
+		return SFTPHostKey{}, fmt.Errorf("set SFTP handshake deadline: %w", err)
+	}
+
+	var presentedKey ssh.PublicKey
+	stopAfterHostKey := errors.New("SFTP host key captured")
+	clientConfig := &ssh.ClientConfig{
+		User: "videocms-host-key-scan",
+		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
+			presentedKey = key
+			return stopAfterHostKey
+		},
+		Timeout: sftpHandshakeTimeout,
+	}
+
+	handshakeDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = rawConnection.Close()
+		case <-handshakeDone:
+		}
+	}()
+	sshConnection, _, _, handshakeErr := ssh.NewClientConn(rawConnection, address, clientConfig)
+	close(handshakeDone)
+	if sshConnection != nil {
+		_ = sshConnection.Close()
+	}
+	if presentedKey == nil {
+		if err := ctx.Err(); err != nil {
+			return SFTPHostKey{}, err
+		}
+		return SFTPHostKey{}, fmt.Errorf("read SFTP host key from %s: %w", address, handshakeErr)
+	}
+	return SFTPHostKey{
+		Host:        host,
+		Port:        port,
+		Algorithm:   presentedKey.Type(),
+		Fingerprint: ssh.FingerprintSHA256(presentedKey),
+	}, nil
 }
 
 func (s *SFTPStore) Open(ctx context.Context, key Key) (*Object, error) {

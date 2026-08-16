@@ -21,6 +21,18 @@ type storageMountRequest struct {
 	Credentials   *json.RawMessage `json:"credentials"`
 }
 
+type storageMountTestRequest struct {
+	MountID       uint             `json:"mount_id"`
+	Provider      string           `json:"provider"`
+	Configuration json.RawMessage  `json:"configuration" validate:"required"`
+	Credentials   *json.RawMessage `json:"credentials"`
+}
+
+type sftpHostKeyRequest struct {
+	Host string `json:"host" validate:"required"`
+	Port int    `json:"port"`
+}
+
 type storagePoolRequest struct {
 	Name      string `json:"name" validate:"required,min=1,max=120"`
 	MountIDs  []uint `json:"mount_ids" validate:"required,min=1"`
@@ -54,6 +66,33 @@ func (h *Handlers) CreateStorageMount(c echo.Context) error {
 		return storageAdminError(c, err)
 	}
 	return c.JSON(http.StatusCreated, map[string]any{"mount": mount, "reconnect": reconnect})
+}
+
+func (h *Handlers) TestStorageMount(c echo.Context) error {
+	request := new(storageMountTestRequest)
+	if status, err := helpers.Validate(c, request); err != nil {
+		return c.String(status, err.Error())
+	}
+	if err := h.Logic.TestStorageMount(c.Request().Context(), request.MountID, logic.StorageMountInput{
+		Provider:      request.Provider,
+		Configuration: request.Configuration,
+		Credentials:   request.Credentials,
+	}); err != nil {
+		return storageAdminError(c, err)
+	}
+	return c.JSON(http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handlers) ScanSFTPHostKey(c echo.Context) error {
+	request := new(sftpHostKeyRequest)
+	if status, err := helpers.Validate(c, request); err != nil {
+		return c.String(status, err.Error())
+	}
+	hostKey, err := storage.ScanSFTPHostKey(c.Request().Context(), request.Host, request.Port)
+	if err != nil {
+		return storageAdminError(c, err)
+	}
+	return c.JSON(http.StatusOK, hostKey)
 }
 
 func (h *Handlers) UpdateStorageMount(c echo.Context) error {

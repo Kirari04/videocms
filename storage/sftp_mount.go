@@ -129,24 +129,10 @@ func DecodeSFTPMountCredentials(value, mountID string, credentialCipher *Credent
 }
 
 func normalizeSFTPOptions(options SFTPOptions) (SFTPOptions, error) {
-	options.Host = strings.TrimSpace(options.Host)
-	if options.Host == "" {
-		return SFTPOptions{}, errors.New("SFTP host is empty")
-	}
-	if strings.HasPrefix(options.Host, "[") && strings.HasSuffix(options.Host, "]") {
-		options.Host = strings.TrimSuffix(strings.TrimPrefix(options.Host, "["), "]")
-	}
-	if strings.ContainsAny(options.Host, "\x00/\\ 	\r\n") || strings.Contains(options.Host, "://") {
-		return SFTPOptions{}, fmt.Errorf("invalid SFTP host %q", options.Host)
-	}
-	if strings.Contains(options.Host, ":") && net.ParseIP(options.Host) == nil {
-		return SFTPOptions{}, errors.New("SFTP host must not include a port")
-	}
-	if options.Port == 0 {
-		options.Port = defaultSFTPPort
-	}
-	if options.Port < 1 || options.Port > 65535 {
-		return SFTPOptions{}, errors.New("SFTP port must be between 1 and 65535")
+	var err error
+	options.Host, options.Port, err = normalizeSFTPAddress(options.Host, options.Port)
+	if err != nil {
+		return SFTPOptions{}, err
 	}
 	options.Username = strings.TrimSpace(options.Username)
 	if options.Username == "" || strings.ContainsAny(options.Username, "\x00\r\n") {
@@ -209,4 +195,27 @@ func normalizeSFTPOptions(options SFTPOptions) (SFTPOptions, error) {
 	}
 	options.HostKeyFingerprints = fingerprints
 	return options, nil
+}
+
+func normalizeSFTPAddress(host string, port int) (string, int, error) {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return "", 0, errors.New("SFTP host is empty")
+	}
+	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	}
+	if strings.ContainsAny(host, "\x00/\\ 	\r\n") || strings.Contains(host, "://") {
+		return "", 0, fmt.Errorf("invalid SFTP host %q", host)
+	}
+	if strings.Contains(host, ":") && net.ParseIP(host) == nil {
+		return "", 0, errors.New("SFTP host must not include a port")
+	}
+	if port == 0 {
+		port = defaultSFTPPort
+	}
+	if port < 1 || port > 65535 {
+		return "", 0, errors.New("SFTP port must be between 1 and 65535")
+	}
+	return host, port, nil
 }
