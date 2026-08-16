@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -121,6 +122,31 @@ func TestSFTPStoreObjectLifecycle(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "videos")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("empty parent directory was not pruned: %v", err)
+	}
+}
+
+func TestScanSFTPHostKeyStopsBeforeAuthentication(t *testing.T) {
+	server := newTestSFTPServer(t)
+	options := server.passwordOptions("")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	presented, err := ScanSFTPHostKey(ctx, options.Host, options.Port)
+	if err != nil {
+		t.Fatalf("ScanSFTPHostKey() error = %v", err)
+	}
+	if presented.Host != options.Host || presented.Port != options.Port {
+		t.Fatalf("ScanSFTPHostKey() address = %s:%d, want %s:%d", presented.Host, presented.Port, options.Host, options.Port)
+	}
+	if presented.Algorithm != server.hostSigner.PublicKey().Type() {
+		t.Fatalf("ScanSFTPHostKey() algorithm = %q, want %q", presented.Algorithm, server.hostSigner.PublicKey().Type())
+	}
+	wantFingerprint := ssh.FingerprintSHA256(server.hostSigner.PublicKey())
+	if presented.Fingerprint != wantFingerprint {
+		t.Fatalf("ScanSFTPHostKey() fingerprint = %q, want %q", presented.Fingerprint, wantFingerprint)
+	}
+	if attempts := server.authenticationAttempts.Load(); attempts != 0 {
+		t.Fatalf("ScanSFTPHostKey() made %d authentication attempts, want 0", attempts)
 	}
 }
 
@@ -325,6 +351,7 @@ type testSFTPServer struct {
 	userSigner              ssh.Signer
 	userKey                 ed25519.PrivateKey
 	keyboardInteractiveOnly bool
+	authenticationAttempts  atomic.Int32
 	stop                    chan struct{}
 	wait                    sync.WaitGroup
 }
@@ -437,6 +464,7 @@ func (s *testSFTPServer) serveConnection(connection net.Conn) {
 	defer s.wait.Done()
 	config := &ssh.ServerConfig{
 		PublicKeyCallback: func(metadata ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+			s.authenticationAttempts.Add(1)
 			if metadata.User() == "videocms" && slices.Equal(key.Marshal(), s.userSigner.PublicKey().Marshal()) {
 				return nil, nil
 			}
@@ -445,6 +473,7 @@ func (s *testSFTPServer) serveConnection(connection net.Conn) {
 	}
 	if s.keyboardInteractiveOnly {
 		config.KeyboardInteractiveCallback = func(metadata ssh.ConnMetadata, challenge ssh.KeyboardInteractiveChallenge) (*ssh.Permissions, error) {
+			s.authenticationAttempts.Add(1)
 			answers, err := challenge("SFTP", "", []string{"Password:"}, []bool{false})
 			if err == nil && metadata.User() == "videocms" && slices.Equal(answers, []string{"test-password"}) {
 				return nil, nil
@@ -453,6 +482,7 @@ func (s *testSFTPServer) serveConnection(connection net.Conn) {
 		}
 	} else {
 		config.PasswordCallback = func(metadata ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
+			s.authenticationAttempts.Add(1)
 			if metadata.User() == "videocms" && string(password) == "test-password" {
 				return nil, nil
 			}
