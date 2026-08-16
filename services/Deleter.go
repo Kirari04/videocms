@@ -66,8 +66,18 @@ func (w *WorkerGroup) runDeleter() error {
 	var successDeletion int
 	for _, todo := range todos {
 		w.CancelDownloadPreparationsForFile(todo.ID)
+		w.cancelActiveEncodingsForFile(todo.ID, "file queued for deletion")
+		releaseFile := w.deps.StorageLifecycle.FileWriteLock(todo.ID)
+		if err := w.deps.DB.Unscoped().Preload("Qualitys").Preload("Subtitles").Preload("Audios").Preload("Links").First(&todo, todo.ID).Error; err != nil {
+			releaseFile()
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				deletionErrors = append(deletionErrors, err)
+			}
+			continue
+		}
 		if w.HasActiveDownloadPreparationForFile(todo.ID) {
 			skippingDeletion++
+			releaseFile()
 			continue
 		}
 
@@ -93,11 +103,9 @@ func (w *WorkerGroup) runDeleter() error {
 		}
 
 		if encoding {
-			// Cancel any active source transfer, encode, or output publication.
-			w.cancelActiveEncodingsForFile(todo.ID, "file queued for deletion")
-
 			// we will try again in the next loop (the encoding process may be finished until then)
 			skippingDeletion++
+			releaseFile()
 			continue
 		}
 
@@ -105,6 +113,7 @@ func (w *WorkerGroup) runDeleter() error {
 			log.Printf("Failed to delete stored data for file %d: %v", todo.ID, err)
 			deletionErrors = append(deletionErrors, err)
 			skippingDeletion++
+			releaseFile()
 			continue
 		}
 
@@ -122,9 +131,11 @@ func (w *WorkerGroup) runDeleter() error {
 		}); err != nil {
 			log.Printf("Failed to delete file %d from database: %v", todo.ID, err)
 			deletionErrors = append(deletionErrors, err)
+			releaseFile()
 			continue
 		}
 		successDeletion++
+		releaseFile()
 	}
 	if skippingDeletion > 0 {
 		log.Printf("Skipped %d files from deletion", skippingDeletion)
@@ -136,6 +147,8 @@ func (w *WorkerGroup) runDeleter() error {
 }
 
 func (w *WorkerGroup) deleteStoredFile(file models.File) error {
+	releaseMount := w.deps.StorageLifecycle.ReadLock(file.StorageID)
+	defer releaseMount()
 	if file.Path != "" {
 		info, err := os.Stat(file.Path)
 		switch {

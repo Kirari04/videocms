@@ -18,6 +18,7 @@ const (
 	ErrorPermanent   ErrorClass = "permanent"
 	ErrorCanceled    ErrorClass = "canceled"
 	ErrorInterrupted ErrorClass = "interrupted"
+	ErrorPaused      ErrorClass = "paused"
 )
 
 type TaskError struct {
@@ -57,6 +58,14 @@ func Interrupted(cause error) error {
 	return &TaskError{Code: "interrupted", Public: "Interrupted by application shutdown", Diagnostic: diagnostic(cause), Class: ErrorInterrupted, Cause: cause}
 }
 
+func Paused(cause error) error {
+	return &TaskError{Code: "paused", Public: "Paused", Diagnostic: diagnostic(cause), Class: ErrorPaused, Cause: cause}
+}
+
+func PauseRequested(ctx context.Context) bool {
+	return ctx != nil && errors.Is(context.Cause(ctx), errUserPaused)
+}
+
 func classifyError(ctx context.Context, err error) *TaskError {
 	if err == nil {
 		return nil
@@ -68,6 +77,9 @@ func classifyError(ctx context.Context, err error) *TaskError {
 	if errors.Is(err, context.Canceled) {
 		if ctx != nil && errors.Is(context.Cause(ctx), errRuntimeStopping) {
 			return &TaskError{Code: "interrupted", Public: "Interrupted by application shutdown", Diagnostic: diagnostic(err), Class: ErrorInterrupted, Cause: err}
+		}
+		if ctx != nil && errors.Is(context.Cause(ctx), errUserPaused) {
+			return &TaskError{Code: "paused", Public: "Paused", Diagnostic: diagnostic(err), Class: ErrorPaused, Cause: err}
 		}
 		return &TaskError{Code: "canceled", Public: "Canceled", Diagnostic: diagnostic(err), Class: ErrorCanceled, Cause: err}
 	}

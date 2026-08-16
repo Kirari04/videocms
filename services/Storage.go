@@ -56,7 +56,15 @@ func (w *WorkerGroup) publishEncodingOutput(ctx context.Context, file models.Fil
 	if w.deps == nil || w.deps.Storage == nil {
 		return nil
 	}
-	_, err := w.deps.Storage.PublishPrefix(ctx, file.StorageID, prefix, directory, storage.PutOptions{
+	releaseFile := w.deps.StorageLifecycle.FileReadLock(file.ID)
+	defer releaseFile()
+	var current models.File
+	if err := w.deps.DB.WithContext(ctx).First(&current, file.ID).Error; err != nil {
+		return err
+	}
+	releaseMount := w.deps.StorageLifecycle.ReadLock(current.StorageID)
+	defer releaseMount()
+	_, err := w.deps.Storage.PublishPrefix(ctx, current.StorageID, prefix, directory, storage.PutOptions{
 		CacheControl: "public, max-age=3600",
 	})
 	return err

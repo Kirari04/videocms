@@ -98,6 +98,30 @@ jobs:
             sleep 1
           done
 
+      - name: Start OpenSSH integration service
+        run: |
+          docker run --detach --name videocms-sftp \
+            --publish 127.0.0.1:2222:22 \
+            atmoz/sftp:debian@sha256:b6ce5fad1fb0b4cd5b6316afb4be651f636074f45d0e59392c403e9766edfd7b \
+            'videocms:test-password:::upload'
+          for attempt in {1..30}; do
+            ssh-keyscan -T 1 -p 2222 127.0.0.1 > /tmp/videocms-sftp-host-keys 2>/dev/null || true
+            if test -s /tmp/videocms-sftp-host-keys; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs videocms-sftp
+              exit 1
+            fi
+            sleep 1
+          done
+          fingerprints="$(ssh-keygen -lf /tmp/videocms-sftp-host-keys -E sha256 | awk '{print $2}' | sort -u | paste -sd, -)"
+          if [ -z "$fingerprints" ]; then
+            docker logs videocms-sftp
+            exit 1
+          fi
+          echo "VIDEOCMS_SFTP_INTEGRATION_HOST_KEY_FINGERPRINTS=$fingerprints" >> "$GITHUB_ENV"
+
       - name: Test
         env:
           VIDEOCMS_S3_INTEGRATION_ENDPOINT: http://127.0.0.1:3900
@@ -105,11 +129,16 @@ jobs:
           VIDEOCMS_S3_INTEGRATION_REGION: garage
           VIDEOCMS_S3_INTEGRATION_ACCESS_KEY_ID: GK0123456789abcdef0123456789abcdef
           VIDEOCMS_S3_INTEGRATION_SECRET_ACCESS_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          VIDEOCMS_SFTP_INTEGRATION_HOST: 127.0.0.1
+          VIDEOCMS_SFTP_INTEGRATION_PORT: 2222
+          VIDEOCMS_SFTP_INTEGRATION_USERNAME: videocms
+          VIDEOCMS_SFTP_INTEGRATION_PASSWORD: test-password
+          VIDEOCMS_SFTP_INTEGRATION_ROOT: /upload
         run: go test ./...
 
-      - name: Stop Garage integration service
+      - name: Stop integration services
         if: always()
-        run: docker rm --force videocms-garage || true
+        run: docker rm --force videocms-garage videocms-sftp || true
 
       - name: Vet
         run: go vet ./...

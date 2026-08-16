@@ -26,10 +26,11 @@ func TestStorageMountReconnectAndUnmountLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	remoteStore, err := storage.NewLocalStore(t.TempDir())
+	remoteLocal, err := storage.NewLocalStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
+	remoteStore := &adminCloseTrackingStore{Store: remoteLocal}
 	storageService, err := storage.NewService("local", storage.LegacyMediaLayout{}, map[string]storage.Store{
 		"local":  localStore,
 		"remote": remoteStore,
@@ -110,6 +111,9 @@ func TestStorageMountReconnectAndUnmountLifecycle(t *testing.T) {
 	}
 	if _, err := storageService.Store(mount.UUID); !errors.Is(err, storage.ErrStoreNotConfigured) {
 		t.Fatalf("unmounted store error = %v", err)
+	}
+	if got := remoteStore.CloseCount(); got != 1 {
+		t.Fatalf("unmounted store close count = %d, want 1", got)
 	}
 	var membershipCount int64
 	if err := db.Model(&models.StoragePoolMount{}).Where("storage_mount_id = ?", mount.ID).Count(&membershipCount).Error; err != nil {
@@ -273,6 +277,10 @@ func TestStorageAdminOverviewReportsRuntimeAvailability(t *testing.T) {
 		{UUID: models.StorageMountLocalUUID, Name: "Local", Provider: models.StorageProviderLocal, Mounted: true, System: true},
 		{UUID: "missing-runtime", Name: "Missing", Provider: models.StorageProviderS3, Mounted: true},
 		{UUID: "health-error", Name: "Error", Provider: models.StorageProviderS3, Mounted: true, LastError: "connection failed"},
+		{
+			UUID: "detached-sftp", Name: "SFTP", Provider: models.StorageProviderSFTP,
+			Configuration: `{"host":"storage.example.com","port":22,"username":"media","root":"videocms","authentication":"password","host_key_fingerprints":["SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"]}`,
+		},
 	}
 	for index := range mounts {
 		if err := db.Create(&mounts[index]).Error; err != nil {
@@ -285,14 +293,25 @@ func TestStorageAdminOverviewReportsRuntimeAvailability(t *testing.T) {
 		t.Fatal(err)
 	}
 	availability := make(map[string]bool, len(overview.Mounts))
+	var sftpConfiguration storage.SFTPMountConfiguration
 	for _, mount := range overview.Mounts {
 		availability[mount.UUID] = mount.Available
+		if mount.UUID == "detached-sftp" {
+			var ok bool
+			sftpConfiguration, ok = mount.Configuration.(storage.SFTPMountConfiguration)
+			if !ok {
+				t.Fatalf("SFTP configuration type = %T", mount.Configuration)
+			}
+		}
 	}
 	if !availability[models.StorageMountLocalUUID] {
 		t.Fatal("mounted local runtime store should be available")
 	}
 	if availability["missing-runtime"] || availability["health-error"] {
 		t.Fatalf("unhealthy availability = %#v", availability)
+	}
+	if sftpConfiguration.Host != "storage.example.com" || sftpConfiguration.Root != "videocms" {
+		t.Fatalf("SFTP configuration = %#v", sftpConfiguration)
 	}
 }
 
@@ -597,6 +616,25 @@ type delayedStatStore struct {
 	mu        sync.Mutex
 	active    int
 	maxActive int
+}
+
+type adminCloseTrackingStore struct {
+	storage.Store
+	mu         sync.Mutex
+	closeCount int
+}
+
+func (s *adminCloseTrackingStore) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closeCount++
+	return nil
+}
+
+func (s *adminCloseTrackingStore) CloseCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closeCount
 }
 
 func (s *delayedStatStore) Stat(ctx context.Context, key storage.Key) (storage.ObjectInfo, error) {

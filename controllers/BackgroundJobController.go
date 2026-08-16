@@ -67,6 +67,30 @@ func (h *Handlers) RetryMyBackgroundJob(c echo.Context) error {
 	return c.NoContent(http.StatusAccepted)
 }
 
+func (h *Handlers) PauseMyBackgroundJob(c echo.Context) error {
+	userID := c.Get("UserID").(uint)
+	if _, err := h.background().Job(c.Request().Context(), c.Param("id"), &userID, false); err != nil {
+		return backgroundAPIError(c, err)
+	}
+	username, _ := c.Get("Username").(string)
+	if err := h.background().PauseJob(c.Request().Context(), c.Param("id"), userID, username); err != nil {
+		return backgroundAPIError(c, err)
+	}
+	return c.NoContent(http.StatusAccepted)
+}
+
+func (h *Handlers) ResumeMyBackgroundJob(c echo.Context) error {
+	userID := c.Get("UserID").(uint)
+	if _, err := h.background().Job(c.Request().Context(), c.Param("id"), &userID, false); err != nil {
+		return backgroundAPIError(c, err)
+	}
+	username, _ := c.Get("Username").(string)
+	if err := h.background().ResumeJob(c.Request().Context(), c.Param("id"), userID, username); err != nil {
+		return backgroundAPIError(c, err)
+	}
+	return c.NoContent(http.StatusAccepted)
+}
+
 func (h *Handlers) ListAdminBackgroundJobs(c echo.Context) error {
 	return h.listBackgroundJobs(c, background.ListFilter{IncludeSystem: queryBool(c.QueryParam("includeSystem"))})
 }
@@ -88,19 +112,63 @@ func (h *Handlers) GetAdminBackgroundSummary(c echo.Context) error {
 }
 
 func (h *Handlers) CancelAdminBackgroundJob(c echo.Context) error {
+	detail, err := h.background().Job(c.Request().Context(), c.Param("id"), nil, true)
+	if err != nil {
+		return backgroundAPIError(c, err)
+	}
 	actorID, actorName := backgroundActor(c)
 	if err := h.background().CancelJob(c.Request().Context(), c.Param("id"), actorID, actorName); err != nil {
 		return backgroundAPIError(c, err)
+	}
+	if err := h.Logic.ReflectStorageMigrationJobControl(c.Request().Context(), detail.Job, "cancel", actorID, actorName); err != nil {
+		return storageMigrationError(c, err)
 	}
 	return c.NoContent(http.StatusAccepted)
 }
 
 func (h *Handlers) RetryAdminBackgroundJob(c echo.Context) error {
+	detail, err := h.background().Job(c.Request().Context(), c.Param("id"), nil, true)
+	if err != nil {
+		return backgroundAPIError(c, err)
+	}
 	actorID, actorName := backgroundActor(c)
 	if err := h.background().RetryJob(c.Request().Context(), c.Param("id"), actorID, actorName); err != nil {
 		return backgroundAPIError(c, err)
 	}
+	if err := h.Logic.ReflectStorageMigrationJobControl(c.Request().Context(), detail.Job, "retry", actorID, actorName); err != nil {
+		return storageMigrationError(c, err)
+	}
 	h.background().Wake()
+	return c.NoContent(http.StatusAccepted)
+}
+
+func (h *Handlers) PauseAdminBackgroundJob(c echo.Context) error {
+	detail, err := h.background().Job(c.Request().Context(), c.Param("id"), nil, true)
+	if err != nil {
+		return backgroundAPIError(c, err)
+	}
+	actorID, actorName := backgroundActor(c)
+	if err := h.background().PauseJob(c.Request().Context(), c.Param("id"), actorID, actorName); err != nil {
+		return backgroundAPIError(c, err)
+	}
+	if err := h.Logic.ReflectStorageMigrationJobControl(c.Request().Context(), detail.Job, "pause", actorID, actorName); err != nil {
+		return storageMigrationError(c, err)
+	}
+	return c.NoContent(http.StatusAccepted)
+}
+
+func (h *Handlers) ResumeAdminBackgroundJob(c echo.Context) error {
+	detail, err := h.background().Job(c.Request().Context(), c.Param("id"), nil, true)
+	if err != nil {
+		return backgroundAPIError(c, err)
+	}
+	actorID, actorName := backgroundActor(c)
+	if err := h.background().ResumeJob(c.Request().Context(), c.Param("id"), actorID, actorName); err != nil {
+		return backgroundAPIError(c, err)
+	}
+	if err := h.Logic.ReflectStorageMigrationJobControl(c.Request().Context(), detail.Job, "resume", actorID, actorName); err != nil {
+		return storageMigrationError(c, err)
+	}
 	return c.NoContent(http.StatusAccepted)
 }
 

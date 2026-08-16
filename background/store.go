@@ -49,6 +49,7 @@ func (r *Runtime) Enqueue(ctx context.Context, spec JobSpec) (*Job, bool, error)
 			SubjectID:      boundedMessage(spec.SubjectID, 128),
 			IdempotencyKey: spec.IdempotencyKey,
 			Label:          boundedMessage(spec.Label, 255),
+			Pausable:       spec.Pausable,
 			Progress:       0,
 		}
 		if err := tx.Create(&job).Error; err != nil {
@@ -101,7 +102,7 @@ func validateIdempotentReuse(tx *gorm.DB, job Job, spec JobSpec) error {
 	}
 	ownerMatches := (job.OwnerID == nil && spec.OwnerID == nil) ||
 		(job.OwnerID != nil && spec.OwnerID != nil && *job.OwnerID == *spec.OwnerID)
-	if job.Kind != spec.Kind || job.Visibility != visibility || !ownerMatches ||
+	if job.Kind != spec.Kind || job.Visibility != visibility || job.Pausable != spec.Pausable || !ownerMatches ||
 		job.SubjectType != boundedMessage(spec.SubjectType, 64) || job.SubjectID != boundedMessage(spec.SubjectID, 128) {
 		return ErrIdempotencyConflict
 	}
@@ -169,6 +170,7 @@ func createTask(tx *gorm.DB, jobID string, spec TaskSpec) (*Task, error) {
 		Required:       spec.Required,
 		Weight:         spec.Weight,
 		MaxAttempts:    spec.MaxAttempts,
+		RunAfter:       spec.RunAfter,
 	}
 	if err := tx.Create(task).Error; err != nil {
 		return nil, err
@@ -204,7 +206,7 @@ func (r *Runtime) Job(ctx context.Context, id string, ownerID *uint, admin bool)
 		Find(&job.Tasks).Error; err != nil {
 		return nil, err
 	}
-	job.CanCancel = cancellableJobStatus(job.Status)
+	populateJobCapabilities(&job)
 	if job.CanCancel {
 		for _, task := range job.Tasks {
 			if task.CommitStartedAt != nil && (task.Status == TaskRunning || task.Status == TaskCancelRequested) {
@@ -294,6 +296,15 @@ func (r *Runtime) ListJobs(ctx context.Context, filter ListFilter) ([]Job, error
 
 func cancellableJobStatus(status string) bool {
 	switch status {
+	case JobQueued, JobRunning, JobRetryWait, JobPauseRequested, JobPaused:
+		return true
+	default:
+		return false
+	}
+}
+
+func pausableJobStatus(status string) bool {
+	switch status {
 	case JobQueued, JobRunning, JobRetryWait:
 		return true
 	default:
@@ -301,11 +312,19 @@ func cancellableJobStatus(status string) bool {
 	}
 }
 
+func populateJobCapabilities(job *Job) {
+	job.CanCancel = cancellableJobStatus(job.Status)
+	job.CanPause = job.Pausable && pausableJobStatus(job.Status)
+	// A job paused by an older release must remain resumable even if that job
+	// kind no longer opts in to initiating new pauses.
+	job.CanResume = job.Status == JobPauseRequested || job.Status == JobPaused
+}
+
 func (r *Runtime) populateCancellationCapabilities(ctx context.Context, jobs []Job) error {
 	jobIDs := make([]string, 0, len(jobs))
 	for index := range jobs {
-		jobs[index].CanCancel = cancellableJobStatus(jobs[index].Status)
-		if jobs[index].CanCancel {
+		populateJobCapabilities(&jobs[index])
+		if jobs[index].CanCancel || jobs[index].CanPause {
 			jobIDs = append(jobIDs, jobs[index].ID)
 		}
 	}
@@ -326,6 +345,7 @@ func (r *Runtime) populateCancellationCapabilities(ctx context.Context, jobs []J
 	for index := range jobs {
 		if _, exists := committing[jobs[index].ID]; exists {
 			jobs[index].CanCancel = false
+			jobs[index].CanPause = false
 		}
 	}
 	return nil
@@ -337,6 +357,9 @@ func (r *Runtime) Summary(ctx context.Context) (Summary, error) {
 		return result, err
 	}
 	if err := r.db.WithContext(ctx).Model(&Job{}).Where("status IN ?", []string{JobQueued, JobRetryWait, JobCancelRequested}).Count(&result.Waiting).Error; err != nil {
+		return result, err
+	}
+	if err := r.db.WithContext(ctx).Model(&Job{}).Where("status IN ?", []string{JobPauseRequested, JobPaused}).Count(&result.Paused).Error; err != nil {
 		return result, err
 	}
 	if err := r.db.WithContext(ctx).Model(&Job{}).Where("status = ? AND finished_at >= ?", JobFailed, time.Now().Add(-24*time.Hour)).Count(&result.Failed24h).Error; err != nil {

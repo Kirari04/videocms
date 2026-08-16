@@ -46,10 +46,18 @@ func startTestRuntime(t *testing.T, runtime *Runtime) {
 }
 
 func enqueueTestJob(t *testing.T, runtime *Runtime, key, kind, queue string, maxAttempts int) *Job {
+	return enqueueTestJobWithPause(t, runtime, key, kind, queue, maxAttempts, false)
+}
+
+func enqueuePausableTestJob(t *testing.T, runtime *Runtime, key, kind, queue string, maxAttempts int) *Job {
+	return enqueueTestJobWithPause(t, runtime, key, kind, queue, maxAttempts, true)
+}
+
+func enqueueTestJobWithPause(t *testing.T, runtime *Runtime, key, kind, queue string, maxAttempts int, pausable bool) *Job {
 	t.Helper()
 	ownerID := uint(7)
 	job, _, err := runtime.Enqueue(context.Background(), JobSpec{
-		Kind: kind, Visibility: VisibilityUser, OwnerID: &ownerID, IdempotencyKey: key, Label: key,
+		Kind: kind, Visibility: VisibilityUser, OwnerID: &ownerID, IdempotencyKey: key, Label: key, Pausable: pausable,
 		Tasks: []TaskSpec{{Kind: kind, Queue: queue, Phase: "Working", DedupeKey: kind, Required: true, Weight: 1, MaxAttempts: maxAttempts}},
 	})
 	if err != nil {
@@ -322,6 +330,190 @@ func TestCancelRunningJobPropagatesToHandler(t *testing.T) {
 	if detail.Tasks[0].Status != TaskCanceled || detail.Tasks[0].Attempts[0].Status != AttemptCanceled {
 		t.Fatalf("unexpected canceled state: %#v", detail.Tasks[0])
 	}
+}
+
+func TestPauseRunningJobCheckpointsAndResumes(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	started := make(chan struct{})
+	var calls atomic.Int32
+	if err := runtime.Register("test.pause", func(ctx context.Context, _ Task) (Result, error) {
+		if calls.Add(1) == 1 {
+			ReportProgress(ctx, 0.42, "Checkpointed")
+			close(started)
+			<-ctx.Done()
+			return Result{}, ctx.Err()
+		}
+		return Result{}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	startTestRuntime(t, runtime)
+	job := enqueuePausableTestJob(t, runtime, "pause-running", "test.pause", QueueStorage, 2)
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not start")
+	}
+	if err := runtime.PauseJob(context.Background(), job.ID, 1, "admin"); err != nil {
+		t.Fatalf("pause job: %v", err)
+	}
+	detail := waitForJob(t, runtime, job.ID, JobPaused)
+	if detail.Tasks[0].Status != TaskQueued || detail.Tasks[0].Progress < 4000 || detail.Tasks[0].MaxAttempts != 3 || len(detail.Tasks[0].Attempts) != 1 || detail.Tasks[0].Attempts[0].Status != AttemptInterrupted {
+		t.Fatalf("unexpected paused state: %#v", detail.Tasks[0])
+	}
+	if detail.CanPause || !detail.CanResume || !detail.CanCancel || detail.PausedAt == nil {
+		t.Fatalf("unexpected paused capabilities: %#v", detail.Job)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if calls.Load() != 1 {
+		t.Fatalf("paused task was reclaimed; calls=%d", calls.Load())
+	}
+	if err := runtime.ResumeJob(context.Background(), job.ID, 1, "admin"); err != nil {
+		t.Fatalf("resume job: %v", err)
+	}
+	detail = waitForJob(t, runtime, job.ID, JobSucceeded)
+	if calls.Load() != 2 || len(detail.Tasks[0].Attempts) != 2 || detail.Tasks[0].Attempts[1].Status != AttemptSucceeded {
+		t.Fatalf("unexpected resumed state: calls=%d task=%#v", calls.Load(), detail.Tasks[0])
+	}
+}
+
+func TestQueuedJobCanBePausedAndCanceledWithoutExecution(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	job := enqueuePausableTestJob(t, runtime, "pause-queued", "test.pause.queued", QueueStorage, 1)
+	if err := runtime.PauseJob(context.Background(), job.ID, 1, "admin"); err != nil {
+		t.Fatalf("pause queued job: %v", err)
+	}
+	detail := waitForJob(t, runtime, job.ID, JobPaused)
+	if detail.Tasks[0].Status != TaskQueued || detail.PausedAt == nil {
+		t.Fatalf("unexpected queued pause state: %#v", detail)
+	}
+	if err := runtime.CancelJob(context.Background(), job.ID, 1, "admin"); err != nil {
+		t.Fatalf("cancel paused job: %v", err)
+	}
+	detail = waitForJob(t, runtime, job.ID, JobCanceled)
+	if detail.Tasks[0].Status != TaskCanceled || detail.PauseRequestedAt != nil || detail.PausedAt != nil {
+		t.Fatalf("unexpected canceled pause state: %#v", detail)
+	}
+}
+
+func TestPauseIsRejectedForJobsWithoutDurablePauseSupport(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	job := enqueueTestJob(t, runtime, "pause-unsupported", "test.pause.unsupported", QueueStorage, 1)
+	if job.Pausable || job.CanPause || job.CanResume {
+		t.Fatalf("non-pausable job advertised pause support: %#v", job)
+	}
+	if err := runtime.PauseJob(context.Background(), job.ID, 1, "admin"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected unsupported pause to conflict, got %v", err)
+	}
+}
+
+func TestLegacyPausedJobCanResumeWithoutAdvertisingNewPauses(t *testing.T) {
+	runtime, db := testRuntime(t)
+	job := enqueueTestJob(t, runtime, "legacy-paused", "test.legacy.pause", QueueStorage, 1)
+	now := time.Now()
+	if err := db.Model(&Job{}).Where("id = ?", job.ID).Updates(map[string]any{
+		"status": JobPaused, "pause_requested_at": &now, "paused_at": &now,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	detail, err := runtime.Job(context.Background(), job.ID, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Pausable || detail.CanPause || !detail.CanResume {
+		t.Fatalf("legacy paused job capabilities are unsafe: %#v", detail.Job)
+	}
+	if err := runtime.ResumeJob(context.Background(), job.ID, 1, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	detail, err = runtime.Job(context.Background(), job.ID, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Status != JobQueued || detail.CanPause || detail.CanResume {
+		t.Fatalf("legacy job did not resume without gaining pause support: %#v", detail.Job)
+	}
+}
+
+func TestMigrateBackfillsStorageMigrationPauseCapability(t *testing.T) {
+	runtime, db := testRuntime(t)
+	job := enqueueTestJob(t, runtime, "legacy-storage-migration", "storage.migration", QueueStorage, 1)
+	if job.Pausable {
+		t.Fatal("test precondition expected a legacy non-pausable job")
+	}
+	if err := Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := runtime.Job(context.Background(), job.ID, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !detail.Pausable || !detail.CanPause {
+		t.Fatalf("storage migration pause capability was not backfilled: %#v", detail.Job)
+	}
+}
+
+func TestPausedJobRemainsPausedAcrossRecovery(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	job := enqueuePausableTestJob(t, runtime, "pause-restart", "test.pause.restart", QueueStorage, 1)
+	if err := runtime.PauseJob(context.Background(), job.ID, 1, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.Recover(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := runtime.Job(context.Background(), job.ID, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Status != JobPaused || !detail.Pausable || detail.CanPause || !detail.CanResume {
+		t.Fatalf("paused job changed during recovery: %#v", detail.Job)
+	}
+}
+
+func TestPausedJobIsNotCountedAsDispatchableQueueWork(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	job := enqueuePausableTestJob(t, runtime, "pause-queue-summary", "test.pause.summary", QueueStorage, 1)
+	if err := runtime.PauseJob(context.Background(), job.ID, 1, "admin"); err != nil {
+		t.Fatalf("pause queued job: %v", err)
+	}
+	queues, err := runtime.QueueSummaries(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, queue := range queues {
+		if queue.Name == QueueStorage && queue.Waiting != 0 {
+			t.Fatalf("paused task counted as waiting work: %#v", queue)
+		}
+	}
+}
+
+func TestPauseIsRejectedAfterIrreversibleCommit(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	committed := make(chan struct{})
+	release := make(chan struct{})
+	if err := runtime.Register("test.pause.commit", func(ctx context.Context, _ Task) (Result, error) {
+		if !BeginCommit(ctx, "Committing") {
+			return Result{}, ctx.Err()
+		}
+		close(committed)
+		<-release
+		return Result{}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	startTestRuntime(t, runtime)
+	job := enqueuePausableTestJob(t, runtime, "pause-commit", "test.pause.commit", QueueStorage, 1)
+	select {
+	case <-committed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not enter commit")
+	}
+	if err := runtime.PauseJob(context.Background(), job.ID, 1, "admin"); !errors.Is(err, ErrCommitStarted) {
+		t.Fatalf("expected commit conflict, got %v", err)
+	}
+	close(release)
+	waitForJob(t, runtime, job.ID, JobSucceeded)
 }
 
 func TestDeletionCancellationStopsAtIrreversiblePhase(t *testing.T) {

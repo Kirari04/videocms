@@ -57,3 +57,50 @@ func TestAPIRoutesKeepLegacyContractsAlongsideBackgroundJobV2Routes(t *testing.T
 		}
 	}
 }
+
+func TestAPIRoutesExposePauseResumeAndStorageMigrationAdminEndpoints(t *testing.T) {
+	ratelimit := false
+	uploads := true
+	deps := &app.Deps{Snapshots: app.NewSnapshotStore(app.Snapshot{Config: config.Config{
+		UploadEnabled:        &uploads,
+		RatelimitEnabled:     &ratelimit,
+		RatelimitRateAuth:    1,
+		RatelimitBurstAuth:   1,
+		RatelimitRateApi:     1,
+		RatelimitBurstApi:    1,
+		RatelimitRateUpload:  1,
+		RatelimitBurstUpload: 1,
+		MaxUploadFilesize:    1024,
+		MaxUploadChunkSize:   1024,
+		MaxItemsMultiDelete:  100,
+	}})}
+
+	server := echo.New()
+	Api(
+		server.Group("/api"),
+		controllers.NewHandlers(deps, nil, nil, nil, nil),
+		middlewares.NewFactory(deps, nil),
+	)
+
+	routes := make(map[string]bool)
+	for _, route := range server.Routes() {
+		routes[route.Method+" "+route.Path] = true
+	}
+	for _, expected := range []string{
+		http.MethodPost + " /api/v2/jobs/:id/pause",
+		http.MethodPost + " /api/v2/jobs/:id/resume",
+		http.MethodPost + " /api/v2/admin/jobs/:id/pause",
+		http.MethodPost + " /api/v2/admin/jobs/:id/resume",
+		http.MethodPost + " /api/v2/admin/storage/migrations/preview",
+		http.MethodPost + " /api/v2/admin/storage/migrations",
+		http.MethodGet + " /api/v2/admin/storage/migrations",
+		http.MethodGet + " /api/v2/admin/storage/migrations/:id",
+		http.MethodGet + " /api/v2/admin/storage/migrations/:id/items",
+		http.MethodPost + " /api/v2/admin/storage/migrations/:id/cancel",
+		http.MethodPost + " /api/v2/admin/storage/migrations/:id/keep-originals",
+	} {
+		if !routes[expected] {
+			t.Errorf("missing background-job/storage-migration route %q", expected)
+		}
+	}
+}

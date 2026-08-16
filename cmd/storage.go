@@ -61,18 +61,12 @@ func newStorageService(ctx context.Context, cfg config.Config, db *gorm.DB) (*st
 			markStorageMountLoadFailure(db, mount, storage.ErrEncryptionKeyNotConfigured)
 			continue
 		}
-		var store storage.Store
-		switch mount.Provider {
-		case models.StorageProviderS3:
-			store, err = storage.NewS3StoreFromMount(ctx, mount.UUID, mount.Configuration, mount.EncryptedCredentials, credentialCipher)
-		default:
-			err = fmt.Errorf("unsupported storage provider %q", mount.Provider)
-		}
+		store, err := storage.NewStoreFromMount(ctx, mount.Provider, mount.UUID, mount.Configuration, mount.EncryptedCredentials, credentialCipher)
 		if err != nil {
 			markStorageMountLoadFailure(db, mount, err)
 			continue
 		}
-		if _, err := storageService.RegisterStore(mount.UUID, store); err != nil {
+		if err := storageService.RegisterStore(mount.UUID, store); err != nil {
 			_ = store.Close()
 			markStorageMountLoadFailure(db, mount, err)
 			continue
