@@ -238,6 +238,55 @@ func (s *Service) CreateStorageMount(ctx context.Context, input StorageMountInpu
 	return mount, reconnect, nil
 }
 
+// TestStorageMount validates and exercises a proposed mount without saving it
+// or replacing a currently mounted runtime store. Existing encrypted
+// credentials can be reused when mountID identifies the mount being edited.
+func (s *Service) TestStorageMount(ctx context.Context, mountID uint, input StorageMountInput) error {
+	if s.Deps.StorageCipher == nil {
+		return storage.ErrEncryptionKeyNotConfigured
+	}
+	input.Provider = strings.ToLower(strings.TrimSpace(input.Provider))
+	mountUUID := uuid.NewString()
+	currentEncryptedCredentials := ""
+	if mountID != 0 {
+		var mount models.StorageMount
+		if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
+			return err
+		}
+		if mount.System {
+			return errors.New("built-in storage cannot be tested with remote mount settings")
+		}
+		if input.Provider == "" {
+			input.Provider = mount.Provider
+		}
+		if input.Provider != mount.Provider {
+			return errors.New("storage mount provider cannot be changed")
+		}
+		mountUUID = mount.UUID
+		currentEncryptedCredentials = mount.EncryptedCredentials
+	}
+	if input.Provider != models.StorageProviderS3 && input.Provider != models.StorageProviderSFTP {
+		return fmt.Errorf("unsupported storage provider %q", input.Provider)
+	}
+	configuration, encryptedCredentials, err := storage.EncodeMount(
+		input.Provider,
+		input.Configuration,
+		input.Credentials,
+		currentEncryptedCredentials,
+		mountUUID,
+		s.Deps.StorageCipher,
+	)
+	if err != nil {
+		return err
+	}
+	store, err := storage.NewStoreFromMount(ctx, input.Provider, mountUUID, configuration, encryptedCredentials, s.Deps.StorageCipher)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	return checkStorageConnection(ctx, store)
+}
+
 func (s *Service) UpdateStorageMount(ctx context.Context, mountID uint, input StorageMountInput) (models.StorageMount, error) {
 	if s.Deps.StorageCipher == nil {
 		return models.StorageMount{}, storage.ErrEncryptionKeyNotConfigured

@@ -3,12 +3,16 @@ package logic
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -121,6 +125,49 @@ func TestStorageMountReconnectAndUnmountLifecycle(t *testing.T) {
 	}
 	if membershipCount != 1 {
 		t.Fatalf("pool memberships = %d, want retained membership", membershipCount)
+	}
+}
+
+func TestStorageMountConnectionCanBeTestedWithoutSaving(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		requests.Add(1)
+		response.Header().Set("Content-Type", "application/xml")
+		_, _ = response.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <Name>media</Name><KeyCount>0</KeyCount><MaxKeys>1</MaxKeys><IsTruncated>false</IsTruncated>
+</ListBucketResult>`))
+	}))
+	defer server.Close()
+
+	cipher, err := storage.NewCredentialCipher(base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration, err := json.Marshal(storage.S3MountConfiguration{
+		Bucket: "media", Region: "us-east-1", Endpoint: server.URL, UsePathStyle: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials := json.RawMessage(`{"access_key_id":"access","secret_access_key":"secret"}`)
+	db := newStorageAdminTestDB(t)
+	service := NewService(&app.Deps{DB: db, StorageCipher: cipher})
+
+	if err := service.TestStorageMount(context.Background(), 0, StorageMountInput{
+		Provider: models.StorageProviderS3, Configuration: configuration, Credentials: &credentials,
+	}); err != nil {
+		t.Fatalf("TestStorageMount() error = %v", err)
+	}
+	if requests.Load() != 1 {
+		t.Fatalf("TestStorageMount() requests = %d, want 1", requests.Load())
+	}
+	var mountCount int64
+	if err := db.Model(&models.StorageMount{}).Count(&mountCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if mountCount != 0 {
+		t.Fatalf("TestStorageMount() saved %d mounts, want 0", mountCount)
 	}
 }
 
