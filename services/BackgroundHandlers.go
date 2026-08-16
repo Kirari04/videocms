@@ -37,6 +37,10 @@ const (
 	taskAuditCleanup      = "maintenance.audit_cleanup"
 	taskResourceCleanup   = "maintenance.resource_cleanup"
 	taskJobRetention      = "maintenance.job_retention"
+	taskStorageMigration  = "storage.migration.run"
+	taskStorageCleanup    = "storage.migration.cleanup"
+	taskStorageAbort      = "storage.migration.abort_cleanup"
+	taskStorageReconcile  = "maintenance.storage_migrations"
 )
 
 type encodingTaskPayload struct {
@@ -97,6 +101,10 @@ func (w *WorkerGroup) RegisterBackgroundHandlers(runtime *background.Runtime, tu
 		taskAuditCleanup:      w.auditCleanupHandler,
 		taskResourceCleanup:   w.resourceCleanupHandler,
 		taskJobRetention:      w.jobRetentionHandler(runtime),
+		taskStorageMigration:  w.storageMigrationHandler(runtime),
+		taskStorageCleanup:    w.storageMigrationCleanupHandler,
+		taskStorageAbort:      w.storageMigrationAbortHandler(runtime),
+		taskStorageReconcile:  w.storageMigrationReconcileHandler(runtime),
 	}
 	for _, kind := range sortedHandlerKinds(registrations) {
 		if err := runtime.Register(kind, registrations[kind]); err != nil {
@@ -112,6 +120,7 @@ func (w *WorkerGroup) RegisterBackgroundHandlers(runtime *background.Runtime, tu
 		maintenanceSchedule("api-audit-retention", taskAuditCleanup, time.Hour, true),
 		maintenanceSchedule("resource-retention", taskResourceCleanup, time.Hour, false),
 		maintenanceSchedule("background-history-retention", taskJobRetention, 24*time.Hour, false),
+		maintenanceSchedule("storage-migration-reconciliation", taskStorageReconcile, time.Minute, true),
 	}
 	for _, schedule := range schedules {
 		if err := runtime.RegisterSchedule(schedule); err != nil {
@@ -142,6 +151,8 @@ func sortedHandlerKinds(handlers map[string]background.Handler) []string {
 		taskMediaImport, taskMediaThumbnail, taskEncodeQuality, taskEncodeAudio, taskEncodeSubtitle,
 		taskRemoteFetch, taskDownloadPrepare, taskContentDelete, taskAuditRecord, taskSourceCleanup,
 		taskDeletionReconcile, taskDownloadCleanup, taskUploadCleanup, taskAuditCleanup, taskResourceCleanup, taskJobRetention,
+		taskStorageMigration, taskStorageCleanup, taskStorageAbort,
+		taskStorageReconcile,
 	}
 	return order
 }
@@ -231,6 +242,13 @@ func (w *WorkerGroup) thumbnailHandler(ctx context.Context, task background.Task
 	if err := w.deps.DB.First(&file, payload.FileID).Error; err != nil {
 		return background.Result{}, background.Permanent("source_unavailable", "The source video is no longer available", err)
 	}
+	releaseFile := w.deps.StorageLifecycle.FileReadLock(file.ID)
+	defer releaseFile()
+	if err := w.deps.DB.WithContext(ctx).First(&file, payload.FileID).Error; err != nil {
+		return background.Result{}, background.Permanent("source_unavailable", "The source video is no longer available", err)
+	}
+	releaseMount := w.deps.StorageLifecycle.ReadLock(file.StorageID)
+	defer releaseMount()
 	if file.AvgFrameRate <= 0 || file.SourceKey == "" {
 		return background.Result{Phase: "Thumbnail not required"}, nil
 	}

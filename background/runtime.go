@@ -20,6 +20,7 @@ import (
 var (
 	errRuntimeStopping     = errors.New("background runtime stopping")
 	errUserCanceled        = errors.New("background job canceled")
+	errUserPaused          = errors.New("background job paused")
 	ErrIdempotencyConflict = errors.New("idempotency key was already used for a different request")
 	ErrConflict            = errors.New("background operation conflicts with its current state")
 	ErrCommitStarted       = fmt.Errorf("%w: irreversible task commit has started", ErrConflict)
@@ -51,6 +52,7 @@ type Runtime struct {
 
 type activeTask struct {
 	queue  string
+	jobID  string
 	cancel context.CancelCauseFunc
 }
 
@@ -450,6 +452,7 @@ func (r *Runtime) Recover(ctx context.Context) error {
 			Where("status = ? AND commit_started_at IS NULL", TaskRunning).
 			Updates(map[string]any{
 				"status":              TaskQueued,
+				"max_attempts":        gorm.Expr("max_attempts + 1"),
 				"run_after":           nil,
 				"heartbeat_at":        nil,
 				"error_code":          "worker_interrupted",
@@ -459,7 +462,7 @@ func (r *Runtime) Recover(ctx context.Context) error {
 			return err
 		}
 		var jobs []Job
-		if err := tx.Where("status IN ?", []string{JobRunning, JobRetryWait, JobCancelRequested}).Find(&jobs).Error; err != nil {
+		if err := tx.Where("status IN ?", []string{JobRunning, JobRetryWait, JobPauseRequested, JobPaused, JobCancelRequested}).Find(&jobs).Error; err != nil {
 			return err
 		}
 		for index := range jobs {
@@ -514,12 +517,16 @@ func (r *Runtime) recoverStaleTasks(ctx context.Context, before time.Time) error
 				message = "Cancellation completed after the worker heartbeat expired"
 				finishedAt = &now
 			}
+			taskUpdates := map[string]any{
+				"status": taskStatus, "run_after": nil, "heartbeat_at": nil, "finished_at": finishedAt,
+				"cancel_requested_at": nil, "error_code": code, "error_message": message,
+			}
+			if taskStatus == TaskQueued {
+				taskUpdates["max_attempts"] = gorm.Expr("max_attempts + 1")
+			}
 			updated := tx.Model(&Task{}).
 				Where("id = ? AND status = ? AND (heartbeat_at IS NULL OR heartbeat_at < ?)", task.ID, task.Status, before).
-				Updates(map[string]any{
-					"status": taskStatus, "run_after": nil, "heartbeat_at": nil, "finished_at": finishedAt,
-					"cancel_requested_at": nil, "error_code": code, "error_message": message,
-				})
+				Updates(taskUpdates)
 			if updated.Error != nil {
 				return updated.Error
 			}
@@ -595,7 +602,7 @@ func (r *Runtime) claim(queue string) (*Task, *Attempt, error) {
 	now := time.Now()
 	err := r.db.WithContext(r.rootCtx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.
-			Where("queue = ? AND status IN ? AND (run_after IS NULL OR run_after <= ?)", queue, []string{TaskQueued, TaskRetryWait}, now).
+			Where("queue = ? AND status IN ? AND (run_after IS NULL OR run_after <= ?) AND job_id IN (SELECT id FROM background_jobs WHERE pause_requested_at IS NULL AND cancel_requested_at IS NULL)", queue, []string{TaskQueued, TaskRetryWait}, now).
 			Order("priority + CAST((julianday(CURRENT_TIMESTAMP) - julianday(created_at)) * 1440 AS INTEGER) DESC").
 			Order("created_at ASC, id ASC").
 			First(&task).Error; err != nil {
@@ -603,7 +610,7 @@ func (r *Runtime) claim(queue string) (*Task, *Attempt, error) {
 		}
 		startedAt := now
 		updated := tx.Model(&Task{}).
-			Where("id = ? AND status IN ?", task.ID, []string{TaskQueued, TaskRetryWait}).
+			Where("id = ? AND status IN ? AND job_id IN (SELECT id FROM background_jobs WHERE pause_requested_at IS NULL AND cancel_requested_at IS NULL)", task.ID, []string{TaskQueued, TaskRetryWait}).
 			Updates(map[string]any{
 				"status":            TaskRunning,
 				"attempt_count":     gorm.Expr("attempt_count + 1"),
@@ -658,7 +665,7 @@ func (r *Runtime) launch(task Task, attempt Attempt) {
 	reporter := &executionReporter{runtime: r, taskID: task.ID, last: task.Progress}
 	ctx = context.WithValue(ctx, executionReporterKey{}, reporter)
 	r.mu.Lock()
-	r.active[task.ID] = activeTask{queue: task.Queue, cancel: cancel}
+	r.active[task.ID] = activeTask{queue: task.Queue, jobID: task.JobID, cancel: cancel}
 	handler := r.handlers[task.Kind]
 	r.mu.Unlock()
 
@@ -721,7 +728,7 @@ func (r *Runtime) finish(task Task, attempt Attempt, result Result, taskErr *Tas
 		if current.Status != TaskRunning && current.Status != TaskCancelRequested {
 			return nil
 		}
-		if taskErr == nil && current.Status == TaskCancelRequested && current.CommitStartedAt == nil {
+		if (taskErr == nil || taskErr.Class == ErrorPaused) && current.Status == TaskCancelRequested && current.CommitStartedAt == nil {
 			taskErr = &TaskError{Code: "canceled", Public: "Canceled", Class: ErrorCanceled, Cause: errUserCanceled}
 		}
 
@@ -751,6 +758,16 @@ func (r *Runtime) finish(task Task, attempt Attempt, result Result, taskErr *Tas
 			updates["error_message"] = public
 			updates["progress"] = current.Progress
 			switch taskErr.Class {
+			case ErrorPaused:
+				attemptStatus = AttemptInterrupted
+				taskStatus = TaskQueued
+				updates["status"] = taskStatus
+				updates["run_after"] = nil
+				updates["finished_at"] = nil
+				updates["cancel_requested_at"] = nil
+				updates["max_attempts"] = gorm.Expr("max_attempts + 1")
+				eventType = "task_paused"
+				eventMessage = "Task paused at a safe checkpoint"
 			case ErrorInterrupted:
 				attemptStatus = AttemptInterrupted
 				taskStatus = TaskQueued
@@ -758,6 +775,7 @@ func (r *Runtime) finish(task Task, attempt Attempt, result Result, taskErr *Tas
 				updates["run_after"] = nil
 				updates["finished_at"] = nil
 				updates["cancel_requested_at"] = nil
+				updates["max_attempts"] = gorm.Expr("max_attempts + 1")
 				eventType = "task_interrupted"
 				eventMessage = "Task interrupted and queued again"
 			case ErrorCanceled:
@@ -911,6 +929,9 @@ func equalFoldASCII(a, b string) bool {
 }
 
 func recomputeJob(tx *gorm.DB, job *Job, now time.Time) error {
+	if err := tx.First(job, "id = ?", job.ID).Error; err != nil {
+		return err
+	}
 	var tasks []Task
 	if err := tx.Where("job_id = ?", job.ID).Order("created_at ASC").Find(&tasks).Error; err != nil {
 		return err
@@ -992,6 +1013,10 @@ func recomputeJob(tx *gorm.DB, job *Job, now time.Time) error {
 		switch {
 		case job.CancelRequestedAt != nil:
 			status = JobCancelRequested
+		case job.PauseRequestedAt != nil && running > 0:
+			status = JobPauseRequested
+		case job.PauseRequestedAt != nil:
+			status = JobPaused
 		case running > 0:
 			status = JobRunning
 		case waiting > 0:
@@ -1019,6 +1044,15 @@ func recomputeJob(tx *gorm.DB, job *Job, now time.Time) error {
 		"progress":      progress,
 		"error_code":    boundedMessage(errorCode, 80),
 		"error_message": boundedMessage(errorMessage, 512),
+	}
+	if status == JobPaused {
+		updates["paused_at"] = gorm.Expr("COALESCE(paused_at, ?)", now)
+	} else if status != JobPauseRequested {
+		updates["paused_at"] = nil
+	}
+	if terminalJobStatus(status) {
+		updates["pause_requested_at"] = nil
+		updates["paused_at"] = nil
 	}
 	if (status == JobRunning || status == JobRetryWait) && job.StartedAt == nil {
 		updates["started_at"] = &now
@@ -1109,7 +1143,7 @@ func BeginCommit(ctx context.Context, phase string) bool {
 		if err := tx.First(&job, "id = ?", task.JobID).Error; err != nil {
 			return err
 		}
-		if job.CancelRequestedAt != nil {
+		if job.CancelRequestedAt != nil || job.PauseRequestedAt != nil {
 			return ErrConflict
 		}
 		updated := tx.Model(&Task{}).Where("id = ? AND status = ? AND cancel_requested_at IS NULL", reporter.taskID, TaskRunning).Updates(map[string]any{"phase": boundedMessage(phase, 120), "commit_started_at": &now})
@@ -1122,6 +1156,75 @@ func BeginCommit(ctx context.Context, phase string) bool {
 		return recomputeJob(tx, &job, now)
 	})
 	return err == nil
+}
+
+func (r *Runtime) PauseJob(ctx context.Context, jobID string, actorID uint, actorName string) error {
+	now := time.Now()
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var job Job
+		if err := tx.First(&job, "id = ?", jobID).Error; err != nil {
+			return err
+		}
+		if !job.Pausable || !pausableJobStatus(job.Status) || job.PauseRequestedAt != nil || job.CancelRequestedAt != nil {
+			return ErrConflict
+		}
+		var committing int64
+		if err := tx.Model(&Task{}).Where("job_id = ? AND commit_started_at IS NOT NULL AND status IN ?", jobID, []string{TaskRunning, TaskCancelRequested}).Count(&committing).Error; err != nil {
+			return err
+		}
+		if committing > 0 {
+			return ErrCommitStarted
+		}
+		if err := tx.Model(&job).Updates(map[string]any{"pause_requested_at": &now, "paused_at": nil}).Error; err != nil {
+			return err
+		}
+		job.PauseRequestedAt = &now
+		if err := addEvent(tx, Event{JobID: jobID, Type: "job_pause_requested", ActorID: optionalActor(actorID), ActorName: actorName, Message: "Pause requested"}); err != nil {
+			return err
+		}
+		return recomputeJob(tx, &job, now)
+	})
+	if err != nil {
+		return err
+	}
+	r.mu.Lock()
+	var cancels []context.CancelCauseFunc
+	for _, active := range r.active {
+		if active.jobID == jobID {
+			cancels = append(cancels, active.cancel)
+		}
+	}
+	r.mu.Unlock()
+	for _, cancel := range cancels {
+		cancel(errUserPaused)
+	}
+	return nil
+}
+
+func (r *Runtime) ResumeJob(ctx context.Context, jobID string, actorID uint, actorName string) error {
+	now := time.Now()
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var job Job
+		if err := tx.First(&job, "id = ?", jobID).Error; err != nil {
+			return err
+		}
+		if job.Status != JobPauseRequested && job.Status != JobPaused {
+			return ErrConflict
+		}
+		if err := tx.Model(&job).Updates(map[string]any{"pause_requested_at": nil, "paused_at": nil}).Error; err != nil {
+			return err
+		}
+		job.PauseRequestedAt = nil
+		job.PausedAt = nil
+		if err := addEvent(tx, Event{JobID: jobID, Type: "job_resumed", ActorID: optionalActor(actorID), ActorName: actorName, Message: "Job resumed"}); err != nil {
+			return err
+		}
+		return recomputeJob(tx, &job, now)
+	})
+	if err == nil {
+		r.Wake()
+	}
+	return err
 }
 
 func (r *Runtime) heartbeatLoop() {
@@ -1214,11 +1317,12 @@ func (r *Runtime) QueueSummaries(ctx context.Context) ([]QueueSummary, error) {
 	result := make([]QueueSummary, 0, len(states))
 	for _, state := range states {
 		summary := QueueSummary{QueueState: state, Capacity: r.capacity(state.Name), Active: r.activeCount(state.Name)}
-		if err := r.db.WithContext(ctx).Model(&Task{}).Where("queue = ? AND status IN ?", state.Name, []string{TaskQueued, TaskRetryWait}).Count(&summary.Waiting).Error; err != nil {
+		dispatchable := "queue = ? AND status IN ? AND job_id IN (SELECT id FROM background_jobs WHERE pause_requested_at IS NULL AND cancel_requested_at IS NULL)"
+		if err := r.db.WithContext(ctx).Model(&Task{}).Where(dispatchable, state.Name, []string{TaskQueued, TaskRetryWait}).Count(&summary.Waiting).Error; err != nil {
 			return nil, err
 		}
 		var oldest Task
-		if err := r.db.WithContext(ctx).Where("queue = ? AND status IN ?", state.Name, []string{TaskQueued, TaskRetryWait}).Order("created_at ASC").First(&oldest).Error; err == nil {
+		if err := r.db.WithContext(ctx).Where(dispatchable, state.Name, []string{TaskQueued, TaskRetryWait}).Order("created_at ASC").First(&oldest).Error; err == nil {
 			summary.OldestAt = &oldest.CreatedAt
 		}
 		result = append(result, summary)
@@ -1266,7 +1370,7 @@ func (r *Runtime) CancelJob(ctx context.Context, jobID string, actorID uint, act
 		if committing > 0 {
 			return ErrCommitStarted
 		}
-		if err := tx.Model(&job).Updates(map[string]any{"status": JobCancelRequested, "cancel_requested_at": &now}).Error; err != nil {
+		if err := tx.Model(&job).Updates(map[string]any{"status": JobCancelRequested, "cancel_requested_at": &now, "pause_requested_at": nil, "paused_at": nil}).Error; err != nil {
 			return err
 		}
 		if err := tx.Model(&Task{}).Where("job_id = ? AND status IN ?", jobID, []string{TaskQueued, TaskRetryWait}).Updates(map[string]any{
@@ -1326,7 +1430,7 @@ func (r *Runtime) RetryJob(ctx context.Context, jobID string, actorID uint, acto
 		if result.RowsAffected == 0 {
 			return ErrConflict
 		}
-		if err := tx.Model(&job).Updates(map[string]any{"status": JobQueued, "finished_at": nil, "cancel_requested_at": nil, "error_code": "", "error_message": ""}).Error; err != nil {
+		if err := tx.Model(&job).Updates(map[string]any{"status": JobQueued, "finished_at": nil, "cancel_requested_at": nil, "pause_requested_at": nil, "paused_at": nil, "error_code": "", "error_message": ""}).Error; err != nil {
 			return err
 		}
 		if err := addEvent(tx, Event{JobID: jobID, Type: "job_retried", ActorID: optionalActor(actorID), ActorName: actorName, Message: "Job queued for manual retry"}); err != nil {

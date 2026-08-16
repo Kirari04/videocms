@@ -47,6 +47,14 @@ func (s *Service) UpdateLinkThumbnail(linkID uint, userID uint, isAdmin bool, in
 	if err != nil {
 		return status, err
 	}
+	releaseFile := s.Deps.StorageLifecycle.FileReadLock(dbLink.FileID)
+	defer releaseFile()
+	dbLink, status, err = s.loadThumbnailLink(linkID, userID, isAdmin)
+	if err != nil {
+		return status, err
+	}
+	releaseMount := s.Deps.StorageLifecycle.ReadLock(dbLink.File.StorageID)
+	defer releaseMount()
 
 	if fileSize <= 0 {
 		return http.StatusBadRequest, errors.New("thumbnail is empty")
@@ -159,6 +167,14 @@ func (s *Service) ResetLinkThumbnail(linkID uint, userID uint, isAdmin bool) (st
 	if err != nil {
 		return status, err
 	}
+	releaseFile := s.Deps.StorageLifecycle.FileReadLock(dbLink.FileID)
+	defer releaseFile()
+	dbLink, status, err = s.loadThumbnailLink(linkID, userID, isAdmin)
+	if err != nil {
+		return status, err
+	}
+	releaseMount := s.Deps.StorageLifecycle.ReadLock(dbLink.File.StorageID)
+	defer releaseMount()
 	if dbLink.Thumbnail == "" {
 		return http.StatusOK, nil
 	}
@@ -202,6 +218,13 @@ func (s *Service) RemoveLinkThumbnailFile(link models.Link) {
 	if link.Thumbnail == "" {
 		return
 	}
+	releaseFile := s.Deps.StorageLifecycle.FileReadLock(link.FileID)
+	defer releaseFile()
+	if err := s.Deps.DB.Preload("File").First(&link, link.ID).Error; err != nil || link.Thumbnail == "" {
+		return
+	}
+	releaseMount := s.Deps.StorageLifecycle.ReadLock(link.File.StorageID)
+	defer releaseMount()
 	store, layout, err := s.mediaStorage(link.File.StorageID)
 	if err != nil {
 		log.Printf("Failed to resolve custom thumbnail storage for link %s: %v", link.UUID, err)

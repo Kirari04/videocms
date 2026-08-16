@@ -42,6 +42,8 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	v2.GET("/jobs/:id", handlers.GetMyBackgroundJob)
 	v2.POST("/jobs/:id/cancel", handlers.CancelMyBackgroundJob)
 	v2.POST("/jobs/:id/retry", handlers.RetryMyBackgroundJob)
+	v2.POST("/jobs/:id/pause", handlers.PauseMyBackgroundJob)
+	v2.POST("/jobs/:id/resume", handlers.ResumeMyBackgroundJob)
 	// Versioned submission endpoints return 202 + Location and can be followed
 	// through the generic jobs API above.
 	v2.POST("/uploads/simple", handlers.SimpleUploadController,
@@ -63,6 +65,8 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	adminV2.GET("/jobs/:id", handlers.GetAdminBackgroundJob)
 	adminV2.POST("/jobs/:id/cancel", handlers.CancelAdminBackgroundJob)
 	adminV2.POST("/jobs/:id/retry", handlers.RetryAdminBackgroundJob)
+	adminV2.POST("/jobs/:id/pause", handlers.PauseAdminBackgroundJob)
+	adminV2.POST("/jobs/:id/resume", handlers.ResumeAdminBackgroundJob)
 	adminV2.POST("/tasks/:id/cancel", handlers.CancelAdminBackgroundTask)
 	adminV2.POST("/tasks/:id/retry", handlers.RetryAdminBackgroundTask)
 	adminV2.GET("/task-queues", handlers.ListAdminBackgroundQueues)
@@ -71,6 +75,13 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	adminV2.GET("/task-schedules", handlers.ListAdminBackgroundSchedules)
 	adminV2.POST("/task-schedules/:key/run", handlers.RunAdminBackgroundSchedule)
 	adminV2.GET("/task-runtime", handlers.GetAdminBackgroundRuntime)
+	adminV2.POST("/storage/migrations/preview", handlers.PreviewStorageMigration)
+	adminV2.POST("/storage/migrations", handlers.CreateStorageMigration)
+	adminV2.GET("/storage/migrations", handlers.ListStorageMigrations)
+	adminV2.GET("/storage/migrations/:id", handlers.GetStorageMigration)
+	adminV2.GET("/storage/migrations/:id/items", handlers.ListStorageMigrationItems)
+	adminV2.POST("/storage/migrations/:id/cancel", handlers.CancelFailedStorageMigration)
+	adminV2.POST("/storage/migrations/:id/keep-originals", handlers.KeepStorageMigrationOriginals)
 	protectedApi.POST("/folder", handlers.CreateFolder)
 	protectedApi.PUT("/folder", handlers.UpdateFolder)
 	protectedApi.DELETE("/folder", handlers.DeleteFolderLegacy)
