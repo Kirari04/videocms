@@ -13,21 +13,24 @@ const (
 	StorageMigrationCompleted          = "completed"
 	StorageMigrationOriginalsRetained  = "originals_retained"
 
-	StorageMigrationItemPending        = "pending"
-	StorageMigrationItemCopying        = "copying"
-	StorageMigrationItemVerifying      = "verifying"
-	StorageMigrationItemCutover        = "cutover"
-	StorageMigrationItemCleanupPending = "cleanup_pending"
-	StorageMigrationItemCleaning       = "cleaning"
-	StorageMigrationItemCleaned        = "cleaned"
-	StorageMigrationItemOriginalKept   = "original_kept"
-	StorageMigrationItemFailed         = "failed"
-	StorageMigrationItemCanceled       = "canceled"
+	StorageMigrationItemPending         = "pending"
+	StorageMigrationItemCopying         = "copying"
+	StorageMigrationItemVerifying       = "verifying"
+	StorageMigrationItemCutover         = "cutover"
+	StorageMigrationItemCleanupPending  = "cleanup_pending"
+	StorageMigrationItemCleaning        = "cleaning"
+	StorageMigrationItemCleaned         = "cleaned"
+	StorageMigrationItemOriginalKept    = "original_kept"
+	StorageMigrationItemOriginalPartial = "original_partial"
+	StorageMigrationItemFailed          = "failed"
+	StorageMigrationItemCanceled        = "canceled"
 )
 
 type StorageMigration struct {
 	Model
 	UUID                string `gorm:"uniqueIndex;size:64"`
+	RequestKey          string `gorm:"size:255;uniqueIndex:idx_storage_migration_request,where:request_key <> ''" json:"-"`
+	PlanFingerprint     string `gorm:"size:64" json:"-"`
 	SourcePoolID        uint   `gorm:"index"`
 	DestinationPoolID   uint   `gorm:"index"`
 	SourcePoolName      string `gorm:"size:120"`

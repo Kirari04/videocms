@@ -82,6 +82,17 @@ func TestStorageMigrationPreviewAndStartSnapshotDeterministically(t *testing.T) 
 	if preview.FileCount != 2 || preview.PlannedBytes != 150 || preview.CleanupGraceHours != 24 || len(preview.DestinationPlacements) != 2 {
 		t.Fatalf("unexpected preview: %#v", preview)
 	}
+	input.PlanFingerprint = preview.PlanFingerprint
+	input.IdempotencyKey = "migration-request"
+	if err := db.Model(&models.File{}).Where("uuid = ?", "550e8400-e29b-41d4-a716-446655440301").Update("size", 101).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := service.StartStorageMigration(context.Background(), input, 7, "admin"); !errors.Is(err, ErrStorageMigrationConflict) {
+		t.Fatalf("expected changed preview to be rejected, got %v", err)
+	}
+	if err := db.Model(&models.File{}).Where("uuid = ?", "550e8400-e29b-41d4-a716-446655440301").Update("size", 100).Error; err != nil {
+		t.Fatal(err)
+	}
 	migration, job, err := service.StartStorageMigration(context.Background(), input, 7, "admin")
 	if err != nil {
 		t.Fatal(err)
@@ -103,6 +114,27 @@ func TestStorageMigrationPreviewAndStartSnapshotDeterministically(t *testing.T) 
 	if len(items) != 2 || items[0].DestinationMountID == items[1].DestinationMountID || items[0].ReservationKey == "" || items[1].ReservationKey == "" {
 		t.Fatalf("unexpected deterministic assignments: %#v", items)
 	}
+	reusedMigration, reusedJob, err := service.StartStorageMigration(context.Background(), input, 7, "admin")
+	if err != nil || reusedMigration.ID != migration.ID || reusedJob.ID != job.ID {
+		t.Fatalf("idempotent migration request was not reused: migration=%#v job=%#v err=%v", reusedMigration, reusedJob, err)
+	}
+	input.PlanFingerprint = strings.Repeat("0", 64)
+	if _, _, err := service.StartStorageMigration(context.Background(), input, 7, "admin"); !errors.Is(err, ErrStorageMigrationConflict) {
+		t.Fatalf("expected changed idempotent request to conflict, got %v", err)
+	}
+	input.PlanFingerprint = preview.PlanFingerprint
+	active, err := service.ListStorageMigrations(context.Background(), "active", 50, 0)
+	if err != nil || len(active) != 1 || active[0].ID != migration.ID {
+		t.Fatalf("active server filter did not return migration: %#v err=%v", active, err)
+	}
+	complete, err := service.ListStorageMigrations(context.Background(), "complete", 50, 0)
+	if err != nil || len(complete) != 0 {
+		t.Fatalf("complete server filter returned active migration: %#v err=%v", complete, err)
+	}
+	if _, err := service.ListStorageMigrations(context.Background(), "unknown", 50, 0); !errors.Is(err, ErrStorageMigrationConflict) {
+		t.Fatalf("expected invalid status filter to fail, got %v", err)
+	}
+	input.IdempotencyKey = "another-migration-request"
 	if _, _, err := service.StartStorageMigration(context.Background(), input, 7, "admin"); !errors.Is(err, ErrStorageMigrationConflict) {
 		t.Fatalf("expected active reservation conflict, got %v", err)
 	}
@@ -142,12 +174,16 @@ func TestKeepStorageMigrationOriginalsWaitsForInFlightCleanup(t *testing.T) {
 	if err := db.AutoMigrate(&models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
 		t.Fatal(err)
 	}
-	migration := models.StorageMigration{UUID: "keep-originals", Status: models.StorageMigrationCleaningOriginals, FileCount: 1}
+	migration := models.StorageMigration{UUID: "keep-originals", Status: models.StorageMigrationCleaningOriginals, FileCount: 2}
 	if err := db.Create(&migration).Error; err != nil {
 		t.Fatal(err)
 	}
 	item := models.StorageMigrationItem{MigrationID: migration.ID, FileID: 42, FileUUID: "file", Status: models.StorageMigrationItemCleaning, ReservationKey: "file:42"}
 	if err := db.Create(&item).Error; err != nil {
+		t.Fatal(err)
+	}
+	partial := models.StorageMigrationItem{MigrationID: migration.ID, FileID: 43, FileUUID: "partial", Status: models.StorageMigrationItemCleaning, ReservationKey: "file:43"}
+	if err := db.Create(&partial).Error; err != nil {
 		t.Fatal(err)
 	}
 	deps := &app.Deps{DB: db}
@@ -190,6 +226,12 @@ func TestKeepStorageMigrationOriginalsWaitsForInFlightCleanup(t *testing.T) {
 	}
 	if item.Status != models.StorageMigrationItemCleaned {
 		t.Fatalf("completed cleanup was overwritten: %#v", item)
+	}
+	if err := db.First(&partial, partial.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if partial.Status != models.StorageMigrationItemOriginalPartial || partial.ReservationKey != "" {
+		t.Fatalf("incomplete cleanup was mislabeled as a complete original: %#v", partial)
 	}
 }
 

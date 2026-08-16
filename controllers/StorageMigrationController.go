@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"ch/kirari04/videocms/logic"
 
@@ -13,7 +14,7 @@ import (
 
 func (h *Handlers) PreviewStorageMigration(c echo.Context) error {
 	request := new(logic.StorageMigrationInput)
-	if err := c.Bind(request); err != nil {
+	if err := c.Bind(request); err != nil || request.SourcePoolID == 0 || request.DestinationPoolID == 0 {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid_request"})
 	}
 	preview, err := h.Logic.PreviewStorageMigration(c.Request().Context(), *request)
@@ -27,6 +28,10 @@ func (h *Handlers) CreateStorageMigration(c echo.Context) error {
 	request := new(logic.StorageMigrationInput)
 	if err := c.Bind(request); err != nil || request.SourcePoolID == 0 || request.DestinationPoolID == 0 {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid_request"})
+	}
+	request.IdempotencyKey = strings.TrimSpace(c.Request().Header.Get("Idempotency-Key"))
+	if request.IdempotencyKey == "" || strings.TrimSpace(request.PlanFingerprint) == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "migration_confirmation_required"})
 	}
 	actorID, actorName := backgroundActor(c)
 	migration, job, err := h.Logic.StartStorageMigration(c.Request().Context(), *request, actorID, actorName)
@@ -45,7 +50,11 @@ func (h *Handlers) ListStorageMigrations(c echo.Context) error {
 		limit = 50
 	}
 	beforeID, _ := strconv.ParseUint(c.QueryParam("beforeId"), 10, 64)
-	migrations, err := h.Logic.ListStorageMigrations(c.Request().Context(), limit, uint(beforeID))
+	filter := strings.TrimSpace(c.QueryParam("status"))
+	if _, valid := logic.StorageMigrationStatusesForFilter(filter); !valid {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid_status_filter"})
+	}
+	migrations, err := h.Logic.ListStorageMigrations(c.Request().Context(), filter, limit, uint(beforeID))
 	if err != nil {
 		return storageMigrationError(c, err)
 	}

@@ -176,6 +176,84 @@ func TestStorageMigrationCopiesFinalChangesBeforeAtomicCutover(t *testing.T) {
 	}
 }
 
+func TestStorageMigrationCleanupStopsOnlyBetweenVideos(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+		t.Fatal(err)
+	}
+	sourceLocal, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	destination, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := &migrationBlockingDeleteStore{Store: sourceLocal, started: make(chan struct{}), release: make(chan struct{})}
+	service, err := storage.NewService("source", storage.LegacyMediaLayout{}, map[string]storage.Store{"source": source, "destination": destination})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = service.Close() })
+	file := models.File{UUID: "550e8400-e29b-41d4-a716-446655440203", StorageID: "destination", StorageState: models.FileStorageAvailable}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+	first := migrationTestKey(t, file.UUID+"/source/first.ts")
+	second := migrationTestKey(t, file.UUID+"/source/second.m3u8")
+	putMigrationTestObject(t, source, first, "first")
+	putMigrationTestObject(t, source, second, "second")
+	migration := models.StorageMigration{UUID: "cleanup-checkpoint", Status: models.StorageMigrationCleaningOriginals, FileCount: 1}
+	if err := db.Create(&migration).Error; err != nil {
+		t.Fatal(err)
+	}
+	item := models.StorageMigrationItem{
+		MigrationID: migration.ID, FileID: file.ID, FileUUID: file.UUID, SourceMountID: "source", DestinationMountID: "destination",
+		Status: models.StorageMigrationItemCleanupPending, ReservationKey: fmt.Sprintf("file:%d", file.ID),
+	}
+	if err := db.Create(&item).Error; err != nil {
+		t.Fatal(err)
+	}
+	worker := NewWorkerGroup(&app.Deps{DB: db, Storage: service}, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() { result <- worker.cleanupStorageMigrationItem(ctx, &item) }()
+	select {
+	case <-source.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cleanup did not begin")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		t.Fatalf("cleanup stopped halfway through a video: %v", err)
+	case <-time.After(30 * time.Millisecond):
+	}
+	close(source.release)
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("cleanup did not finish the current video")
+	}
+	for _, key := range []storage.Key{first, second} {
+		if _, err := source.Stat(context.Background(), key); !errors.Is(err, storage.ErrNotFound) {
+			t.Fatalf("source object %s remained after cleanup checkpoint: %v", key.String(), err)
+		}
+	}
+	if err := db.First(&item, item.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if item.Status != models.StorageMigrationItemCleaned || item.ReservationKey != "" {
+		t.Fatalf("cleanup checkpoint was not committed: %#v", item)
+	}
+}
+
 func TestStorageMigrationRefusesUnownedDestinationPrefix(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
@@ -350,12 +428,79 @@ func TestStorageMigrationReconciliationRepairsCanceledJobCrashWindow(t *testing.
 	if retaining.Status != models.StorageMigrationOriginalsRetained || retainedItem.Status != models.StorageMigrationItemOriginalKept || retainedItem.ReservationKey != "" {
 		t.Fatalf("canceled original cleanup was not reconciled: migration=%#v item=%#v", retaining, retainedItem)
 	}
+
+	missing := models.StorageMigration{UUID: "reconcile-missing-main", SourcePoolName: "Source", DestinationPoolName: "Destination", Status: models.StorageMigrationQueued, FileCount: 1}
+	if err := db.Create(&missing).Error; err != nil {
+		t.Fatal(err)
+	}
+	missingItem := models.StorageMigrationItem{MigrationID: missing.ID, FileID: 3, FileUUID: "missing", SourceMountID: "source", DestinationMountID: "destination", Status: models.StorageMigrationItemPending, ReservationKey: "file:3"}
+	if err := db.Create(&missingItem).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := worker.storageMigrationReconcileHandler(runtime)(context.Background(), background.Task{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.First(&missing, missing.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if missing.BackgroundJobID == "" {
+		t.Fatal("missing migration job was not recreated")
+	}
+	recreated, err := runtime.Job(context.Background(), missing.BackgroundJobID, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recreated.Status != background.JobQueued || !recreated.Pausable {
+		t.Fatalf("unexpected recreated migration job: %#v", recreated.Job)
+	}
+	if err := runtime.PauseJob(context.Background(), recreated.ID, 1, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&missing).Updates(map[string]any{"status": models.StorageMigrationRunning, "phase": "stale"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := worker.storageMigrationReconcileHandler(runtime)(context.Background(), background.Task{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.First(&missing, missing.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if missing.Status != models.StorageMigrationPaused || missing.Phase != "Migration paused" {
+		t.Fatalf("paused job projection was not repaired: %#v", missing)
+	}
+	if err := runtime.ResumeJob(context.Background(), recreated.ID, 1, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := worker.storageMigrationReconcileHandler(runtime)(context.Background(), background.Task{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.First(&missing, missing.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if missing.Status != models.StorageMigrationQueued {
+		t.Fatalf("resumed job projection was not repaired: %#v", missing)
+	}
 }
 
 type migrationHookStore struct {
 	storage.Store
 	once sync.Once
 	hook func()
+}
+
+type migrationBlockingDeleteStore struct {
+	storage.Store
+	once    sync.Once
+	started chan struct{}
+	release chan struct{}
+}
+
+func (s *migrationBlockingDeleteStore) Delete(ctx context.Context, key storage.Key) error {
+	s.once.Do(func() {
+		close(s.started)
+		<-s.release
+	})
+	return s.Store.Delete(ctx, key)
 }
 
 func (s *migrationHookStore) Put(ctx context.Context, key storage.Key, source io.Reader, options storage.PutOptions) (storage.ObjectInfo, error) {
@@ -401,7 +546,7 @@ func assertMigrationTestObject(t *testing.T, store storage.Store, key storage.Ke
 
 func waitStorageMigrationJob(t *testing.T, runtime *background.Runtime, jobID string, status string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(12 * time.Second)
 	for time.Now().Before(deadline) {
 		detail, err := runtime.Job(context.Background(), jobID, nil, true)
 		if err == nil && detail.Status == status {

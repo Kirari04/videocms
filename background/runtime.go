@@ -1165,7 +1165,7 @@ func (r *Runtime) PauseJob(ctx context.Context, jobID string, actorID uint, acto
 		if err := tx.First(&job, "id = ?", jobID).Error; err != nil {
 			return err
 		}
-		if !pausableJobStatus(job.Status) || job.PauseRequestedAt != nil || job.CancelRequestedAt != nil {
+		if !job.Pausable || !pausableJobStatus(job.Status) || job.PauseRequestedAt != nil || job.CancelRequestedAt != nil {
 			return ErrConflict
 		}
 		var committing int64

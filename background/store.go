@@ -49,6 +49,7 @@ func (r *Runtime) Enqueue(ctx context.Context, spec JobSpec) (*Job, bool, error)
 			SubjectID:      boundedMessage(spec.SubjectID, 128),
 			IdempotencyKey: spec.IdempotencyKey,
 			Label:          boundedMessage(spec.Label, 255),
+			Pausable:       spec.Pausable,
 			Progress:       0,
 		}
 		if err := tx.Create(&job).Error; err != nil {
@@ -101,7 +102,7 @@ func validateIdempotentReuse(tx *gorm.DB, job Job, spec JobSpec) error {
 	}
 	ownerMatches := (job.OwnerID == nil && spec.OwnerID == nil) ||
 		(job.OwnerID != nil && spec.OwnerID != nil && *job.OwnerID == *spec.OwnerID)
-	if job.Kind != spec.Kind || job.Visibility != visibility || !ownerMatches ||
+	if job.Kind != spec.Kind || job.Visibility != visibility || job.Pausable != spec.Pausable || !ownerMatches ||
 		job.SubjectType != boundedMessage(spec.SubjectType, 64) || job.SubjectID != boundedMessage(spec.SubjectID, 128) {
 		return ErrIdempotencyConflict
 	}
@@ -313,7 +314,9 @@ func pausableJobStatus(status string) bool {
 
 func populateJobCapabilities(job *Job) {
 	job.CanCancel = cancellableJobStatus(job.Status)
-	job.CanPause = pausableJobStatus(job.Status)
+	job.CanPause = job.Pausable && pausableJobStatus(job.Status)
+	// A job paused by an older release must remain resumable even if that job
+	// kind no longer opts in to initiating new pauses.
 	job.CanResume = job.Status == JobPauseRequested || job.Status == JobPaused
 }
 

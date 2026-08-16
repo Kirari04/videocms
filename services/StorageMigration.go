@@ -376,7 +376,7 @@ func (w *WorkerGroup) refreshStorageMigrationProgress(ctx context.Context, migra
 			COALESCE(SUM(bytes_copied), 0) AS copied_bytes,
 			SUM(CASE WHEN status IN ? THEN 1 ELSE 0 END) AS cutover_count,
 			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS cleaned_count,
-			COUNT(*) AS file_count`, []string{models.StorageMigrationItemCleanupPending, models.StorageMigrationItemCleaning, models.StorageMigrationItemCleaned, models.StorageMigrationItemOriginalKept}, models.StorageMigrationItemCleaned).
+			COUNT(*) AS file_count`, []string{models.StorageMigrationItemCleanupPending, models.StorageMigrationItemCleaning, models.StorageMigrationItemCleaned, models.StorageMigrationItemOriginalKept, models.StorageMigrationItemOriginalPartial}, models.StorageMigrationItemCleaned).
 		Where("migration_id = ?", migrationID).Scan(&aggregate).Error
 	if err != nil {
 		return err
@@ -406,11 +406,15 @@ func (w *WorkerGroup) scheduleStorageMigrationCleanup(ctx context.Context, runti
 		return nil
 	}
 	cleanupAfter := time.Now().UTC().Add(storageMigrationCleanupGrace)
+	if migration.CleanupAfter != nil {
+		cleanupAfter = migration.CleanupAfter.UTC()
+	}
 	job, _, err := runtime.Enqueue(ctx, background.JobSpec{
 		Kind: "storage.migration.cleanup", Visibility: background.VisibilityAdmin,
 		SubjectType: "storage_migration", SubjectID: migration.UUID,
 		IdempotencyKey: "storage-migration-cleanup:" + migration.UUID,
 		Label:          fmt.Sprintf("Clean originals from %s", migration.SourcePoolName),
+		Pausable:       true,
 		Tasks: []background.TaskSpec{{
 			Kind: taskStorageCleanup, Queue: background.QueueStorage, Phase: "Retaining originals",
 			Payload: storageMigrationTaskPayload{MigrationID: migration.ID}, DedupeKey: fmt.Sprintf("storage-cleanup:%d", migration.ID),
@@ -472,6 +476,14 @@ func (w *WorkerGroup) storageMigrationCleanupHandler(ctx context.Context, task b
 			return background.Result{}, background.Transient("cleanup_progress_failed", "Original cleanup progress could not be recorded", err)
 		}
 		background.ReportProgress(ctx, float64(index+1)/float64(len(items)), fmt.Sprintf("Cleaned %d of %d originals", index+1, len(items)))
+		if err := ctx.Err(); err != nil {
+			status, phase := models.StorageMigrationCanceled, "Cleanup canceled; remaining originals retained"
+			if background.PauseRequested(ctx) {
+				status, phase = models.StorageMigrationPaused, "Cleanup paused"
+			}
+			_ = w.deps.DB.WithContext(context.WithoutCancel(ctx)).Model(&migration).Updates(map[string]any{"status": status, "phase": phase}).Error
+			return background.Result{}, err
+		}
 	}
 	if err := w.deps.DB.WithContext(context.WithoutCancel(ctx)).First(&migration, migration.ID).Error; err == nil && migration.KeepOriginals {
 		return background.Result{ResultType: "storage_migration", ResultID: migration.UUID, Phase: "Originals retained"}, nil
@@ -487,17 +499,23 @@ func (w *WorkerGroup) storageMigrationCleanupHandler(ctx context.Context, task b
 }
 
 func (w *WorkerGroup) cleanupStorageMigrationItem(ctx context.Context, item *models.StorageMigrationItem) error {
-	if item.Status == models.StorageMigrationItemCleaned || item.Status == models.StorageMigrationItemOriginalKept {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if item.Status == models.StorageMigrationItemCleaned || item.Status == models.StorageMigrationItemOriginalKept || item.Status == models.StorageMigrationItemOriginalPartial {
 		return nil
 	}
 	releaseFile := w.deps.StorageLifecycle.FileWriteLock(item.FileID)
 	defer releaseFile()
 	releaseMount := w.deps.StorageLifecycle.ReadLock(item.SourceMountID)
 	defer releaseMount()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := w.deps.DB.WithContext(ctx).First(item, item.ID).Error; err != nil {
 		return err
 	}
-	if item.Status == models.StorageMigrationItemCleaned || item.Status == models.StorageMigrationItemOriginalKept {
+	if item.Status == models.StorageMigrationItemCleaned || item.Status == models.StorageMigrationItemOriginalKept || item.Status == models.StorageMigrationItemOriginalPartial {
 		return nil
 	}
 	var file models.File
@@ -521,11 +539,15 @@ func (w *WorkerGroup) cleanupStorageMigrationItem(ctx context.Context, item *mod
 	}).Error; err != nil {
 		return err
 	}
-	if err := storage.DeletePrefix(ctx, store, prefix); err != nil {
+	// Once cleanup begins for a video, finish that whole video before honoring a
+	// pause or cancel. This prevents a retained original from being only partly
+	// deleted while still presenting cleanup as safely stopped.
+	commitCtx := context.WithoutCancel(ctx)
+	if err := storage.DeletePrefix(commitCtx, store, prefix); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
-	return w.deps.DB.WithContext(context.WithoutCancel(ctx)).Model(item).Updates(map[string]any{
+	return w.deps.DB.WithContext(commitCtx).Model(item).Updates(map[string]any{
 		"status": models.StorageMigrationItemCleaned, "cleaned_at": &now, "reservation_key": "",
 		"progress_message": "Original removed", "error_code": "", "error_message": "",
 	}).Error
@@ -558,6 +580,14 @@ func (w *WorkerGroup) storageMigrationAbortHandler(runtime *background.Runtime) 
 				return background.Result{}, background.Transient("abort_cleanup_failed", "Incomplete destination data could not be cleaned", err)
 			}
 			background.ReportProgress(ctx, float64(index+1)/float64(len(items)), fmt.Sprintf("Reconciled %d of %d videos", index+1, len(items)))
+			if err := ctx.Err(); err != nil {
+				phase := "Canceled; incomplete destination cleanup stopped"
+				if background.PauseRequested(ctx) {
+					phase = "Canceled; incomplete destination cleanup paused"
+				}
+				_ = w.deps.DB.WithContext(context.WithoutCancel(ctx)).Model(&migration).Update("phase", phase).Error
+				return background.Result{}, err
+			}
 		}
 		if err := w.refreshStorageMigrationProgress(context.WithoutCancel(ctx), migration.ID); err != nil {
 			return background.Result{}, background.Transient("abort_progress_failed", "Canceled migration progress could not be reconciled", err)
@@ -573,10 +603,16 @@ func (w *WorkerGroup) storageMigrationAbortHandler(runtime *background.Runtime) 
 }
 
 func (w *WorkerGroup) cleanupCanceledStorageMigrationItem(ctx context.Context, item *models.StorageMigrationItem) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	releaseFile := w.deps.StorageLifecycle.FileWriteLock(item.FileID)
 	defer releaseFile()
 	releaseMount := w.deps.StorageLifecycle.ReadLock(item.DestinationMountID)
 	defer releaseMount()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := w.deps.DB.WithContext(ctx).First(item, item.ID).Error; err != nil {
 		return err
 	}
@@ -603,7 +639,7 @@ func (w *WorkerGroup) cleanupCanceledStorageMigrationItem(ctx context.Context, i
 		if err != nil {
 			return err
 		}
-		if err := storage.DeletePrefix(ctx, store, prefix); err != nil {
+		if err := storage.DeletePrefix(context.WithoutCancel(ctx), store, prefix); err != nil {
 			return err
 		}
 	}
@@ -629,55 +665,207 @@ func (w *WorkerGroup) storageMigrationReconcileHandler(runtime *background.Runti
 		}
 		var migrations []models.StorageMigration
 		if err := w.deps.DB.WithContext(ctx).
-			Where(`(cleanup_job_id = '' AND status IN ?) OR
-				(cleanup_job_id <> '' AND status IN ?)`,
-				[]string{models.StorageMigrationQueued, models.StorageMigrationRunning, models.StorageMigrationPaused, models.StorageMigrationCanceled},
-				[]string{models.StorageMigrationRetainingOriginals, models.StorageMigrationCleaningOriginals, models.StorageMigrationPaused}).
+			Where("status IN ?", []string{
+				models.StorageMigrationQueued, models.StorageMigrationRunning, models.StorageMigrationPaused,
+				models.StorageMigrationCanceled, models.StorageMigrationRetainingOriginals, models.StorageMigrationCleaningOriginals,
+			}).
 			Order("id ASC").Find(&migrations).Error; err != nil {
 			return background.Result{}, background.Transient("migration_reconcile_load_failed", "Storage migrations could not be inspected", err)
 		}
 		reconciled := 0
 		for index := range migrations {
+			if err := ctx.Err(); err != nil {
+				return background.Result{}, err
+			}
 			migration := &migrations[index]
-			mainCanceled := false
-			var mainJob background.Job
+			durableCtx := context.WithoutCancel(ctx)
+			if migration.CleanupJobID != "" {
+				cleanupJob, err := runtime.Job(ctx, migration.CleanupJobID, nil, true)
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					if migration.Status == models.StorageMigrationCanceled {
+						if err := w.logic.EnsureStorageMigrationAbortCleanup(durableCtx, migration.ID); err != nil {
+							return background.Result{}, background.Transient("migration_reconcile_abort_failed", "Canceled migration cleanup could not be restored", err)
+						}
+					} else {
+						wasPaused := migration.Status == models.StorageMigrationPaused
+						if err := w.deps.DB.WithContext(durableCtx).Model(migration).Update("cleanup_job_id", "").Error; err != nil {
+							return background.Result{}, background.Transient("migration_reconcile_link_failed", "Original cleanup could not be relinked", err)
+						}
+						migration.CleanupJobID = ""
+						if err := w.scheduleStorageMigrationCleanup(durableCtx, runtime, migration); err != nil {
+							return background.Result{}, background.Transient("migration_reconcile_cleanup_failed", "Original cleanup could not be restored", err)
+						}
+						if wasPaused {
+							if err := runtime.PauseJob(durableCtx, migration.CleanupJobID, 0, "VideoCMS"); err != nil && !errors.Is(err, background.ErrConflict) {
+								return background.Result{}, background.Transient("migration_reconcile_pause_failed", "Paused original cleanup could not be restored", err)
+							}
+							if err := w.deps.DB.WithContext(durableCtx).Model(migration).Updates(map[string]any{
+								"status": models.StorageMigrationPaused, "phase": "Original cleanup paused",
+							}).Error; err != nil {
+								return background.Result{}, background.Transient("migration_reconcile_state_failed", "Paused cleanup status could not be restored", err)
+							}
+						}
+					}
+					reconciled++
+				} else if err != nil {
+					return background.Result{}, background.Transient("migration_reconcile_job_failed", "Original cleanup status could not be inspected", err)
+				} else if cleanupJob.Kind == "storage.migration.cleanup" {
+					switch cleanupJob.Status {
+					case background.JobCanceled:
+						if _, err := w.logic.KeepStorageMigrationOriginals(durableCtx, migration.UUID, 0, "VideoCMS"); err != nil {
+							return background.Result{}, background.Transient("migration_reconcile_retention_failed", "Canceled original cleanup could not be reconciled", err)
+						}
+						reconciled++
+					case background.JobPauseRequested, background.JobPaused:
+						if migration.Status != models.StorageMigrationPaused {
+							if err := w.deps.DB.WithContext(durableCtx).Model(migration).Updates(map[string]any{"status": models.StorageMigrationPaused, "phase": "Original cleanup paused"}).Error; err != nil {
+								return background.Result{}, background.Transient("migration_reconcile_state_failed", "Paused cleanup status could not be repaired", err)
+							}
+							reconciled++
+						}
+					case background.JobQueued, background.JobRetryWait, background.JobRunning:
+						status, phase := models.StorageMigrationCleaningOriginals, "Cleaning original copies"
+						if cleanupJob.Status != background.JobRunning && migration.CleanupAfter != nil && migration.CleanupAfter.After(time.Now().UTC()) {
+							status, phase = models.StorageMigrationRetainingOriginals, "Retaining originals until cleanup begins"
+						}
+						if migration.Status != status || migration.Phase != phase {
+							if err := w.deps.DB.WithContext(durableCtx).Model(migration).Updates(map[string]any{"status": status, "phase": phase}).Error; err != nil {
+								return background.Result{}, background.Transient("migration_reconcile_state_failed", "Cleanup status could not be repaired", err)
+							}
+							reconciled++
+						}
+					case background.JobSucceeded, background.JobSucceededWithWarnings:
+						completedAt := time.Now().UTC()
+						if err := w.refreshStorageMigrationProgress(durableCtx, migration.ID); err != nil {
+							return background.Result{}, background.Transient("migration_reconcile_progress_failed", "Cleanup progress could not be repaired", err)
+						}
+						if err := w.deps.DB.WithContext(durableCtx).Model(migration).Updates(map[string]any{
+							"status": models.StorageMigrationCompleted, "phase": "Migration and cleanup complete", "completed_at": &completedAt,
+						}).Error; err != nil {
+							return background.Result{}, background.Transient("migration_reconcile_state_failed", "Completed cleanup status could not be repaired", err)
+						}
+						reconciled++
+					case background.JobFailed:
+						if migration.Phase != "Original cleanup needs attention" {
+							if err := w.deps.DB.WithContext(durableCtx).Model(migration).Updates(map[string]any{
+								"phase": "Original cleanup needs attention", "error_code": cleanupJob.ErrorCode, "error_message": cleanupJob.ErrorMessage,
+							}).Error; err != nil {
+								return background.Result{}, background.Transient("migration_reconcile_state_failed", "Failed cleanup status could not be repaired", err)
+							}
+							reconciled++
+						}
+					}
+				} else if cleanupJob.Kind == "storage.migration.abort_cleanup" {
+					phase := "Canceled; cleaning incomplete destination data"
+					if cleanupJob.Status == background.JobPauseRequested || cleanupJob.Status == background.JobPaused {
+						phase = "Canceled; incomplete destination cleanup paused"
+					} else if cleanupJob.Status == background.JobCanceled {
+						phase = "Canceled; incomplete destination cleanup stopped"
+					} else if cleanupJob.Status == background.JobFailed {
+						phase = "Canceled; incomplete destination cleanup needs attention"
+					} else if cleanupJob.Status == background.JobSucceeded || cleanupJob.Status == background.JobSucceededWithWarnings {
+						phase = "Canceled; incomplete destination data cleaned and originals retained"
+					}
+					if migration.Status != models.StorageMigrationCanceled || migration.Phase != phase {
+						if err := w.deps.DB.WithContext(durableCtx).Model(migration).Updates(map[string]any{"status": models.StorageMigrationCanceled, "phase": phase}).Error; err != nil {
+							return background.Result{}, background.Transient("migration_reconcile_state_failed", "Canceled migration status could not be repaired", err)
+						}
+						reconciled++
+					}
+				}
+				background.ReportProgress(ctx, float64(index+1)/float64(len(migrations)), fmt.Sprintf("Inspected %d of %d migrations", index+1, len(migrations)))
+				continue
+			}
+
+			if migration.Status == models.StorageMigrationCanceled {
+				if err := w.logic.EnsureStorageMigrationAbortCleanup(durableCtx, migration.ID); err != nil {
+					return background.Result{}, background.Transient("migration_reconcile_abort_failed", "A canceled migration could not be reconciled", err)
+				}
+				reconciled++
+				background.ReportProgress(ctx, float64(index+1)/float64(len(migrations)), fmt.Sprintf("Inspected %d of %d migrations", index+1, len(migrations)))
+				continue
+			}
+			if migration.Status == models.StorageMigrationRetainingOriginals || migration.Status == models.StorageMigrationCleaningOriginals {
+				if err := w.scheduleStorageMigrationCleanup(durableCtx, runtime, migration); err != nil {
+					return background.Result{}, background.Transient("migration_reconcile_cleanup_failed", "Original cleanup could not be restored", err)
+				}
+				reconciled++
+				background.ReportProgress(ctx, float64(index+1)/float64(len(migrations)), fmt.Sprintf("Inspected %d of %d migrations", index+1, len(migrations)))
+				continue
+			}
+
+			mainMissing := false
+			var persistedMain background.Job
 			mainQuery := w.deps.DB.WithContext(ctx)
 			if migration.BackgroundJobID != "" {
 				mainQuery = mainQuery.Where("id = ?", migration.BackgroundJobID)
 			} else {
 				mainQuery = mainQuery.Where("kind = ? AND subject_type = ? AND subject_id = ?", "storage.migration", "storage_migration", migration.UUID).Order("created_at DESC")
 			}
-			if err := mainQuery.First(&mainJob).Error; err == nil {
-				if migration.BackgroundJobID == "" {
-					_ = w.deps.DB.WithContext(context.WithoutCancel(ctx)).Model(migration).Update("background_job_id", mainJob.ID).Error
-				}
-				mainCanceled = mainJob.Status == background.JobCanceled
+			if err := mainQuery.First(&persistedMain).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+				mainMissing = true
+			} else if err != nil {
+				return background.Result{}, background.Transient("migration_reconcile_main_failed", "The migration job could not be inspected", err)
 			}
-			if mainCanceled {
-				if err := w.logic.EnsureStorageMigrationAbortCleanup(context.WithoutCancel(ctx), migration.ID); err != nil {
+			mainJob, err := w.logic.EnsureStorageMigrationJob(durableCtx, migration.ID)
+			if err != nil {
+				return background.Result{}, background.Transient("migration_reconcile_main_failed", "The migration job could not be restored", err)
+			}
+			if migration.BackgroundJobID != mainJob.ID {
+				migration.BackgroundJobID = mainJob.ID
+				reconciled++
+			}
+			if mainMissing && migration.Status == models.StorageMigrationPaused && mainJob.Status != background.JobPaused && mainJob.Status != background.JobPauseRequested {
+				if err := runtime.PauseJob(durableCtx, mainJob.ID, 0, "VideoCMS"); err != nil && !errors.Is(err, background.ErrConflict) {
+					return background.Result{}, background.Transient("migration_reconcile_pause_failed", "Paused migration status could not be restored", err)
+				}
+				mainJob, err = w.logic.EnsureStorageMigrationJob(durableCtx, migration.ID)
+				if err != nil {
+					return background.Result{}, background.Transient("migration_reconcile_main_failed", "The paused migration job could not be reloaded", err)
+				}
+			}
+			switch mainJob.Status {
+			case background.JobCanceled:
+				if err := w.logic.EnsureStorageMigrationAbortCleanup(durableCtx, migration.ID); err != nil {
 					return background.Result{}, background.Transient("migration_reconcile_abort_failed", "A canceled migration could not be reconciled", err)
 				}
 				reconciled++
-				background.ReportProgress(ctx, float64(index+1)/float64(len(migrations)), fmt.Sprintf("Inspected %d of %d migrations", index+1, len(migrations)))
-				continue
-			}
-			if migration.CleanupJobID != "" {
-				if cleanupJob, err := runtime.Job(ctx, migration.CleanupJobID, nil, true); err == nil &&
-					cleanupJob.Kind == "storage.migration.cleanup" && cleanupJob.Status == background.JobCanceled {
-					if _, err := w.logic.KeepStorageMigrationOriginals(context.WithoutCancel(ctx), migration.UUID, 0, "VideoCMS"); err != nil {
-						return background.Result{}, background.Transient("migration_reconcile_retention_failed", "Canceled original cleanup could not be reconciled", err)
+			case background.JobPauseRequested, background.JobPaused:
+				if migration.Status != models.StorageMigrationPaused {
+					if err := w.deps.DB.WithContext(durableCtx).Model(migration).Updates(map[string]any{"status": models.StorageMigrationPaused, "phase": "Migration paused"}).Error; err != nil {
+						return background.Result{}, background.Transient("migration_reconcile_state_failed", "Paused migration status could not be repaired", err)
 					}
 					reconciled++
 				}
-				background.ReportProgress(ctx, float64(index+1)/float64(len(migrations)), fmt.Sprintf("Inspected %d of %d migrations", index+1, len(migrations)))
-				continue
-			}
-			needsAbort := migration.Status == models.StorageMigrationCanceled && migration.CleanupJobID == ""
-			if needsAbort {
-				if err := w.logic.EnsureStorageMigrationAbortCleanup(context.WithoutCancel(ctx), migration.ID); err != nil {
-					return background.Result{}, background.Transient("migration_reconcile_abort_failed", "A canceled migration could not be reconciled", err)
+			case background.JobQueued, background.JobRetryWait:
+				if migration.Status != models.StorageMigrationQueued {
+					if err := w.deps.DB.WithContext(durableCtx).Model(migration).Updates(map[string]any{"status": models.StorageMigrationQueued, "phase": "Waiting to resume migration"}).Error; err != nil {
+						return background.Result{}, background.Transient("migration_reconcile_state_failed", "Queued migration status could not be repaired", err)
+					}
+					reconciled++
+				}
+			case background.JobRunning:
+				if migration.Status != models.StorageMigrationRunning {
+					if err := w.deps.DB.WithContext(durableCtx).Model(migration).Updates(map[string]any{"status": models.StorageMigrationRunning, "phase": "Migrating videos"}).Error; err != nil {
+						return background.Result{}, background.Transient("migration_reconcile_state_failed", "Running migration status could not be repaired", err)
+					}
+					reconciled++
+				}
+			case background.JobSucceeded, background.JobSucceededWithWarnings:
+				if err := w.scheduleStorageMigrationCleanup(durableCtx, runtime, migration); err != nil {
+					return background.Result{}, background.Transient("migration_reconcile_cleanup_failed", "Original cleanup could not be restored", err)
 				}
 				reconciled++
+			case background.JobFailed:
+				if migration.Status != models.StorageMigrationFailed {
+					if err := w.deps.DB.WithContext(durableCtx).Model(migration).Updates(map[string]any{
+						"status": models.StorageMigrationFailed, "phase": "Migration needs attention",
+						"error_code": mainJob.ErrorCode, "error_message": mainJob.ErrorMessage,
+					}).Error; err != nil {
+						return background.Result{}, background.Transient("migration_reconcile_state_failed", "Failed migration status could not be repaired", err)
+					}
+					reconciled++
+				}
 			}
 			background.ReportProgress(ctx, float64(index+1)/float64(len(migrations)), fmt.Sprintf("Inspected %d of %d migrations", index+1, len(migrations)))
 		}

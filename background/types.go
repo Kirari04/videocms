@@ -65,6 +65,7 @@ type Job struct {
 	ResultID          string     `gorm:"size:128" json:"resultId,omitempty"`
 	ErrorCode         string     `gorm:"size:80" json:"errorCode,omitempty"`
 	ErrorMessage      string     `gorm:"size:512" json:"errorMessage,omitempty"`
+	Pausable          bool       `json:"pausable"`
 	PauseRequestedAt  *time.Time `gorm:"index" json:"pauseRequestedAt,omitempty"`
 	PausedAt          *time.Time `gorm:"index" json:"pausedAt,omitempty"`
 	CancelRequestedAt *time.Time `json:"cancelRequestedAt,omitempty"`
@@ -203,6 +204,7 @@ type JobSpec struct {
 	SubjectID      string
 	IdempotencyKey string
 	Label          string
+	Pausable       bool
 	Tasks          []TaskSpec
 }
 
@@ -300,6 +302,14 @@ func marshalPayload(value any) (string, error) {
 
 func Migrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(&Job{}, &Task{}, &Attempt{}, &Event{}, &QueueState{}, &ScheduleState{}, &MigrationState{}); err != nil {
+		return err
+	}
+	// Storage migration pause support shipped before pause eligibility became an
+	// explicit persisted capability. Preserve pause/resume for jobs created by
+	// that version while keeping every other job opted out by default.
+	if err := db.Model(&Job{}).Where("pausable = ? AND kind IN ?", false, []string{
+		"storage.migration", "storage.migration.cleanup", "storage.migration.abort_cleanup",
+	}).Update("pausable", true).Error; err != nil {
 		return err
 	}
 	if db.Dialector.Name() != "sqlite" {

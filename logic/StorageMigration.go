@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"sort"
@@ -23,8 +24,10 @@ var (
 )
 
 type StorageMigrationInput struct {
-	SourcePoolID      uint `json:"sourcePoolId" validate:"required"`
-	DestinationPoolID uint `json:"destinationPoolId" validate:"required"`
+	SourcePoolID      uint   `json:"sourcePoolId" validate:"required"`
+	DestinationPoolID uint   `json:"destinationPoolId" validate:"required"`
+	PlanFingerprint   string `json:"planFingerprint,omitempty"`
+	IdempotencyKey    string `json:"-"`
 }
 
 type StorageMigrationMountPreview struct {
@@ -54,6 +57,7 @@ type StorageMigrationPreview struct {
 	DestinationPlacements []StorageMigrationPlacementPreview `json:"destinationPlacements"`
 	Warnings              []string                           `json:"warnings"`
 	CleanupGraceHours     int                                `json:"cleanupGraceHours"`
+	PlanFingerprint       string                             `json:"planFingerprint"`
 }
 
 type StorageMigrationSummary struct {
@@ -86,6 +90,13 @@ func (s *Service) StartStorageMigration(ctx context.Context, input StorageMigrat
 	if s == nil || s.Deps == nil || s.Deps.Background == nil {
 		return nil, nil, errors.New("background work is not configured")
 	}
+	requestKey := storageMigrationRequestKey(actorID, input.IdempotencyKey)
+	if requestKey == "" {
+		return nil, nil, fmt.Errorf("%w: an idempotency key is required", ErrStorageMigrationConflict)
+	}
+	if migration, job, found, err := s.storageMigrationByRequest(ctx, requestKey, input); found || err != nil {
+		return migration, job, err
+	}
 	releasePools := s.Deps.StorageLifecycle.PoolReadLocks(input.SourcePoolID, input.DestinationPoolID)
 	defer releasePools()
 	plan, err := s.buildStorageMigrationPlan(ctx, input)
@@ -115,9 +126,15 @@ func (s *Service) StartStorageMigration(ctx context.Context, input StorageMigrat
 		return nil, nil, fmt.Errorf("%w: source videos changed during migration setup; review the preview again", ErrStorageMigrationConflict)
 	}
 	plan = validatedPlan
+	wantedFingerprint := strings.TrimSpace(input.PlanFingerprint)
+	if wantedFingerprint == "" || wantedFingerprint != plan.preview.PlanFingerprint {
+		return nil, nil, fmt.Errorf("%w: the migration preview changed; review it again before starting", ErrStorageMigrationConflict)
+	}
 	now := time.Now().UTC()
 	migration := &models.StorageMigration{
 		UUID:                uuid.NewString(),
+		RequestKey:          requestKey,
+		PlanFingerprint:     plan.preview.PlanFingerprint,
 		SourcePoolID:        input.SourcePoolID,
 		DestinationPoolID:   input.DestinationPoolID,
 		SourcePoolName:      plan.preview.SourcePoolName,
@@ -151,20 +168,15 @@ func (s *Service) StartStorageMigration(ctx context.Context, input StorageMigrat
 		return nil
 	})
 	if err != nil {
+		if isStorageMigrationUniqueError(err) {
+			if existing, job, found, loadErr := s.storageMigrationByRequest(context.WithoutCancel(ctx), requestKey, input); found || loadErr != nil {
+				return existing, job, loadErr
+			}
+		}
 		return nil, nil, err
 	}
 
-	job, _, enqueueErr := s.Deps.Background.Enqueue(ctx, background.JobSpec{
-		Kind: "storage.migration", Visibility: background.VisibilityAdmin,
-		SubjectType: "storage_migration", SubjectID: migration.UUID,
-		IdempotencyKey: "storage-migration:" + migration.UUID,
-		Label:          fmt.Sprintf("Migrate %s to %s", migration.SourcePoolName, migration.DestinationPoolName),
-		Tasks: []background.TaskSpec{{
-			Kind: "storage.migration.run", Queue: background.QueueStorage, Phase: "Migrating videos",
-			Payload: map[string]any{"migrationId": migration.ID}, DedupeKey: fmt.Sprintf("storage-migration:%d", migration.ID),
-			Priority: 20, Required: true, Weight: 1, MaxAttempts: 4,
-		}},
-	})
+	job, enqueueErr := s.ensureStorageMigrationJob(ctx, migration)
 	if enqueueErr != nil {
 		_ = s.Deps.DB.WithContext(context.WithoutCancel(ctx)).Transaction(func(tx *gorm.DB) error {
 			if err := tx.Model(&models.StorageMigrationItem{}).Where("migration_id = ?", migration.ID).Update("reservation_key", "").Error; err != nil {
@@ -187,6 +199,107 @@ func (s *Service) StartStorageMigration(ctx context.Context, input StorageMigrat
 	migration.BackgroundJobID = job.ID
 	migration.StartedAt = &now
 	return migration, job, nil
+}
+
+func storageMigrationRequestKey(actorID uint, value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%d:%s", actorID, value)))
+	return fmt.Sprintf("storage-migration-request:%x", sum)
+}
+
+func (s *Service) storageMigrationByRequest(ctx context.Context, requestKey string, input StorageMigrationInput) (*models.StorageMigration, *background.Job, bool, error) {
+	var migration models.StorageMigration
+	err := s.Deps.DB.WithContext(ctx).Where("request_key = ?", requestKey).First(&migration).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil, false, nil
+	}
+	if err != nil {
+		return nil, nil, false, err
+	}
+	if migration.SourcePoolID != input.SourcePoolID || migration.DestinationPoolID != input.DestinationPoolID ||
+		migration.PlanFingerprint != strings.TrimSpace(input.PlanFingerprint) {
+		return nil, nil, true, fmt.Errorf("%w: the idempotency key was already used for another migration request", ErrStorageMigrationConflict)
+	}
+	job, err := s.ensureStorageMigrationJob(context.WithoutCancel(ctx), &migration)
+	if err == nil && migration.Status == models.StorageMigrationFailed && migration.ErrorCode == "queue_failed" {
+		now := time.Now().UTC()
+		err = s.Deps.DB.WithContext(context.WithoutCancel(ctx)).Model(&migration).Updates(map[string]any{
+			"status": models.StorageMigrationQueued, "phase": "Waiting to start", "started_at": &now,
+			"background_job_id": job.ID, "error_code": "", "error_message": "",
+		}).Error
+		if err == nil {
+			migration.Status = models.StorageMigrationQueued
+			migration.Phase = "Waiting to start"
+			migration.StartedAt = &now
+			migration.BackgroundJobID = job.ID
+			migration.ErrorCode = ""
+			migration.ErrorMessage = ""
+		}
+	}
+	return &migration, job, true, err
+}
+
+func storageMigrationJobSpec(migration models.StorageMigration) background.JobSpec {
+	return background.JobSpec{
+		Kind: "storage.migration", Visibility: background.VisibilityAdmin,
+		SubjectType: "storage_migration", SubjectID: migration.UUID,
+		IdempotencyKey: "storage-migration:" + migration.UUID,
+		Label:          fmt.Sprintf("Migrate %s to %s", migration.SourcePoolName, migration.DestinationPoolName),
+		Pausable:       true,
+		Tasks: []background.TaskSpec{{
+			Kind: "storage.migration.run", Queue: background.QueueStorage, Phase: "Migrating videos",
+			Payload: map[string]any{"migrationId": migration.ID}, DedupeKey: fmt.Sprintf("storage-migration:%d", migration.ID),
+			Priority: 20, Required: true, Weight: 1, MaxAttempts: 4,
+		}},
+	}
+}
+
+func (s *Service) ensureStorageMigrationJob(ctx context.Context, migration *models.StorageMigration) (*background.Job, error) {
+	if migration == nil || migration.ID == 0 || s.Deps.Background == nil {
+		return nil, errors.New("background work is not configured")
+	}
+	if migration.BackgroundJobID != "" {
+		if detail, err := s.Deps.Background.Job(ctx, migration.BackgroundJobID, nil, true); err == nil {
+			return &detail.Job, nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	}
+	var existing background.Job
+	if err := s.Deps.DB.WithContext(ctx).
+		Where("kind = ? AND subject_type = ? AND subject_id = ?", "storage.migration", "storage_migration", migration.UUID).
+		Order("created_at DESC").First(&existing).Error; err == nil {
+		// The worker repairs this association when it starts. Once the durable
+		// job exists, an association write failure must not release reservations
+		// or encourage the caller to create another migration.
+		_ = s.Deps.DB.WithContext(context.WithoutCancel(ctx)).Model(migration).Update("background_job_id", existing.ID).Error
+		migration.BackgroundJobID = existing.ID
+		detail, err := s.Deps.Background.Job(context.WithoutCancel(ctx), existing.ID, nil, true)
+		if err != nil {
+			return nil, err
+		}
+		return &detail.Job, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	job, _, err := s.Deps.Background.Enqueue(ctx, storageMigrationJobSpec(*migration))
+	if err != nil {
+		return nil, err
+	}
+	_ = s.Deps.DB.WithContext(context.WithoutCancel(ctx)).Model(migration).Update("background_job_id", job.ID).Error
+	migration.BackgroundJobID = job.ID
+	return job, nil
+}
+
+func (s *Service) EnsureStorageMigrationJob(ctx context.Context, migrationID uint) (*background.Job, error) {
+	var migration models.StorageMigration
+	if err := s.Deps.DB.WithContext(ctx).First(&migration, migrationID).Error; err != nil {
+		return nil, err
+	}
+	return s.ensureStorageMigrationJob(ctx, &migration)
 }
 
 func sameStorageMigrationFiles(first, second []models.File) bool {
@@ -326,7 +439,7 @@ func (s *Service) buildStorageMigrationPlan(ctx context.Context, input StorageMi
 	if overrideCount > 0 {
 		warnings = append(warnings, fmt.Sprintf("%d users still upload to the source pool.", overrideCount))
 	}
-	return storageMigrationPlan{
+	plan := storageMigrationPlan{
 		preview: StorageMigrationPreview{
 			SourcePoolID: sourcePool.ID, SourcePoolName: sourcePool.Name,
 			DestinationPoolID: destinationPool.ID, DestinationPoolName: destinationPool.Name,
@@ -335,7 +448,26 @@ func (s *Service) buildStorageMigrationPlan(ctx context.Context, input StorageMi
 			DestinationPlacements: placements, Warnings: warnings, CleanupGraceHours: 24,
 		},
 		files: files, destination: destination,
-	}, nil
+	}
+	plan.preview.PlanFingerprint = storageMigrationPlanFingerprint(plan)
+	return plan, nil
+}
+
+func storageMigrationPlanFingerprint(plan storageMigrationPlan) string {
+	digest := sha256.New()
+	_, _ = fmt.Fprintf(digest, "source-pool:%d\ndestination-pool:%d\n", plan.preview.SourcePoolID, plan.preview.DestinationPoolID)
+	for _, mount := range plan.preview.SourceMounts {
+		_, _ = fmt.Fprintf(digest, "source-mount:%s\n", mount.UUID)
+	}
+	for _, mount := range plan.preview.DestinationMounts {
+		_, _ = fmt.Fprintf(digest, "destination-mount:%s\n", mount.UUID)
+	}
+	files := append([]models.File(nil), plan.files...)
+	sort.Slice(files, func(i, j int) bool { return files[i].ID < files[j].ID })
+	for _, file := range files {
+		_, _ = fmt.Fprintf(digest, "file:%d:%s:%s:%d:%s\n", file.ID, file.UUID, file.StorageID, file.Size, plan.destination[file.ID])
+	}
+	return fmt.Sprintf("%x", digest.Sum(nil))
 }
 
 func (s *Service) storageMigrationMounts(ctx context.Context, pool models.StoragePool) ([]StorageMigrationMountPreview, []string, error) {
@@ -372,11 +504,35 @@ func isStorageMigrationUniqueError(err error) bool {
 	return errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(message, "unique constraint") || strings.Contains(message, "duplicate key")
 }
 
-func (s *Service) ListStorageMigrations(ctx context.Context, limit int, beforeID uint) ([]models.StorageMigration, error) {
+func StorageMigrationStatusesForFilter(filter string) ([]string, bool) {
+	switch strings.TrimSpace(filter) {
+	case "":
+		return nil, true
+	case "active":
+		return []string{models.StorageMigrationQueued, models.StorageMigrationRunning, models.StorageMigrationPaused}, true
+	case "retention":
+		return []string{models.StorageMigrationRetainingOriginals, models.StorageMigrationCleaningOriginals, models.StorageMigrationOriginalsRetained}, true
+	case "attention":
+		return []string{models.StorageMigrationFailed, models.StorageMigrationCanceled}, true
+	case "complete":
+		return []string{models.StorageMigrationCompleted}, true
+	default:
+		return nil, false
+	}
+}
+
+func (s *Service) ListStorageMigrations(ctx context.Context, filter string, limit int, beforeID uint) ([]models.StorageMigration, error) {
 	if limit < 1 || limit > 200 {
 		limit = 50
 	}
+	statuses, valid := StorageMigrationStatusesForFilter(filter)
+	if !valid {
+		return nil, fmt.Errorf("%w: unknown migration status filter", ErrStorageMigrationConflict)
+	}
 	query := s.Deps.DB.WithContext(ctx).Model(&models.StorageMigration{})
+	if len(statuses) > 0 {
+		query = query.Where("status IN ?", statuses)
+	}
 	if beforeID > 0 {
 		query = query.Where("id < ?", beforeID)
 	}
@@ -514,9 +670,14 @@ func (s *Service) KeepStorageMigrationOriginals(ctx context.Context, migrationUU
 			if item.Status == models.StorageMigrationItemCleaned {
 				return nil
 			}
+			status := models.StorageMigrationItemOriginalKept
+			message := "Original retained by administrator"
+			if item.Status == models.StorageMigrationItemCleaning {
+				status = models.StorageMigrationItemOriginalPartial
+				message = "Original cleanup was incomplete; remaining data retained"
+			}
 			return tx.Model(item).Updates(map[string]any{
-				"status": models.StorageMigrationItemOriginalKept, "reservation_key": "",
-				"progress_message": "Original retained by administrator",
+				"status": status, "reservation_key": "", "progress_message": message,
 			}).Error
 		})
 		releaseFile()
@@ -524,7 +685,7 @@ func (s *Service) KeepStorageMigrationOriginals(ctx context.Context, migrationUU
 			return models.StorageMigration{}, err
 		}
 	}
-	var cleaned int64
+	var cleaned, partial int64
 	now := time.Now().UTC()
 	err = s.Deps.DB.WithContext(durableCtx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&models.StorageMigrationItem{}).
@@ -532,9 +693,20 @@ func (s *Service) KeepStorageMigrationOriginals(ctx context.Context, migrationUU
 			Count(&cleaned).Error; err != nil {
 			return err
 		}
+		if err := tx.Model(&models.StorageMigrationItem{}).
+			Where("migration_id = ? AND status = ?", migration.ID, models.StorageMigrationItemOriginalPartial).
+			Count(&partial).Error; err != nil {
+			return err
+		}
 		phase := "Original copies retained"
 		if cleaned > 0 {
 			phase = fmt.Sprintf("Originals retained; %d had already been removed", cleaned)
+		}
+		if partial > 0 {
+			phase = fmt.Sprintf("Originals retained; %d may be incomplete after a storage error", partial)
+			if cleaned > 0 {
+				phase = fmt.Sprintf("Originals retained; %d removed and %d may be incomplete", cleaned, partial)
+			}
 		}
 		return tx.Model(&migration).Updates(map[string]any{
 			"status": models.StorageMigrationOriginalsRetained, "phase": phase, "keep_originals": true,
@@ -684,6 +856,7 @@ func (s *Service) queueStorageMigrationAbort(ctx context.Context, migration *mod
 		SubjectType: "storage_migration", SubjectID: migration.UUID,
 		IdempotencyKey: fmt.Sprintf("storage-migration-abort:%s:%d", migration.UUID, cancelGeneration),
 		Label:          fmt.Sprintf("Clean canceled migration to %s", migration.DestinationPoolName),
+		Pausable:       true,
 		Tasks: []background.TaskSpec{{
 			Kind: "storage.migration.abort_cleanup", Queue: background.QueueStorage, Phase: "Cleaning canceled migration",
 			Payload: map[string]any{"migrationId": migration.ID}, DedupeKey: fmt.Sprintf("storage-abort:%d", migration.ID),
