@@ -13,6 +13,8 @@ const (
 	JobQueued                = "queued"
 	JobRunning               = "running"
 	JobRetryWait             = "retry_wait"
+	JobPauseRequested        = "pause_requested"
+	JobPaused                = "paused"
 	JobCancelRequested       = "cancel_requested"
 	JobSucceeded             = "succeeded"
 	JobSucceededWithWarnings = "succeeded_with_warnings"
@@ -63,7 +65,11 @@ type Job struct {
 	ResultID          string     `gorm:"size:128" json:"resultId,omitempty"`
 	ErrorCode         string     `gorm:"size:80" json:"errorCode,omitempty"`
 	ErrorMessage      string     `gorm:"size:512" json:"errorMessage,omitempty"`
+	PauseRequestedAt  *time.Time `gorm:"index" json:"pauseRequestedAt,omitempty"`
+	PausedAt          *time.Time `gorm:"index" json:"pausedAt,omitempty"`
 	CancelRequestedAt *time.Time `json:"cancelRequestedAt,omitempty"`
+	CanPause          bool       `gorm:"-" json:"canPause"`
+	CanResume         bool       `gorm:"-" json:"canResume"`
 	CanCancel         bool       `gorm:"-" json:"canCancel"`
 	StartedAt         *time.Time `json:"startedAt,omitempty"`
 	FinishedAt        *time.Time `gorm:"index" json:"finishedAt,omitempty"`
@@ -185,6 +191,7 @@ type TaskSpec struct {
 	Required       bool
 	Weight         int
 	MaxAttempts    int
+	RunAfter       *time.Time
 	ParentTaskID   string
 }
 
@@ -238,6 +245,7 @@ type QueueSummary struct {
 type Summary struct {
 	Running      int64 `json:"running"`
 	Waiting      int64 `json:"waiting"`
+	Paused       int64 `json:"paused"`
 	Failed24h    int64 `json:"failed24h"`
 	PausedQueues int64 `json:"pausedQueues"`
 }

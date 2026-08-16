@@ -249,9 +249,15 @@ func (s *Service) UpdateStorageMount(ctx context.Context, mountID uint, input St
 	if mount.System {
 		return models.StorageMount{}, errors.New("storage mount cannot be edited")
 	}
+	if err := s.ensureStorageMountNotMigrating(mount.UUID); err != nil {
+		return models.StorageMount{}, err
+	}
 	releaseMount := s.Deps.StorageLifecycle.WriteLock(mount.UUID)
 	defer releaseMount()
 	if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
+		return models.StorageMount{}, err
+	}
+	if err := s.ensureStorageMountNotMigrating(mount.UUID); err != nil {
 		return models.StorageMount{}, err
 	}
 	input.Name = strings.TrimSpace(input.Name)
@@ -364,9 +370,15 @@ func (s *Service) UnmountStorageMount(mountID uint) (int64, error) {
 	if mount.System {
 		return 0, errors.New("built-in local storage cannot be unmounted")
 	}
+	if err := s.ensureStorageMountNotMigrating(mount.UUID); err != nil {
+		return 0, err
+	}
 	releaseMount := s.Deps.StorageLifecycle.WriteLock(mount.UUID)
 	defer releaseMount()
 	if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
+		return 0, err
+	}
+	if err := s.ensureStorageMountNotMigrating(mount.UUID); err != nil {
 		return 0, err
 	}
 	if !mount.Mounted {
@@ -415,10 +427,16 @@ func (s *Service) DeleteStorageMount(mountID uint) (int64, error) {
 	if mount.System {
 		return 0, errors.New("built-in local storage cannot be deleted")
 	}
+	if err := s.ensureStorageMountNotMigrating(mount.UUID); err != nil {
+		return 0, err
+	}
 
 	releaseMount := s.Deps.StorageLifecycle.WriteLock(mount.UUID)
 	defer releaseMount()
 	if err := s.Deps.DB.First(&mount, mountID).Error; err != nil {
+		return 0, err
+	}
+	if err := s.ensureStorageMountNotMigrating(mount.UUID); err != nil {
 		return 0, err
 	}
 	if mount.Mounted {
@@ -786,9 +804,19 @@ func (s *Service) UpdateStoragePool(poolID uint, input StoragePoolInput) (models
 }
 
 func (s *Service) saveStoragePool(pool *models.StoragePool, input StoragePoolInput) error {
+	var releasePool func()
+	if pool.ID > 0 {
+		releasePool = s.Deps.StorageLifecycle.PoolWriteLock(pool.ID)
+		defer releasePool()
+	}
 	input.Name = strings.TrimSpace(input.Name)
 	if input.Name == "" {
 		return errors.New("storage pool name is required")
+	}
+	if pool.ID > 0 {
+		if err := s.ensureStoragePoolNotMigrating(pool.ID); err != nil {
+			return err
+		}
 	}
 	mountIDs := uniqueUintValues(input.MountIDs)
 	if len(mountIDs) == 0 {
@@ -847,6 +875,11 @@ func (s *Service) SetDefaultStoragePool(poolID uint) error {
 }
 
 func (s *Service) DeleteStoragePool(poolID uint) error {
+	releasePool := s.Deps.StorageLifecycle.PoolWriteLock(poolID)
+	defer releasePool()
+	if err := s.ensureStoragePoolNotMigrating(poolID); err != nil {
+		return err
+	}
 	return s.Deps.DB.Transaction(func(tx *gorm.DB) error {
 		var pool models.StoragePool
 		if err := tx.First(&pool, poolID).Error; err != nil {
