@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +23,7 @@ func TestStorageMigrationPreviewAndStartSnapshotDeterministically(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.StorageMount{}, &models.StoragePool{}, &models.StoragePoolMount{}, &models.User{}, &models.File{}, &models.Link{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.StorageMount{}, &models.StoragePool{}, &models.StoragePoolMount{}, &models.User{}, &models.File{}, &models.Link{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := background.Migrate(db); err != nil {
@@ -79,7 +80,7 @@ func TestStorageMigrationPreviewAndStartSnapshotDeterministically(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preview.FileCount != 2 || preview.PlannedBytes != 150 || preview.CleanupGraceHours != 24 || len(preview.DestinationPlacements) != 2 {
+	if preview.Scope != models.StorageMigrationScopeAll || preview.Accounts == nil || preview.FileCount != 2 || preview.PlannedBytes != 150 || preview.CleanupGraceHours != 24 || len(preview.DestinationPlacements) != 2 {
 		t.Fatalf("unexpected preview: %#v", preview)
 	}
 	input.PlanFingerprint = preview.PlanFingerprint
@@ -140,6 +141,241 @@ func TestStorageMigrationPreviewAndStartSnapshotDeterministically(t *testing.T) 
 	}
 }
 
+func TestStorageMigrationAccountScopeUsesActiveLinksAndPersistsSnapshot(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.StorageMount{}, &models.StoragePool{}, &models.StoragePoolMount{}, &models.User{}, &models.File{}, &models.Link{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := background.Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+	stores := make(map[string]storage.Store)
+	var mounts []models.StorageMount
+	for _, id := range []string{"account-source", "account-destination"} {
+		store, storeErr := storage.NewLocalStore(t.TempDir())
+		if storeErr != nil {
+			t.Fatal(storeErr)
+		}
+		stores[id] = store
+		mount := models.StorageMount{UUID: id, Name: id, Provider: models.StorageProviderLocal, Mounted: true}
+		if err := db.Create(&mount).Error; err != nil {
+			t.Fatal(err)
+		}
+		mounts = append(mounts, mount)
+	}
+	storageService, err := storage.NewService("account-source", storage.LegacyMediaLayout{}, stores)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = storageService.Close() })
+	sourcePool := models.StoragePool{UUID: "account-source-pool", Name: "Account source"}
+	destinationPool := models.StoragePool{UUID: "account-destination-pool", Name: "Account destination"}
+	if err := db.Create(&sourcePool).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&destinationPool).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, membership := range []models.StoragePoolMount{
+		{StoragePoolID: sourcePool.ID, StorageMountID: mounts[0].ID},
+		{StoragePoolID: destinationPool.ID, StorageMountID: mounts[1].ID},
+	} {
+		if err := db.Create(&membership).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	users := []models.User{{Username: "alice"}, {Username: "bob"}, {Username: "carol"}, {Username: "deleted"}}
+	if err := db.Create(&users).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Delete(&users[3]).Error; err != nil {
+		t.Fatal(err)
+	}
+	files := []models.File{
+		{UUID: "account-alice", StorageID: mounts[0].UUID, StorageState: models.FileStorageAvailable, Size: 100},
+		{UUID: "account-bob", StorageID: mounts[0].UUID, StorageState: models.FileStorageAvailable, Size: 80},
+		{UUID: "account-alice-carol", StorageID: mounts[0].UUID, StorageState: models.FileStorageAvailable, Size: 60},
+		{UUID: "account-alice-bob", StorageID: mounts[0].UUID, StorageState: models.FileStorageAvailable, Size: 40},
+		{UUID: "account-carol", StorageID: mounts[0].UUID, StorageState: models.FileStorageAvailable, Size: 20},
+		{UUID: "account-carol-unavailable", StorageID: mounts[0].UUID, StorageState: models.FileStorageUnavailable, Size: 10},
+	}
+	if err := db.Create(&files).Error; err != nil {
+		t.Fatal(err)
+	}
+	links := []models.Link{
+		{UUID: "link-alice", Name: "Alice", FileID: files[0].ID, UserID: users[0].ID},
+		{UUID: "link-bob", Name: "Bob", FileID: files[1].ID, UserID: users[1].ID},
+		{UUID: "link-alice-shared", Name: "Alice shared", FileID: files[2].ID, UserID: users[0].ID},
+		{UUID: "link-carol-shared", Name: "Carol shared", FileID: files[2].ID, UserID: users[2].ID},
+		{UUID: "link-alice-selected", Name: "Alice selected", FileID: files[3].ID, UserID: users[0].ID},
+		{UUID: "link-bob-selected", Name: "Bob selected", FileID: files[3].ID, UserID: users[1].ID},
+		{UUID: "link-carol", Name: "Carol", FileID: files[4].ID, UserID: users[2].ID},
+		{UUID: "link-carol-unavailable", Name: "Carol unavailable", FileID: files[5].ID, UserID: users[2].ID},
+		{UUID: "link-deleted-shared", Name: "Deleted shared", FileID: files[0].ID, UserID: users[3].ID},
+	}
+	if err := db.Create(&links).Error; err != nil {
+		t.Fatal(err)
+	}
+	runtime := background.New(db, background.Options{})
+	service := NewService(&app.Deps{DB: db, Storage: storageService, Background: runtime})
+	accountResults, err := service.ListStorageMigrationAccounts(context.Background(), "ali", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(accountResults) != 1 || accountResults[0].ID != users[0].ID || accountResults[0].Username != "alice" {
+		t.Fatalf("unexpected account search results: %#v", accountResults)
+	}
+	accountResults, err = service.ListStorageMigrationAccounts(context.Background(), "", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(accountResults) != 3 {
+		t.Fatalf("deleted accounts were returned by account search: %#v", accountResults)
+	}
+	input := StorageMigrationInput{
+		SourcePoolID: sourcePool.ID, DestinationPoolID: destinationPool.ID,
+		AccountIDs: []uint{users[1].ID, users[0].ID, users[0].ID},
+	}
+	preview, err := service.PreviewStorageMigration(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Scope != models.StorageMigrationScopeAccounts || preview.FileCount != 4 || preview.PlannedBytes != 280 || preview.SharedFileCount != 1 {
+		t.Fatalf("unexpected account-scoped preview: %#v", preview)
+	}
+	if len(preview.Accounts) != 2 || preview.Accounts[0].ID != users[0].ID || preview.Accounts[1].ID != users[1].ID {
+		t.Fatalf("account selection was not normalized: %#v", preview.Accounts)
+	}
+	if !strings.Contains(strings.Join(preview.Warnings, " "), "shared physical files move once for everyone") {
+		t.Fatalf("shared-file consequence was not disclosed: %#v", preview.Warnings)
+	}
+
+	// A source file unavailable only to an unselected account does not block
+	// this scoped migration, but the same full-pool migration remains blocked.
+	if _, err := service.PreviewStorageMigration(context.Background(), StorageMigrationInput{
+		SourcePoolID: sourcePool.ID, DestinationPoolID: destinationPool.ID,
+	}); !errors.Is(err, ErrStorageMigrationUnavailable) {
+		t.Fatalf("expected full migration to see unrelated unavailable video, got %v", err)
+	}
+	selectedUnavailable := models.File{UUID: "account-alice-unavailable", StorageID: mounts[0].UUID, StorageState: models.FileStorageUnavailable, Size: 5}
+	if err := db.Create(&selectedUnavailable).Error; err != nil {
+		t.Fatal(err)
+	}
+	selectedUnavailableLink := models.Link{UUID: "link-alice-unavailable", Name: "Alice unavailable", FileID: selectedUnavailable.ID, UserID: users[0].ID}
+	if err := db.Create(&selectedUnavailableLink).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.PreviewStorageMigration(context.Background(), input); !errors.Is(err, ErrStorageMigrationUnavailable) {
+		t.Fatalf("expected selected unavailable video to block migration, got %v", err)
+	}
+	if err := db.Unscoped().Delete(&selectedUnavailableLink).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Unscoped().Delete(&selectedUnavailable).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// Reservations are checked only for selected physical files, so unrelated
+	// account migrations can run concurrently without weakening overlap safety.
+	reservation := models.StorageMigrationItem{MigrationID: 999, FileID: files[4].ID, FileUUID: files[4].UUID, ReservationKey: fmt.Sprintf("file:%d", files[4].ID)}
+	if err := db.Create(&reservation).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.PreviewStorageMigration(context.Background(), input); err != nil {
+		t.Fatalf("unrelated reservation blocked selected accounts: %v", err)
+	}
+	if _, err := service.PreviewStorageMigration(context.Background(), StorageMigrationInput{
+		SourcePoolID: sourcePool.ID, DestinationPoolID: destinationPool.ID, AccountIDs: []uint{users[2].ID},
+	}); !errors.Is(err, ErrStorageMigrationUnavailable) {
+		// Carol still has an unavailable source video, which is checked before
+		// reservations and remains the correct safety failure.
+		t.Fatalf("expected selected unavailable video to take precedence, got %v", err)
+	}
+	if err := db.Unscoped().Delete(&reservation).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Unscoped().Delete(&links[7]).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Unscoped().Delete(&files[5]).Error; err != nil {
+		t.Fatal(err)
+	}
+	reservation = models.StorageMigrationItem{MigrationID: 999, FileID: files[4].ID, FileUUID: files[4].UUID, ReservationKey: fmt.Sprintf("file:%d", files[4].ID)}
+	if err := db.Create(&reservation).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.PreviewStorageMigration(context.Background(), StorageMigrationInput{
+		SourcePoolID: sourcePool.ID, DestinationPoolID: destinationPool.ID, AccountIDs: []uint{users[2].ID},
+	}); !errors.Is(err, ErrStorageMigrationConflict) {
+		t.Fatalf("expected overlapping selected reservation conflict, got %v", err)
+	}
+	if err := db.Unscoped().Delete(&reservation).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	alicePreview, err := service.PreviewStorageMigration(context.Background(), StorageMigrationInput{
+		SourcePoolID: sourcePool.ID, DestinationPoolID: destinationPool.ID, AccountIDs: []uint{users[0].ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if alicePreview.PlanFingerprint == preview.PlanFingerprint {
+		t.Fatal("different account scopes produced the same plan fingerprint")
+	}
+	input.PlanFingerprint = preview.PlanFingerprint
+	input.IdempotencyKey = "account-migration-request"
+	if err := db.Model(&users[0]).Update("username", "alice-renamed").Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := service.StartStorageMigration(context.Background(), input, 9, "admin"); !errors.Is(err, ErrStorageMigrationConflict) {
+		t.Fatalf("expected renamed account snapshot to require another review, got %v", err)
+	}
+	if err := db.Model(&users[0]).Update("username", "alice").Error; err != nil {
+		t.Fatal(err)
+	}
+	migration, _, err := service.StartStorageMigration(context.Background(), input, 9, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if migration.Scope != models.StorageMigrationScopeAccounts || migration.AccountCount != 2 || migration.SharedFileCount != 1 {
+		t.Fatalf("migration scope summary was not persisted: %#v", migration)
+	}
+	detail, err := service.GetStorageMigration(context.Background(), migration.UUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Accounts) != 2 || detail.Accounts[0].Username != "alice" || detail.Accounts[1].Username != "bob" {
+		t.Fatalf("account snapshot was not returned: %#v", detail.Accounts)
+	}
+	if err := db.Model(&users[0]).Update("username", "alice-renamed").Error; err != nil {
+		t.Fatal(err)
+	}
+	detail, err = service.GetStorageMigration(context.Background(), migration.UUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Accounts[0].Username != "alice" {
+		t.Fatalf("migration audit snapshot changed after account rename: %#v", detail.Accounts)
+	}
+	if _, err := service.PreviewStorageMigration(context.Background(), StorageMigrationInput{
+		SourcePoolID: sourcePool.ID, DestinationPoolID: destinationPool.ID, AccountIDs: []uint{users[3].ID},
+	}); !errors.Is(err, ErrStorageMigrationAccounts) {
+		t.Fatalf("expected deleted account selection to fail, got %v", err)
+	}
+	tooMany := make([]uint, maxStorageMigrationAccounts+1)
+	for index := range tooMany {
+		tooMany[index] = uint(index + 1)
+	}
+	if _, err := service.PreviewStorageMigration(context.Background(), StorageMigrationInput{
+		SourcePoolID: sourcePool.ID, DestinationPoolID: destinationPool.ID, AccountIDs: tooMany,
+	}); !errors.Is(err, ErrStorageMigrationAccounts) {
+		t.Fatalf("expected oversized account selection to fail, got %v", err)
+	}
+}
+
 func TestStorageMigrationRejectsOverlappingPools(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
@@ -171,7 +407,7 @@ func TestKeepStorageMigrationOriginalsWaitsForInFlightCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}); err != nil {
 		t.Fatal(err)
 	}
 	migration := models.StorageMigration{UUID: "keep-originals", Status: models.StorageMigrationCleaningOriginals, FileCount: 3}
@@ -250,7 +486,7 @@ func TestCanceledStorageMigrationProtectsMountsDuringSafetyWindow(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}); err != nil {
 		t.Fatal(err)
 	}
 	protectUntil := time.Now().UTC().Add(time.Hour)
@@ -283,7 +519,7 @@ func TestFailedStorageMigrationCanBeCanceledForReconciliation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := background.Migrate(db); err != nil {

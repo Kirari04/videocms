@@ -85,7 +85,7 @@ func TestStorageMigrationS3ToSFTPIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.Quality{}, &models.Audio{}, &models.Subtitle{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}, &models.StorageMigrationObject{}); err != nil {
 		t.Fatal(err)
 	}
 	file := models.File{UUID: fileUUID, StorageID: "s3", StorageState: models.FileStorageAvailable, Size: int64(len("garage-to-sftp-media"))}

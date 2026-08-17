@@ -3,6 +3,9 @@ package models
 import "time"
 
 const (
+	StorageMigrationScopeAll      = "all"
+	StorageMigrationScopeAccounts = "accounts"
+
 	StorageMigrationQueued             = "queued"
 	StorageMigrationRunning            = "running"
 	StorageMigrationPaused             = "paused"
@@ -36,6 +39,9 @@ type StorageMigration struct {
 	DestinationPoolID   uint   `gorm:"index"`
 	SourcePoolName      string `gorm:"size:120"`
 	DestinationPoolName string `gorm:"size:120"`
+	Scope               string `gorm:"size:24;index;default:all"`
+	AccountCount        int
+	SharedFileCount     int64
 	BackgroundJobID     string `gorm:"size:36;index"`
 	CleanupJobID        string `gorm:"size:36;index"`
 	Status              string `gorm:"size:32;index"`
@@ -59,7 +65,17 @@ type StorageMigration struct {
 	ErrorCode           string `gorm:"size:80"`
 	ErrorMessage        string `gorm:"size:512"`
 
-	Items []StorageMigrationItem `gorm:"foreignKey:MigrationID" json:"-"`
+	Items    []StorageMigrationItem    `gorm:"foreignKey:MigrationID" json:"-"`
+	Accounts []StorageMigrationAccount `gorm:"foreignKey:MigrationID" json:"Accounts,omitempty"`
+}
+
+// StorageMigrationAccount preserves the selected account identity as it was
+// shown to the administrator. It intentionally does not reference users with a
+// foreign key so migration history survives account deletion.
+type StorageMigrationAccount struct {
+	MigrationID uint   `gorm:"primaryKey" json:"MigrationID"`
+	UserID      uint   `gorm:"primaryKey;index" json:"UserID"`
+	Username    string `gorm:"size:32" json:"Username"`
 }
 
 type StorageMigrationItem struct {
@@ -84,4 +100,18 @@ type StorageMigrationItem struct {
 	VerifiedAt         *time.Time
 	CutoverAt          *time.Time
 	CleanedAt          *time.Time
+}
+
+// StorageMigrationObject is a short-lived durable checkpoint. It allows a
+// retry to trust an object that this migration already uploaded and validated
+// without downloading the destination again. Checkpoints are removed at
+// cutover or when an incomplete destination is discarded.
+type StorageMigrationObject struct {
+	ItemID          uint   `gorm:"primaryKey;autoIncrement:false"`
+	ObjectKey       string `gorm:"primaryKey;size:1024"`
+	SourceRevision  string `gorm:"size:64"`
+	SourceSize      int64
+	DestinationETag string    `gorm:"size:255"`
+	Checksum        string    `gorm:"size:64"`
+	UpdatedAt       time.Time `gorm:"index"`
 }

@@ -2,11 +2,22 @@ package storage
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+type openCountingStore struct {
+	Store
+	opens int
+}
+
+func (s *openCountingStore) Open(ctx context.Context, key Key) (*Object, error) {
+	s.opens++
+	return s.Store.Open(ctx, key)
+}
 
 func TestCopyObjectVerifiedCopiesMetadataAndSkipsVerifiedDestination(t *testing.T) {
 	source, err := NewLocalStore(t.TempDir())
@@ -39,6 +50,46 @@ func TestCopyObjectVerifiedCopiesMetadataAndSkipsVerifiedDestination(t *testing.
 	}
 	if second.Copied || second.Checksum != first.Checksum {
 		t.Fatalf("verified destination was not reused: %#v", second)
+	}
+}
+
+func TestCopyObjectValidatedUsesTransportValidationWithoutDestinationReadback(t *testing.T) {
+	source, err := NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	destinationLocal, err := NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	destination := &openCountingStore{Store: destinationLocal}
+	key := copyTestKey(t, "video/1080p/out288.ts")
+	size := int64(len("segment-data"))
+	if _, err := source.Put(context.Background(), key, strings.NewReader("segment-data"), PutOptions{ExpectedSize: &size}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := source.Stat(context.Background(), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := CopyObjectValidated(context.Background(), source, destination, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Copied || result.Checksum == "" || result.Info.Size != size {
+		t.Fatalf("unexpected validated copy: %#v", result)
+	}
+	if destination.opens != 0 {
+		t.Fatalf("destination was downloaded %d time(s) after upload", destination.opens)
+	}
+	object, err := destinationLocal.Open(context.Background(), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer object.Body.Close()
+	data, err := io.ReadAll(object.Body)
+	if err != nil || string(data) != "segment-data" {
+		t.Fatalf("stored data = %q, %v", data, err)
 	}
 }
 

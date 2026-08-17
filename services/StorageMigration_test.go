@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -25,7 +26,7 @@ func TestStorageMigrationBackgroundJobCutsOverAndSchedulesDeferredCleanup(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}, &models.StorageMigrationObject{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := background.Migrate(db); err != nil {
@@ -100,7 +101,7 @@ func TestStorageMigrationCopiesFinalChangesBeforeAtomicCutover(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.Quality{}, &models.Audio{}, &models.Subtitle{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}, &models.StorageMigrationObject{}); err != nil {
 		t.Fatal(err)
 	}
 	source, err := storage.NewLocalStore(t.TempDir())
@@ -176,12 +177,270 @@ func TestStorageMigrationCopiesFinalChangesBeforeAtomicCutover(t *testing.T) {
 	}
 }
 
+func TestStorageMigrationRetriesObjectsInPlaceAndCopiesSegmentsConcurrently(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}, &models.StorageMigrationObject{}); err != nil {
+		t.Fatal(err)
+	}
+	source, _ := storage.NewLocalStore(t.TempDir())
+	destinationLocal, _ := storage.NewLocalStore(t.TempDir())
+	file := models.File{UUID: "550e8400-e29b-41d4-a716-446655440207", StorageID: "source", StorageState: models.FileStorageAvailable}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+	prefix, err := storage.LegacyMediaLayout{}.FilePrefix(file.UUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := make([]storage.Key, 0, 13)
+	for index := 0; index < 12; index++ {
+		key := migrationTestKey(t, fmt.Sprintf("%s/1080p/out%03d.ts", prefix.String(), index))
+		putMigrationTestObject(t, source, key, fmt.Sprintf("segment-%03d", index))
+		keys = append(keys, key)
+	}
+	manifest := migrationTestKey(t, prefix.String()+"/1080p/index.m3u8")
+	putMigrationTestObject(t, source, manifest, "manifest")
+	keys = append(keys, manifest)
+	flakyKey := keys[5].String()
+	destination := &migrationObservedPutStore{
+		Store: destinationLocal, delay: 20 * time.Millisecond,
+		failures: map[string]int{flakyKey: 2}, attempts: make(map[string]int),
+	}
+	service, err := storage.NewService("source", storage.LegacyMediaLayout{}, map[string]storage.Store{"source": source, "destination": destination})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = service.Close() })
+	migration := models.StorageMigration{UUID: "parallel-object-copy", Status: models.StorageMigrationRunning, FileCount: 1}
+	if err := db.Create(&migration).Error; err != nil {
+		t.Fatal(err)
+	}
+	item := models.StorageMigrationItem{
+		MigrationID: migration.ID, FileID: file.ID, FileUUID: file.UUID,
+		SourceMountID: "source", DestinationMountID: "destination",
+		Status: models.StorageMigrationItemPending, ReservationKey: fmt.Sprintf("file:%d", file.ID),
+	}
+	if err := db.Create(&item).Error; err != nil {
+		t.Fatal(err)
+	}
+	worker := NewWorkerGroup(&app.Deps{DB: db, Storage: service}, nil)
+	if err := worker.migrateStorageItem(context.Background(), migration, &item); err != nil {
+		t.Fatal(err)
+	}
+	if attempts := destination.attemptCount(flakyKey); attempts != 3 {
+		t.Fatalf("flaky object attempts = %d, want 3", attempts)
+	}
+	if maximum := destination.maximumConcurrency(); maximum < 2 || maximum > storageMigrationObjectConcurrency {
+		t.Fatalf("object copy concurrency = %d, want 2..%d", maximum, storageMigrationObjectConcurrency)
+	}
+	if destination.manifestOverlappedSegments() {
+		t.Fatal("manifest upload started before all segment uploads completed")
+	}
+	if err := db.First(&file, file.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if file.StorageID != "destination" {
+		t.Fatalf("file remained on %q", file.StorageID)
+	}
+	var checkpointCount int64
+	if err := db.Model(&models.StorageMigrationObject{}).Where("item_id = ?", item.ID).Count(&checkpointCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if checkpointCount != 0 {
+		t.Fatalf("%d checkpoint(s) remained after cutover", checkpointCount)
+	}
+}
+
+func TestStorageMigrationReusesDurableObjectCheckpoints(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}, &models.StorageMigrationObject{}); err != nil {
+		t.Fatal(err)
+	}
+	source, _ := storage.NewLocalStore(t.TempDir())
+	destinationLocal, _ := storage.NewLocalStore(t.TempDir())
+	file := models.File{UUID: "550e8400-e29b-41d4-a716-446655440208", StorageID: "source", StorageState: models.FileStorageAvailable}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+	first := migrationTestKey(t, file.UUID+"/720p/out000.ts")
+	second := migrationTestKey(t, file.UUID+"/720p/out001.ts")
+	putMigrationTestObject(t, source, first, "first")
+	putMigrationTestObject(t, source, second, "second")
+	putMigrationTestObject(t, destinationLocal, first, "first")
+	firstInfo, err := source.Stat(context.Background(), first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	destination := &migrationObservedPutStore{Store: destinationLocal, attempts: make(map[string]int), failures: make(map[string]int)}
+	service, err := storage.NewService("source", storage.LegacyMediaLayout{}, map[string]storage.Store{"source": source, "destination": destination})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = service.Close() })
+	migration := models.StorageMigration{UUID: "checkpoint-resume", Status: models.StorageMigrationRunning, FileCount: 1}
+	if err := db.Create(&migration).Error; err != nil {
+		t.Fatal(err)
+	}
+	item := models.StorageMigrationItem{
+		MigrationID: migration.ID, FileID: file.ID, FileUUID: file.UUID,
+		SourceMountID: "source", DestinationMountID: "destination", DestinationOwned: true,
+		Status: models.StorageMigrationItemCopying, ReservationKey: fmt.Sprintf("file:%d", file.ID),
+	}
+	if err := db.Create(&item).Error; err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := models.StorageMigrationObject{
+		ItemID: item.ID, ObjectKey: first.String(), SourceRevision: storageMigrationObjectRevision(firstInfo),
+		SourceSize: firstInfo.Size, Checksum: fmt.Sprintf("%x", sha256.Sum256([]byte("first"))), UpdatedAt: time.Now().UTC(),
+	}
+	if err := db.Create(&checkpoint).Error; err != nil {
+		t.Fatal(err)
+	}
+	worker := NewWorkerGroup(&app.Deps{DB: db, Storage: service}, nil)
+	if err := worker.copyStorageMigrationPrefix(context.Background(), &item, file, false); err != nil {
+		t.Fatal(err)
+	}
+	if attempts := destination.attemptCount(first.String()); attempts != 0 {
+		t.Fatalf("checkpointed object was uploaded %d time(s)", attempts)
+	}
+	if attempts := destination.attemptCount(second.String()); attempts != 1 {
+		t.Fatalf("new object uploads = %d, want 1", attempts)
+	}
+	if err := db.First(&item, item.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if item.ObjectsVerified != 2 || item.BytesCopied != int64(len("first")+len("second")) {
+		t.Fatalf("unexpected resumed progress: %#v", item)
+	}
+	var checkpointCount int64
+	if err := db.Model(&models.StorageMigrationObject{}).Where("item_id = ?", item.ID).Count(&checkpointCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if checkpointCount != 2 {
+		t.Fatalf("checkpoint count = %d, want 2", checkpointCount)
+	}
+
+	// A same-size destination corruption must not be trusted when the store has
+	// no ETag. The saved checksum makes the final pass repair it.
+	putMigrationTestObject(t, destinationLocal, first, "wrong")
+	if err := worker.copyStorageMigrationPrefix(context.Background(), &item, file, true); err != nil {
+		t.Fatal(err)
+	}
+	if attempts := destination.attemptCount(first.String()); attempts != 1 {
+		t.Fatalf("corrupted checkpointed object uploads = %d, want 1", attempts)
+	}
+	assertMigrationTestObject(t, destination, first, "first")
+
+	// A same-size source replacement must not be mistaken for the already
+	// copied object either. The final pass compares its source revision.
+	time.Sleep(time.Millisecond)
+	putMigrationTestObject(t, source, first, "fresh")
+	if err := worker.copyStorageMigrationPrefix(context.Background(), &item, file, true); err != nil {
+		t.Fatal(err)
+	}
+	if attempts := destination.attemptCount(first.String()); attempts != 2 {
+		t.Fatalf("changed checkpointed object uploads = %d, want 2 total", attempts)
+	}
+	if attempts := destination.attemptCount(second.String()); attempts != 1 {
+		t.Fatalf("unchanged checkpointed object uploads = %d, want 1 total", attempts)
+	}
+	assertMigrationTestObject(t, destination, first, "fresh")
+}
+
+func TestStorageMigrationCleanupWaitsForActiveEncoding(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(
+		&models.File{}, &models.Quality{}, &models.Audio{}, &models.Subtitle{},
+		&models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{},
+	); err != nil {
+		t.Fatal(err)
+	}
+	source, _ := storage.NewLocalStore(t.TempDir())
+	destination, _ := storage.NewLocalStore(t.TempDir())
+	service, err := storage.NewService("source", storage.LegacyMediaLayout{}, map[string]storage.Store{"source": source, "destination": destination})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = service.Close() })
+	file := models.File{UUID: "550e8400-e29b-41d4-a716-446655440206", StorageID: "destination", StorageState: models.FileStorageAvailable}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+	quality := models.Quality{FileID: file.ID, Name: "720p", Encoding: true}
+	if err := db.Create(&quality).Error; err != nil {
+		t.Fatal(err)
+	}
+	key := migrationTestKey(t, file.UUID+"/source/original.mp4")
+	putMigrationTestObject(t, source, key, "media")
+	migration := models.StorageMigration{UUID: "encoding-cleanup-wait", Status: models.StorageMigrationRetainingOriginals, FileCount: 1}
+	if err := db.Create(&migration).Error; err != nil {
+		t.Fatal(err)
+	}
+	item := models.StorageMigrationItem{
+		MigrationID: migration.ID, FileID: file.ID, FileUUID: file.UUID,
+		SourceMountID: "source", DestinationMountID: "destination",
+		Status: models.StorageMigrationItemCleanupPending, ReservationKey: fmt.Sprintf("file:%d", file.ID),
+	}
+	if err := db.Create(&item).Error; err != nil {
+		t.Fatal(err)
+	}
+	worker := NewWorkerGroup(&app.Deps{DB: db, Storage: service}, nil)
+	handler := worker.storageMigrationCleanupHandler
+	task := background.Task{PayloadVersion: 1, Payload: fmt.Sprintf(`{"migrationId":%d}`, migration.ID)}
+	if _, err := handler(context.Background(), task); err == nil {
+		t.Fatal("cleanup proceeded while encoding was active")
+	} else {
+		var taskErr *background.TaskError
+		if !errors.As(err, &taskErr) || taskErr.Class != background.ErrorDeferred || taskErr.Code != "encoding_active" {
+			t.Fatalf("cleanup returned %T %v, want an encoding deferral", err, err)
+		}
+	}
+	assertMigrationTestObject(t, source, key, "media")
+	if err := db.First(&item, item.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if item.Status != models.StorageMigrationItemCleanupPending || item.ProgressMessage != "Waiting for video encoding to finish" {
+		t.Fatalf("unexpected waiting item state: %#v", item)
+	}
+	if err := db.First(&migration, migration.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if migration.Status != models.StorageMigrationCleaningOriginals || migration.Phase != "Waiting for video encoding to finish" {
+		t.Fatalf("unexpected waiting migration state: %#v", migration)
+	}
+
+	if err := db.Model(&quality).Update("encoding", false).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handler(context.Background(), task); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := source.Stat(context.Background(), key); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("source remained after encoding completed: %v", err)
+	}
+	if err := db.First(&item, item.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if item.Status != models.StorageMigrationItemCleaned || item.ReservationKey != "" {
+		t.Fatalf("unexpected cleaned item: %#v", item)
+	}
+}
+
 func TestStorageMigrationDeletionBetweenCopyAndCutoverIsTerminal(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}, &models.StorageMigrationObject{}); err != nil {
 		t.Fatal(err)
 	}
 	source, err := storage.NewLocalStore(t.TempDir())
@@ -260,7 +519,7 @@ func TestStorageMigrationCleanupSkipsDeletedVideo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.StorageMigrationItem{}, &models.StorageMigrationObject{}); err != nil {
 		t.Fatal(err)
 	}
 	source, _ := storage.NewLocalStore(t.TempDir())
@@ -304,7 +563,7 @@ func TestStorageMigrationCleanupStopsOnlyBetweenVideos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.Quality{}, &models.Audio{}, &models.Subtitle{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}, &models.StorageMigrationObject{}); err != nil {
 		t.Fatal(err)
 	}
 	sourceLocal, err := storage.NewLocalStore(t.TempDir())
@@ -382,7 +641,7 @@ func TestStorageMigrationRefusesUnownedDestinationPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}, &models.StorageMigrationObject{}); err != nil {
 		t.Fatal(err)
 	}
 	source, _ := storage.NewLocalStore(t.TempDir())
@@ -420,7 +679,7 @@ func TestCanceledStorageMigrationRemovesOnlyUnreferencedDestinationData(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}, &models.StorageMigrationObject{}); err != nil {
 		t.Fatal(err)
 	}
 	source, _ := storage.NewLocalStore(t.TempDir())
@@ -438,6 +697,9 @@ func TestCanceledStorageMigrationRemovesOnlyUnreferencedDestinationData(t *testi
 	putMigrationTestObject(t, destination, pendingKey, "partial")
 	pending := models.StorageMigrationItem{MigrationID: migration.ID, FileID: pendingFile.ID, FileUUID: pendingFile.UUID, SourceMountID: "source", DestinationMountID: "destination", Status: models.StorageMigrationItemCopying, ReservationKey: fmt.Sprintf("file:%d", pendingFile.ID), DestinationOwned: true}
 	db.Create(&pending)
+	if err := db.Create(&models.StorageMigrationObject{ItemID: pending.ID, ObjectKey: pendingKey.String(), SourceRevision: "pending"}).Error; err != nil {
+		t.Fatal(err)
+	}
 	if err := worker.cleanupCanceledStorageMigrationItem(context.Background(), &pending); err != nil {
 		t.Fatal(err)
 	}
@@ -445,6 +707,13 @@ func TestCanceledStorageMigrationRemovesOnlyUnreferencedDestinationData(t *testi
 		t.Fatalf("partial destination remained: %v", err)
 	}
 	assertMigrationTestObject(t, source, pendingKey, "source")
+	var pendingCheckpointCount int64
+	if err := db.Model(&models.StorageMigrationObject{}).Where("item_id = ?", pending.ID).Count(&pendingCheckpointCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if pendingCheckpointCount != 0 {
+		t.Fatalf("%d canceled-item checkpoint(s) remained", pendingCheckpointCount)
+	}
 
 	cutoverFile := models.File{UUID: "550e8400-e29b-41d4-a716-446655440402", StorageID: "destination", StorageState: models.FileStorageAvailable}
 	db.Create(&cutoverFile)
@@ -472,7 +741,7 @@ func TestStorageMigrationReconciliationRepairsCanceledJobCrashWindow(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}, &models.StorageMigrationObject{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := background.Migrate(db); err != nil {
@@ -609,6 +878,80 @@ type migrationHookStore struct {
 	storage.Store
 	once sync.Once
 	hook func()
+}
+
+type migrationObservedPutStore struct {
+	storage.Store
+	delay time.Duration
+
+	mu                     sync.Mutex
+	attempts               map[string]int
+	failures               map[string]int
+	active                 int
+	maxActive              int
+	activeSegments         int
+	manifestSegmentOverlap bool
+}
+
+func (s *migrationObservedPutStore) Put(ctx context.Context, key storage.Key, source io.Reader, options storage.PutOptions) (storage.ObjectInfo, error) {
+	isManifest := strings.HasSuffix(strings.ToLower(key.String()), ".m3u8")
+	s.mu.Lock()
+	s.attempts[key.String()]++
+	s.active++
+	if s.active > s.maxActive {
+		s.maxActive = s.active
+	}
+	if isManifest {
+		if s.activeSegments > 0 {
+			s.manifestSegmentOverlap = true
+		}
+	} else {
+		s.activeSegments++
+	}
+	shouldFail := s.failures[key.String()] > 0
+	if shouldFail {
+		s.failures[key.String()]--
+	}
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.active--
+		if !isManifest {
+			s.activeSegments--
+		}
+		s.mu.Unlock()
+	}()
+	if s.delay > 0 {
+		timer := time.NewTimer(s.delay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return storage.ObjectInfo{}, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	if shouldFail {
+		return storage.ObjectInfo{}, io.ErrUnexpectedEOF
+	}
+	return s.Store.Put(ctx, key, source, options)
+}
+
+func (s *migrationObservedPutStore) attemptCount(key string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.attempts[key]
+}
+
+func (s *migrationObservedPutStore) maximumConcurrency() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.maxActive
+}
+
+func (s *migrationObservedPutStore) manifestOverlappedSegments() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.manifestSegmentOverlap
 }
 
 type migrationBlockingDeleteStore struct {

@@ -21,11 +21,15 @@ var (
 	ErrStorageMigrationConflict    = errors.New("storage migration conflicts with existing work")
 	ErrStorageMigrationEmpty       = errors.New("source pool contains no available videos")
 	ErrStorageMigrationUnavailable = errors.New("storage migration requires available mounts and media")
+	ErrStorageMigrationAccounts    = errors.New("storage migration account selection is invalid")
 )
+
+const maxStorageMigrationAccounts = 500
 
 type StorageMigrationInput struct {
 	SourcePoolID      uint   `json:"sourcePoolId" validate:"required"`
 	DestinationPoolID uint   `json:"destinationPoolId" validate:"required"`
+	AccountIDs        []uint `json:"accountIds,omitempty"`
 	PlanFingerprint   string `json:"planFingerprint,omitempty"`
 	IdempotencyKey    string `json:"-"`
 }
@@ -45,11 +49,19 @@ type StorageMigrationPlacementPreview struct {
 	PlannedBytes int64  `json:"plannedBytes"`
 }
 
+type StorageMigrationAccountPreview struct {
+	ID       uint   `json:"id"`
+	Username string `json:"username"`
+}
+
 type StorageMigrationPreview struct {
 	SourcePoolID          uint                               `json:"sourcePoolId"`
 	SourcePoolName        string                             `json:"sourcePoolName"`
 	DestinationPoolID     uint                               `json:"destinationPoolId"`
 	DestinationPoolName   string                             `json:"destinationPoolName"`
+	Scope                 string                             `json:"scope"`
+	Accounts              []StorageMigrationAccountPreview   `json:"accounts"`
+	SharedFileCount       int64                              `json:"sharedFileCount"`
 	FileCount             int64                              `json:"fileCount"`
 	PlannedBytes          int64                              `json:"plannedBytes"`
 	SourceMounts          []StorageMigrationMountPreview     `json:"sourceMounts"`
@@ -67,10 +79,30 @@ type StorageMigrationSummary struct {
 	VideosMoved        int64 `json:"videosMoved"`
 }
 
+func (s *Service) ListStorageMigrationAccounts(ctx context.Context, search string, limit int) ([]StorageMigrationAccountPreview, error) {
+	if s == nil || s.Deps == nil || s.Deps.DB == nil {
+		return nil, errors.New("storage migration account lookup is not configured")
+	}
+	if limit < 1 || limit > 50 {
+		limit = 20
+	}
+	query := s.Deps.DB.WithContext(ctx).Model(&models.User{}).Select("id", "username")
+	if search = strings.TrimSpace(search); search != "" {
+		query = query.Where("username LIKE ?", "%"+search+"%")
+	}
+	var accounts []StorageMigrationAccountPreview
+	err := query.Order("username ASC, id ASC").Limit(limit).Scan(&accounts).Error
+	if accounts == nil {
+		accounts = []StorageMigrationAccountPreview{}
+	}
+	return accounts, err
+}
+
 type storageMigrationPlan struct {
 	preview     StorageMigrationPreview
 	files       []models.File
 	destination map[uint]string
+	accounts    []StorageMigrationAccountPreview
 }
 
 type storageMountUsageRow struct {
@@ -139,6 +171,9 @@ func (s *Service) StartStorageMigration(ctx context.Context, input StorageMigrat
 		DestinationPoolID:   input.DestinationPoolID,
 		SourcePoolName:      plan.preview.SourcePoolName,
 		DestinationPoolName: plan.preview.DestinationPoolName,
+		Scope:               plan.preview.Scope,
+		AccountCount:        len(plan.accounts),
+		SharedFileCount:     plan.preview.SharedFileCount,
 		Status:              models.StorageMigrationQueued,
 		Phase:               "Waiting to start",
 		FileCount:           plan.preview.FileCount,
@@ -149,6 +184,17 @@ func (s *Service) StartStorageMigration(ctx context.Context, input StorageMigrat
 	err = s.Deps.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(migration).Error; err != nil {
 			return err
+		}
+		if len(plan.accounts) > 0 {
+			accounts := make([]models.StorageMigrationAccount, 0, len(plan.accounts))
+			for _, account := range plan.accounts {
+				accounts = append(accounts, models.StorageMigrationAccount{
+					MigrationID: migration.ID, UserID: account.ID, Username: account.Username,
+				})
+			}
+			if err := tx.CreateInBatches(&accounts, 100).Error; err != nil {
+				return err
+			}
 		}
 		items := make([]models.StorageMigrationItem, 0, len(plan.files))
 		for _, file := range plan.files {
@@ -243,11 +289,15 @@ func (s *Service) storageMigrationByRequest(ctx context.Context, requestKey stri
 }
 
 func storageMigrationJobSpec(migration models.StorageMigration) background.JobSpec {
+	label := fmt.Sprintf("Migrate %s to %s", migration.SourcePoolName, migration.DestinationPoolName)
+	if migration.Scope == models.StorageMigrationScopeAccounts {
+		label = fmt.Sprintf("Migrate videos for %d accounts from %s to %s", migration.AccountCount, migration.SourcePoolName, migration.DestinationPoolName)
+	}
 	return background.JobSpec{
 		Kind: "storage.migration", Visibility: background.VisibilityAdmin,
 		SubjectType: "storage_migration", SubjectID: migration.UUID,
 		IdempotencyKey: "storage-migration:" + migration.UUID,
-		Label:          fmt.Sprintf("Migrate %s to %s", migration.SourcePoolName, migration.DestinationPoolName),
+		Label:          label,
 		Pausable:       true,
 		Tasks: []background.TaskSpec{{
 			Kind: "storage.migration.run", Queue: background.QueueStorage, Phase: "Migrating videos",
@@ -318,12 +368,66 @@ func sameStorageMigrationFiles(first, second []models.File) bool {
 	return true
 }
 
+func (s *Service) storageMigrationAccountScope(ctx context.Context, requested []uint) ([]uint, []StorageMigrationAccountPreview, error) {
+	if len(requested) == 0 {
+		return nil, []StorageMigrationAccountPreview{}, nil
+	}
+	if len(requested) > maxStorageMigrationAccounts {
+		return nil, nil, fmt.Errorf("%w: select at most %d accounts", ErrStorageMigrationAccounts, maxStorageMigrationAccounts)
+	}
+	seen := make(map[uint]struct{}, len(requested))
+	accountIDs := make([]uint, 0, len(requested))
+	for _, accountID := range requested {
+		if accountID == 0 {
+			return nil, nil, fmt.Errorf("%w: account IDs must be positive", ErrStorageMigrationAccounts)
+		}
+		if _, exists := seen[accountID]; exists {
+			continue
+		}
+		seen[accountID] = struct{}{}
+		accountIDs = append(accountIDs, accountID)
+	}
+	sort.Slice(accountIDs, func(i, j int) bool { return accountIDs[i] < accountIDs[j] })
+	var users []models.User
+	if err := s.Deps.DB.WithContext(ctx).Select("id", "username").Where("id IN ?", accountIDs).Order("id ASC").Find(&users).Error; err != nil {
+		return nil, nil, err
+	}
+	if len(users) != len(accountIDs) {
+		return nil, nil, fmt.Errorf("%w: one or more selected accounts no longer exist", ErrStorageMigrationAccounts)
+	}
+	accounts := make([]StorageMigrationAccountPreview, 0, len(users))
+	for _, user := range users {
+		accounts = append(accounts, StorageMigrationAccountPreview{ID: user.ID, Username: user.Username})
+	}
+	return accountIDs, accounts, nil
+}
+
+func applyStorageMigrationAccountScope(query *gorm.DB, accountIDs []uint) *gorm.DB {
+	if len(accountIDs) == 0 {
+		return query
+	}
+	return query.Where(`EXISTS (
+		SELECT 1 FROM links
+		WHERE links.file_id = files.id
+			AND links.deleted_at IS NULL
+			AND links.user_id IN ?
+	)`, accountIDs)
+}
+
 func (s *Service) buildStorageMigrationPlan(ctx context.Context, input StorageMigrationInput) (storageMigrationPlan, error) {
 	if s == nil || s.Deps == nil || s.Deps.DB == nil || s.Deps.Storage == nil {
 		return storageMigrationPlan{}, storage.ErrStoreNotConfigured
 	}
 	if input.SourcePoolID == 0 || input.DestinationPoolID == 0 || input.SourcePoolID == input.DestinationPoolID {
 		return storageMigrationPlan{}, fmt.Errorf("%w: source and destination pools must be different", ErrStorageMigrationConflict)
+	}
+	accountIDs, accounts, err := s.storageMigrationAccountScope(ctx, input.AccountIDs)
+	if err != nil {
+		return storageMigrationPlan{}, err
+	}
+	scope := models.StorageMigrationScopeAll
+	if len(accountIDs) > 0 {
+		scope = models.StorageMigrationScopeAccounts
 	}
 	var sourcePool, destinationPool models.StoragePool
 	preload := func(db *gorm.DB) *gorm.DB { return db.Preload("Members.StorageMount") }
@@ -352,18 +456,18 @@ func (s *Service) buildStorageMigrationPlan(ctx context.Context, input StorageMi
 	}
 
 	var unavailable int64
-	if err := s.Deps.DB.WithContext(ctx).Model(&models.File{}).
-		Where("storage_id IN ? AND storage_state = ?", sourceIDs, models.FileStorageUnavailable).
-		Count(&unavailable).Error; err != nil {
+	unavailableQuery := s.Deps.DB.WithContext(ctx).Model(&models.File{}).
+		Where("storage_id IN ? AND storage_state = ?", sourceIDs, models.FileStorageUnavailable)
+	if err := applyStorageMigrationAccountScope(unavailableQuery, accountIDs).Count(&unavailable).Error; err != nil {
 		return storageMigrationPlan{}, err
 	}
 	if unavailable > 0 {
 		return storageMigrationPlan{}, fmt.Errorf("%w: source pool contains %d unavailable videos", ErrStorageMigrationUnavailable, unavailable)
 	}
 	var files []models.File
-	if err := s.Deps.DB.WithContext(ctx).
-		Where("storage_id IN ? AND storage_state = ?", sourceIDs, models.FileStorageAvailable).
-		Order("size DESC, id ASC").Find(&files).Error; err != nil {
+	filesQuery := s.Deps.DB.WithContext(ctx).Model(&models.File{}).
+		Where("storage_id IN ? AND storage_state = ?", sourceIDs, models.FileStorageAvailable)
+	if err := applyStorageMigrationAccountScope(filesQuery, accountIDs).Order("size DESC, id ASC").Find(&files).Error; err != nil {
 		return storageMigrationPlan{}, err
 	}
 	if len(files) == 0 {
@@ -373,19 +477,32 @@ func (s *Service) buildStorageMigrationPlan(ctx context.Context, input StorageMi
 	for _, file := range files {
 		plannedBytes += file.Size
 	}
+	fileIDs := make([]uint, 0, len(files))
+	for _, file := range files {
+		fileIDs = append(fileIDs, file.ID)
+	}
 	var reserved int64
 	if err := s.Deps.DB.WithContext(ctx).Model(&models.StorageMigrationItem{}).
-		Where(`reservation_key <> '' AND EXISTS (
-			SELECT 1 FROM files
-			WHERE files.id = storage_migration_items.file_id
-			AND files.deleted_at IS NULL
-			AND files.storage_id IN ?
-			AND files.storage_state = ?
-		)`, sourceIDs, models.FileStorageAvailable).Count(&reserved).Error; err != nil {
+		Where("reservation_key <> '' AND file_id IN ?", fileIDs).Count(&reserved).Error; err != nil {
 		return storageMigrationPlan{}, err
 	}
 	if reserved > 0 {
 		return storageMigrationPlan{}, fmt.Errorf("%w: %d videos are already reserved by another migration", ErrStorageMigrationConflict, reserved)
+	}
+	var sharedFileCount int64
+	if len(accountIDs) > 0 {
+		if err := s.Deps.DB.WithContext(ctx).Model(&models.File{}).
+			Where("id IN ?", fileIDs).
+			Where(`EXISTS (
+				SELECT 1 FROM links
+				JOIN users ON users.id = links.user_id AND users.deleted_at IS NULL
+				WHERE links.file_id = files.id
+					AND links.deleted_at IS NULL
+					AND links.user_id NOT IN ?
+			)`, accountIDs).
+			Count(&sharedFileCount).Error; err != nil {
+			return storageMigrationPlan{}, err
+		}
 	}
 
 	usage := make(map[string]int64, len(destinationIDs))
@@ -429,25 +546,41 @@ func (s *Service) buildStorageMigrationPlan(ctx context.Context, input StorageMi
 	}
 
 	warnings := []string{"Videos uploaded after this snapshot will not be included.", "Upload routing is not changed automatically."}
+	if sharedFileCount > 0 {
+		videoLabel, verb := "videos", "are"
+		if sharedFileCount == 1 {
+			videoLabel, verb = "video", "is"
+		}
+		warnings = append(warnings, fmt.Sprintf("%d selected %s %s also used by other accounts; shared physical files move once for everyone.", sharedFileCount, videoLabel, verb))
+	}
 	if sourcePool.IsDefault {
 		warnings = append(warnings, "The source is still the default upload pool.")
 	}
 	var overrideCount int64
-	if err := s.Deps.DB.WithContext(ctx).Model(&models.User{}).Where("storage_pool_id = ?", sourcePool.ID).Count(&overrideCount).Error; err != nil {
+	overrideQuery := s.Deps.DB.WithContext(ctx).Model(&models.User{}).Where("storage_pool_id = ?", sourcePool.ID)
+	if len(accountIDs) > 0 {
+		overrideQuery = overrideQuery.Where("id IN ?", accountIDs)
+	}
+	if err := overrideQuery.Count(&overrideCount).Error; err != nil {
 		return storageMigrationPlan{}, err
 	}
 	if overrideCount > 0 {
-		warnings = append(warnings, fmt.Sprintf("%d users still upload to the source pool.", overrideCount))
+		label := "accounts"
+		if len(accountIDs) > 0 {
+			label = "selected accounts"
+		}
+		warnings = append(warnings, fmt.Sprintf("%d %s still upload to the source pool.", overrideCount, label))
 	}
 	plan := storageMigrationPlan{
 		preview: StorageMigrationPreview{
 			SourcePoolID: sourcePool.ID, SourcePoolName: sourcePool.Name,
 			DestinationPoolID: destinationPool.ID, DestinationPoolName: destinationPool.Name,
+			Scope: scope, Accounts: accounts, SharedFileCount: sharedFileCount,
 			FileCount: int64(len(files)), PlannedBytes: plannedBytes,
 			SourceMounts: sourceMounts, DestinationMounts: destinationMounts,
 			DestinationPlacements: placements, Warnings: warnings, CleanupGraceHours: 24,
 		},
-		files: files, destination: destination,
+		files: files, destination: destination, accounts: accounts,
 	}
 	plan.preview.PlanFingerprint = storageMigrationPlanFingerprint(plan)
 	return plan, nil
@@ -455,7 +588,10 @@ func (s *Service) buildStorageMigrationPlan(ctx context.Context, input StorageMi
 
 func storageMigrationPlanFingerprint(plan storageMigrationPlan) string {
 	digest := sha256.New()
-	_, _ = fmt.Fprintf(digest, "source-pool:%d\ndestination-pool:%d\n", plan.preview.SourcePoolID, plan.preview.DestinationPoolID)
+	_, _ = fmt.Fprintf(digest, "source-pool:%d\ndestination-pool:%d\nscope:%s\nshared-files:%d\n", plan.preview.SourcePoolID, plan.preview.DestinationPoolID, plan.preview.Scope, plan.preview.SharedFileCount)
+	for _, account := range plan.accounts {
+		_, _ = fmt.Fprintf(digest, "account:%d:%q\n", account.ID, account.Username)
+	}
 	for _, mount := range plan.preview.SourceMounts {
 		_, _ = fmt.Fprintf(digest, "source-mount:%s\n", mount.UUID)
 	}
@@ -561,7 +697,9 @@ func (s *Service) GetStorageMigration(ctx context.Context, migrationUUID string)
 	if err != nil {
 		return models.StorageMigration{}, err
 	}
-	err = s.Deps.DB.WithContext(context.WithoutCancel(ctx)).First(&migration, migration.ID).Error
+	err = s.Deps.DB.WithContext(context.WithoutCancel(ctx)).Preload("Accounts", func(db *gorm.DB) *gorm.DB {
+		return db.Order("user_id ASC")
+	}).First(&migration, migration.ID).Error
 	return migration, err
 }
 

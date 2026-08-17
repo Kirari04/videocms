@@ -285,6 +285,42 @@ func TestTransientFailureRetriesThenSucceeds(t *testing.T) {
 	}
 }
 
+func TestDeferredTaskRetriesWithoutExhaustingRetryBudget(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	var calls atomic.Int32
+	if err := runtime.Register("test.deferred", func(context.Context, Task) (Result, error) {
+		if calls.Add(1) == 1 {
+			return Result{}, Deferred("prerequisite_pending", "Waiting for a prerequisite", time.Millisecond)
+		}
+		return Result{}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	startTestRuntime(t, runtime)
+	job := enqueueTestJob(t, runtime, "deferred", "test.deferred", QueueStorage, 1)
+	detail := waitForJob(t, runtime, job.ID, JobSucceeded)
+	if calls.Load() != 2 || len(detail.Tasks) != 1 {
+		t.Fatalf("expected a deferred attempt followed by success, calls=%d tasks=%#v", calls.Load(), detail.Tasks)
+	}
+	task := detail.Tasks[0]
+	if task.AttemptCount != 2 || task.MaxAttempts != 2 {
+		t.Fatalf("deferral consumed the retry budget: %#v", task)
+	}
+	if len(task.Attempts) != 2 || task.Attempts[0].Status != AttemptInterrupted || task.Attempts[1].Status != AttemptSucceeded {
+		t.Fatalf("unexpected deferred attempt history: %#v", task.Attempts)
+	}
+	foundDeferredEvent := false
+	for _, event := range detail.Events {
+		if event.Type == "task_deferred" {
+			foundDeferredEvent = true
+			break
+		}
+	}
+	if !foundDeferredEvent {
+		t.Fatalf("deferred task event was not recorded: %#v", detail.Events)
+	}
+}
+
 func TestPermanentFailureDoesNotRetryAndRedactsDiagnostics(t *testing.T) {
 	runtime, _ := testRuntime(t)
 	if err := runtime.Register("test.fail", func(context.Context, Task) (Result, error) {

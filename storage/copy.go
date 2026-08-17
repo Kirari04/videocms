@@ -12,9 +12,10 @@ import (
 )
 
 type VerifiedCopyResult struct {
-	Info     ObjectInfo
-	Checksum string
-	Copied   bool
+	Info       ObjectInfo
+	SourceInfo ObjectInfo
+	Checksum   string
+	Copied     bool
 }
 
 func PrefixInventory(ctx context.Context, store Store, prefix Key) ([]ObjectInfo, error) {
@@ -56,7 +57,7 @@ func CopyObjectVerified(ctx context.Context, source, destination Store, sourceIn
 			return VerifiedCopyResult{}, destinationErr
 		}
 		if sourceSize == destinationSize && sourceChecksum == destinationChecksum {
-			return VerifiedCopyResult{Info: destinationInfo, Checksum: sourceChecksum, Copied: false}, nil
+			return VerifiedCopyResult{Info: destinationInfo, SourceInfo: sourceInfo, Checksum: sourceChecksum, Copied: false}, nil
 		}
 	} else if err != nil && !errors.Is(err, ErrNotFound) {
 		return VerifiedCopyResult{}, err
@@ -87,7 +88,45 @@ func CopyObjectVerified(ctx context.Context, source, destination Store, sourceIn
 	if destinationSize != expectedSize || destinationChecksum != sourceChecksum {
 		return VerifiedCopyResult{}, fmt.Errorf("copied object %s failed checksum verification", sourceInfo.Key.String())
 	}
-	return VerifiedCopyResult{Info: written, Checksum: sourceChecksum, Copied: true}, nil
+	return VerifiedCopyResult{Info: written, SourceInfo: object.Info, Checksum: sourceChecksum, Copied: true}, nil
+}
+
+// CopyObjectValidated copies an object once and relies on Store.Put's atomic,
+// size-checked, transport-validated contract. S3 uploads are protected by the
+// SDK's request checksums, SFTP by SSH integrity and atomic rename, and local
+// writes by a temporary file and atomic rename. The source SHA-256 is retained
+// for the caller's durable checkpoint, avoiding an expensive destination
+// download after every successful upload.
+func CopyObjectValidated(ctx context.Context, source, destination Store, sourceInfo ObjectInfo) (VerifiedCopyResult, error) {
+	if source == nil || destination == nil {
+		return VerifiedCopyResult{}, ErrStoreNotConfigured
+	}
+	if err := ctx.Err(); err != nil {
+		return VerifiedCopyResult{}, err
+	}
+	object, err := source.Open(ctx, sourceInfo.Key)
+	if err != nil {
+		return VerifiedCopyResult{}, err
+	}
+	defer object.Body.Close()
+	if object.Info.Size != sourceInfo.Size {
+		return VerifiedCopyResult{}, fmt.Errorf("source object %s changed size from %d to %d", sourceInfo.Key.String(), sourceInfo.Size, object.Info.Size)
+	}
+	expectedSize := object.Info.Size
+	digest := sha256.New()
+	reader := io.TeeReader(&contextReader{ctx: ctx, reader: object.Body}, digest)
+	written, err := destination.Put(ctx, sourceInfo.Key, reader, PutOptions{
+		ContentType: object.Info.ContentType, CacheControl: object.Info.CacheControl, ExpectedSize: &expectedSize,
+	})
+	if err != nil {
+		return VerifiedCopyResult{}, err
+	}
+	if written.Size != expectedSize {
+		return VerifiedCopyResult{}, fmt.Errorf("copied object %s size mismatch: wrote %d, expected %d", sourceInfo.Key.String(), written.Size, expectedSize)
+	}
+	return VerifiedCopyResult{
+		Info: written, SourceInfo: object.Info, Checksum: fmt.Sprintf("%x", digest.Sum(nil)), Copied: true,
+	}, nil
 }
 
 func hashStoredObject(ctx context.Context, store Store, key Key) (string, int64, error) {

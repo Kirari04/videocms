@@ -78,6 +78,7 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	adminV2.POST("/storage/migrations/preview", handlers.PreviewStorageMigration)
 	adminV2.POST("/storage/migrations", handlers.CreateStorageMigration)
 	adminV2.GET("/storage/migrations", handlers.ListStorageMigrations)
+	adminV2.GET("/storage/migrations/accounts", handlers.ListStorageMigrationAccounts)
 	adminV2.GET("/storage/migrations/:id", handlers.GetStorageMigration)
 	adminV2.GET("/storage/migrations/:id/items", handlers.ListStorageMigrationItems)
 	adminV2.POST("/storage/migrations/:id/cancel", handlers.CancelFailedStorageMigration)

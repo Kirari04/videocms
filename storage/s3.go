@@ -26,6 +26,7 @@ const (
 	defaultS3UploadPartSize    = int64(16 * 1024 * 1024)
 	defaultS3UploadConcurrency = 4
 	minimumS3UploadPartSize    = int64(5 * 1024 * 1024)
+	maxS3ReadResumeAttempts    = 4
 )
 
 type S3Options struct {
@@ -210,18 +211,22 @@ func (s *S3Store) Put(ctx context.Context, key Key, src io.Reader, options PutOp
 	if options.CacheControl != "" {
 		input.CacheControl = aws.String(options.CacheControl)
 	}
-	if _, err := s.uploader.UploadObject(ctx, input); err != nil {
+	output, err := s.uploader.UploadObject(ctx, input)
+	if err != nil {
 		return ObjectInfo{}, fmt.Errorf("upload S3 object %s: %w", key.String(), err)
 	}
-	info, err := s.Stat(ctx, key)
-	if err != nil {
-		return ObjectInfo{}, err
+	if output == nil {
+		return ObjectInfo{}, fmt.Errorf("upload S3 object %s returned no result", key.String())
 	}
-	if options.ExpectedSize != nil && info.Size != *options.ExpectedSize {
-		sizeErr := fmt.Errorf("object %s size mismatch: stored %d, expected %d", key.String(), info.Size, *options.ExpectedSize)
+	storedSize := aws.ToInt64(output.ContentLength)
+	if options.ExpectedSize != nil && storedSize != *options.ExpectedSize {
+		sizeErr := fmt.Errorf("object %s size mismatch: stored %d, expected %d", key.String(), storedSize, *options.ExpectedSize)
 		return ObjectInfo{}, errors.Join(sizeErr, s.Delete(context.WithoutCancel(ctx), key))
 	}
-	return info, nil
+	return ObjectInfo{
+		Key: key, Size: storedSize, ContentType: options.ContentType,
+		CacheControl: options.CacheControl, ETag: aws.ToString(output.ETag),
+	}, nil
 }
 
 func validateSeekableSize(src io.Reader, expected int64) error {
@@ -425,6 +430,7 @@ type s3ReadSeekCloser struct {
 	position int64
 	body     io.ReadCloser
 	closed   bool
+	resumes  int
 }
 
 func (r *s3ReadSeekCloser) Read(buffer []byte) (int, error) {
@@ -442,24 +448,59 @@ func (r *s3ReadSeekCloser) Read(buffer []byte) (int, error) {
 	if r.position >= r.size {
 		return 0, io.EOF
 	}
-	if r.body == nil {
-		if err := r.openBody(); err != nil {
-			return 0, err
+	for {
+		if r.body == nil {
+			if err := r.openBody(); err != nil {
+				if retryErr := r.prepareResume(err); retryErr != nil {
+					return 0, retryErr
+				}
+				continue
+			}
 		}
-	}
-	n, err := r.body.Read(buffer)
-	r.position += int64(n)
-	if errors.Is(err, io.EOF) {
+		n, err := r.body.Read(buffer)
+		r.position += int64(n)
+		if err == nil {
+			return n, nil
+		}
 		closeErr := r.body.Close()
 		r.body = nil
-		if r.position < r.size {
-			err = io.ErrUnexpectedEOF
+		if r.position >= r.size {
+			if closeErr != nil {
+				return n, fmt.Errorf("close S3 object %s after reading: %w", r.key, closeErr)
+			}
+			// Keep io.EOF as the exact sentinel. io.ReadAll and io.Copy compare it
+			// directly rather than using errors.Is, so wrapping it would turn a
+			// complete short-object read into a false failure.
+			return n, io.EOF
 		}
-		if closeErr != nil {
-			err = errors.Join(err, closeErr)
+		if retryErr := r.prepareResume(errors.Join(err, closeErr)); retryErr != nil {
+			return n, retryErr
+		}
+		if n > 0 {
+			// Preserve the bytes already read. The next call resumes from the exact
+			// offset with If-Match protection against an object replacement.
+			return n, nil
 		}
 	}
-	return n, err
+}
+
+func (r *s3ReadSeekCloser) prepareResume(cause error) error {
+	if err := r.ctx.Err(); err != nil {
+		return err
+	}
+	if r.resumes >= maxS3ReadResumeAttempts {
+		return fmt.Errorf("read S3 object %s stopped at byte %d after %d resume attempts: %w", r.key, r.position, r.resumes, cause)
+	}
+	r.resumes++
+	delay := time.Duration(1<<(r.resumes-1)) * 50 * time.Millisecond
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-r.ctx.Done():
+		return r.ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (r *s3ReadSeekCloser) Seek(offset int64, whence int) (int64, error) {
@@ -496,6 +537,7 @@ func (r *s3ReadSeekCloser) Seek(offset int64, whence int) (int64, error) {
 		r.body = nil
 	}
 	r.position = target
+	r.resumes = 0
 	return target, nil
 }
 

@@ -76,7 +76,7 @@ func TestDeleterRemovesAllMigrationCopiesAndReleasesReservations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.Link{}, &models.Quality{}, &models.Audio{}, &models.Subtitle{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.Link{}, &models.Quality{}, &models.Audio{}, &models.Subtitle{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}, &models.StorageMigrationObject{}); err != nil {
 		t.Fatal(err)
 	}
 	source, _ := storage.NewLocalStore(t.TempDir())
@@ -119,6 +119,11 @@ func TestDeleterRemovesAllMigrationCopiesAndReleasesReservations(t *testing.T) {
 	if err := db.Create(&items).Error; err != nil {
 		t.Fatal(err)
 	}
+	for _, item := range items {
+		if err := db.Create(&models.StorageMigrationObject{ItemID: item.ID, ObjectKey: fmt.Sprintf("checkpoint/%d", item.ID), SourceRevision: "delete"}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
 	worker := NewWorkerGroup(&app.Deps{DB: db, Storage: storageService}, nil)
 	if err := worker.runDeleter(); err != nil {
 		t.Fatal(err)
@@ -150,6 +155,13 @@ func TestDeleterRemovesAllMigrationCopiesAndReleasesReservations(t *testing.T) {
 	}
 	if migration.DeletedCount != 2 || migration.ActualBytes != 0 || migration.CopiedBytes != 0 {
 		t.Fatalf("migration progress was not reconciled: %#v", migration)
+	}
+	var checkpointCount int64
+	if err := db.Model(&models.StorageMigrationObject{}).Count(&checkpointCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if checkpointCount != 0 {
+		t.Fatalf("%d deleted-file checkpoint(s) remained", checkpointCount)
 	}
 }
 
