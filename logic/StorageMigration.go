@@ -667,7 +667,7 @@ func (s *Service) KeepStorageMigrationOriginals(ctx context.Context, migrationUU
 			if err := tx.Select("id", "status").First(item, item.ID).Error; err != nil {
 				return err
 			}
-			if item.Status == models.StorageMigrationItemCleaned {
+			if item.Status == models.StorageMigrationItemCleaned || item.Status == models.StorageMigrationItemDeleted {
 				return nil
 			}
 			status := models.StorageMigrationItemOriginalKept
@@ -676,16 +676,18 @@ func (s *Service) KeepStorageMigrationOriginals(ctx context.Context, migrationUU
 				status = models.StorageMigrationItemOriginalPartial
 				message = "Original cleanup was incomplete; remaining data retained"
 			}
-			return tx.Model(item).Updates(map[string]any{
-				"status": status, "reservation_key": "", "progress_message": message,
-			}).Error
+			return tx.Model(item).
+				Where("status NOT IN ?", []string{models.StorageMigrationItemCleaned, models.StorageMigrationItemDeleted}).
+				Updates(map[string]any{
+					"status": status, "reservation_key": "", "progress_message": message,
+				}).Error
 		})
 		releaseFile()
 		if err != nil {
 			return models.StorageMigration{}, err
 		}
 	}
-	var cleaned, partial int64
+	var cleaned, partial, deleted int64
 	now := time.Now().UTC()
 	err = s.Deps.DB.WithContext(durableCtx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&models.StorageMigrationItem{}).
@@ -696,6 +698,11 @@ func (s *Service) KeepStorageMigrationOriginals(ctx context.Context, migrationUU
 		if err := tx.Model(&models.StorageMigrationItem{}).
 			Where("migration_id = ? AND status = ?", migration.ID, models.StorageMigrationItemOriginalPartial).
 			Count(&partial).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&models.StorageMigrationItem{}).
+			Where("migration_id = ? AND status = ?", migration.ID, models.StorageMigrationItemDeleted).
+			Count(&deleted).Error; err != nil {
 			return err
 		}
 		phase := "Original copies retained"
@@ -710,7 +717,7 @@ func (s *Service) KeepStorageMigrationOriginals(ctx context.Context, migrationUU
 		}
 		return tx.Model(&migration).Updates(map[string]any{
 			"status": models.StorageMigrationOriginalsRetained, "phase": phase, "keep_originals": true,
-			"cleaned_count": cleaned, "completed_at": &now, "error_code": "", "error_message": "",
+			"cleaned_count": cleaned, "deleted_count": deleted, "completed_at": &now, "error_code": "", "error_message": "",
 		}).Error
 	})
 	if err != nil {

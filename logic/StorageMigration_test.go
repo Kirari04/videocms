@@ -174,7 +174,7 @@ func TestKeepStorageMigrationOriginalsWaitsForInFlightCleanup(t *testing.T) {
 	if err := db.AutoMigrate(&models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
 		t.Fatal(err)
 	}
-	migration := models.StorageMigration{UUID: "keep-originals", Status: models.StorageMigrationCleaningOriginals, FileCount: 2}
+	migration := models.StorageMigration{UUID: "keep-originals", Status: models.StorageMigrationCleaningOriginals, FileCount: 3}
 	if err := db.Create(&migration).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -184,6 +184,10 @@ func TestKeepStorageMigrationOriginalsWaitsForInFlightCleanup(t *testing.T) {
 	}
 	partial := models.StorageMigrationItem{MigrationID: migration.ID, FileID: 43, FileUUID: "partial", Status: models.StorageMigrationItemCleaning, ReservationKey: "file:43"}
 	if err := db.Create(&partial).Error; err != nil {
+		t.Fatal(err)
+	}
+	deleted := models.StorageMigrationItem{MigrationID: migration.ID, FileID: 44, FileUUID: "deleted", Status: models.StorageMigrationItemDeleted, ReservationKey: "file:44"}
+	if err := db.Create(&deleted).Error; err != nil {
 		t.Fatal(err)
 	}
 	deps := &app.Deps{DB: db}
@@ -213,7 +217,7 @@ func TestKeepStorageMigrationOriginalsWaitsForInFlightCleanup(t *testing.T) {
 	releaseCleanup()
 	select {
 	case kept := <-result:
-		if kept.Status != models.StorageMigrationOriginalsRetained || kept.CleanedCount != 1 {
+		if kept.Status != models.StorageMigrationOriginalsRetained || kept.CleanedCount != 1 || kept.DeletedCount != 1 {
 			t.Fatalf("unexpected retained state: %#v", kept)
 		}
 	case err := <-failures:
@@ -232,6 +236,12 @@ func TestKeepStorageMigrationOriginalsWaitsForInFlightCleanup(t *testing.T) {
 	}
 	if partial.Status != models.StorageMigrationItemOriginalPartial || partial.ReservationKey != "" {
 		t.Fatalf("incomplete cleanup was mislabeled as a complete original: %#v", partial)
+	}
+	if err := db.First(&deleted, deleted.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if deleted.Status != models.StorageMigrationItemDeleted || deleted.ReservationKey == "" {
+		t.Fatalf("deleted video cleanup ownership was released: %#v", deleted)
 	}
 }
 

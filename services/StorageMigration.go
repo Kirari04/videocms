@@ -18,6 +18,7 @@ import (
 const storageMigrationCleanupGrace = 24 * time.Hour
 
 var errStorageMigrationStateConflict = errors.New("storage migration state changed")
+var errStorageMigrationItemDeleted = errors.New("storage migration video was deleted")
 
 type storageMigrationTaskPayload struct {
 	MigrationID uint `json:"migrationId"`
@@ -62,7 +63,7 @@ func (w *WorkerGroup) storageMigrationHandler(runtime *background.Runtime) backg
 
 		var items []models.StorageMigrationItem
 		if err := w.deps.DB.WithContext(ctx).
-			Where("migration_id = ? AND status NOT IN ?", migration.ID, []string{models.StorageMigrationItemCleanupPending, models.StorageMigrationItemCleaned}).
+			Where("migration_id = ? AND status NOT IN ?", migration.ID, []string{models.StorageMigrationItemCleanupPending, models.StorageMigrationItemCleaned, models.StorageMigrationItemDeleted}).
 			Order("id ASC").Find(&items).Error; err != nil {
 			return background.Result{}, background.Transient("migration_items_failed", "Migration videos could not be loaded", err)
 		}
@@ -124,9 +125,24 @@ func (w *WorkerGroup) prepareStorageMigrationRetry(ctx context.Context, migratio
 		}
 		for index := range items {
 			item := &items[index]
+			if item.Status == models.StorageMigrationItemDeleted {
+				continue
+			}
 			var file models.File
-			if err := tx.First(&file, item.FileID).Error; err != nil {
+			if err := tx.Unscoped().First(&file, item.FileID).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					if err := markStorageMigrationItemDeleted(tx, item); err != nil {
+						return err
+					}
+					continue
+				}
 				return err
+			}
+			if file.DeletedAt != nil && file.DeletedAt.Valid {
+				if err := markStorageMigrationItemDeleted(tx, item); err != nil {
+					return err
+				}
+				continue
 			}
 			status := models.StorageMigrationItemPending
 			if file.StorageID == item.DestinationMountID && item.CutoverAt != nil {
@@ -140,11 +156,15 @@ func (w *WorkerGroup) prepareStorageMigrationRetry(ctx context.Context, migratio
 				updates["bytes_copied"] = 0
 				updates["objects_verified"] = 0
 			}
-			if err := tx.Model(item).Updates(updates).Error; err != nil {
-				if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			updated := tx.Model(item).Where("status <> ?", models.StorageMigrationItemDeleted).Updates(updates)
+			if updated.Error != nil {
+				if strings.Contains(strings.ToLower(updated.Error.Error()), "unique") {
 					return errStorageMigrationStateConflict
 				}
-				return err
+				return updated.Error
+			}
+			if updated.RowsAffected == 0 {
+				continue
 			}
 		}
 		return tx.Model(migration).Updates(map[string]any{"keep_originals": false, "cleanup_job_id": "", "cleanup_after": nil, "canceled_at": nil}).Error
@@ -198,15 +218,8 @@ func (w *WorkerGroup) runStorageMigrationItems(ctx context.Context, migration mo
 }
 
 func (w *WorkerGroup) migrateStorageItem(ctx context.Context, migration models.StorageMigration, item *models.StorageMigrationItem) (err error) {
-	if item.Status == models.StorageMigrationItemCleanupPending || item.Status == models.StorageMigrationItemCleaned {
+	if item.Status == models.StorageMigrationItemCleanupPending || item.Status == models.StorageMigrationItemCleaned || item.Status == models.StorageMigrationItemDeleted {
 		return nil
-	}
-	now := time.Now().UTC()
-	if err := w.deps.DB.WithContext(ctx).Model(item).Updates(map[string]any{
-		"status": models.StorageMigrationItemCopying, "copy_started_at": gorm.Expr("COALESCE(copy_started_at, ?)", now),
-		"error_code": "", "error_message": "", "progress_message": "Copying and verifying media",
-	}).Error; err != nil {
-		return err
 	}
 	defer func() {
 		if err == nil {
@@ -216,15 +229,43 @@ func (w *WorkerGroup) migrateStorageItem(ctx context.Context, migration models.S
 		if ctx.Err() != nil {
 			status, code, message = models.StorageMigrationItemPending, "", "Paused at a safe checkpoint"
 		}
-		_ = w.deps.DB.WithContext(context.WithoutCancel(ctx)).Model(item).Updates(map[string]any{
+		_ = w.deps.DB.WithContext(context.WithoutCancel(ctx)).Model(item).
+			Where("status <> ?", models.StorageMigrationItemDeleted).Updates(map[string]any{
 			"status": status, "error_code": code, "error_message": message, "progress_message": message,
 		}).Error
 	}()
 
 	releaseFile := w.deps.StorageLifecycle.FileReadLock(item.FileID)
+	if err = w.deps.DB.WithContext(ctx).First(item, item.ID).Error; err != nil {
+		releaseFile()
+		return err
+	}
+	if item.Status == models.StorageMigrationItemDeleted {
+		releaseFile()
+		return nil
+	}
 	var file models.File
 	if err = w.deps.DB.WithContext(ctx).First(&file, item.FileID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			err = markStorageMigrationItemDeleted(w.deps.DB.WithContext(context.WithoutCancel(ctx)), item)
+			if err == nil {
+				releaseMount := w.deps.StorageLifecycle.ReadLock(item.DestinationMountID)
+				err = w.cleanupDeletedStorageMigrationDestination(context.WithoutCancel(ctx), item, false)
+				releaseMount()
+			}
+		}
 		releaseFile()
+		return err
+	}
+	now := time.Now().UTC()
+	if err = updateActiveStorageMigrationItem(w.deps.DB.WithContext(ctx), item, map[string]any{
+		"status": models.StorageMigrationItemCopying, "copy_started_at": gorm.Expr("COALESCE(copy_started_at, ?)", now),
+		"error_code": "", "error_message": "", "progress_message": "Copying and verifying media",
+	}); err != nil {
+		releaseFile()
+		if errors.Is(err, errStorageMigrationItemDeleted) {
+			return nil
+		}
 		return err
 	}
 	if file.StorageID != item.SourceMountID || file.StorageState != models.FileStorageAvailable {
@@ -233,8 +274,14 @@ func (w *WorkerGroup) migrateStorageItem(ctx context.Context, migration models.S
 	}
 	releaseMounts := w.deps.StorageLifecycle.ReadLocks(item.SourceMountID, item.DestinationMountID)
 	if err = w.copyStorageMigrationPrefix(ctx, item, file, false); err != nil {
+		if errors.Is(err, errStorageMigrationItemDeleted) {
+			err = w.cleanupDeletedStorageMigrationDestination(context.WithoutCancel(ctx), item, true)
+		}
 		releaseMounts()
 		releaseFile()
+		if errors.Is(err, errStorageMigrationItemDeleted) {
+			return nil
+		}
 		return err
 	}
 	releaseMounts()
@@ -245,15 +292,34 @@ func (w *WorkerGroup) migrateStorageItem(ctx context.Context, migration models.S
 	}
 	releaseFile = w.deps.StorageLifecycle.FileWriteLock(item.FileID)
 	defer releaseFile()
+	if err = w.deps.DB.WithContext(ctx).First(item, item.ID).Error; err != nil {
+		return err
+	}
+	if item.Status == models.StorageMigrationItemDeleted {
+		releaseMount := w.deps.StorageLifecycle.ReadLock(item.DestinationMountID)
+		defer releaseMount()
+		return w.cleanupDeletedStorageMigrationDestination(context.WithoutCancel(ctx), item, true)
+	}
 	releaseMounts = w.deps.StorageLifecycle.ReadLocks(item.SourceMountID, item.DestinationMountID)
 	defer releaseMounts()
 	if err = w.deps.DB.WithContext(ctx).First(&file, item.FileID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if err = markStorageMigrationItemDeleted(w.deps.DB.WithContext(context.WithoutCancel(ctx)), item); err == nil {
+				err = w.cleanupDeletedStorageMigrationDestination(context.WithoutCancel(ctx), item, true)
+			}
+		}
 		return err
 	}
 	if file.StorageID != item.SourceMountID || file.StorageState != models.FileStorageAvailable {
 		return fmt.Errorf("%w: file %d changed before cutover", errStorageMigrationStateConflict, file.ID)
 	}
 	if err = w.copyStorageMigrationPrefix(ctx, item, file, true); err != nil {
+		if errors.Is(err, errStorageMigrationItemDeleted) {
+			if cleanupErr := w.cleanupDeletedStorageMigrationDestination(context.WithoutCancel(ctx), item, true); cleanupErr != nil {
+				return cleanupErr
+			}
+			return nil
+		}
 		return err
 	}
 	if err = ctx.Err(); err != nil {
@@ -270,12 +336,106 @@ func (w *WorkerGroup) migrateStorageItem(ctx context.Context, migration models.S
 		if updated.RowsAffected != 1 {
 			return errStorageMigrationStateConflict
 		}
-		return tx.Model(item).Updates(map[string]any{
+		updated = tx.Model(item).Where("status <> ?", models.StorageMigrationItemDeleted).Updates(map[string]any{
 			"status": models.StorageMigrationItemCleanupPending, "verified_at": &cutoverAt, "cutover_at": &cutoverAt,
 			"progress_message": "Destination active; original retained", "error_code": "", "error_message": "",
-		}).Error
+		})
+		if updated.Error != nil {
+			return updated.Error
+		}
+		if updated.RowsAffected != 1 {
+			return errStorageMigrationItemDeleted
+		}
+		return nil
 	})
+	if errors.Is(err, errStorageMigrationItemDeleted) {
+		if cleanupErr := w.cleanupDeletedStorageMigrationDestination(context.WithoutCancel(ctx), item, true); cleanupErr != nil {
+			return cleanupErr
+		}
+		return nil
+	}
+	if errors.Is(err, errStorageMigrationStateConflict) {
+		var current models.File
+		loadErr := w.deps.DB.WithContext(context.WithoutCancel(ctx)).Unscoped().First(&current, file.ID).Error
+		if errors.Is(loadErr, gorm.ErrRecordNotFound) || (loadErr == nil && current.DeletedAt != nil && current.DeletedAt.Valid) {
+			if markErr := markStorageMigrationItemDeleted(w.deps.DB.WithContext(context.WithoutCancel(ctx)), item); markErr != nil {
+				return markErr
+			}
+			if cleanupErr := w.cleanupDeletedStorageMigrationDestination(context.WithoutCancel(ctx), item, true); cleanupErr != nil {
+				return cleanupErr
+			}
+			return nil
+		}
+		if loadErr != nil {
+			return loadErr
+		}
+	}
 	return err
+}
+
+func updateActiveStorageMigrationItem(db *gorm.DB, item *models.StorageMigrationItem, updates map[string]any) error {
+	result := db.Model(item).Where("status <> ?", models.StorageMigrationItemDeleted).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		var current models.StorageMigrationItem
+		if err := db.First(&current, item.ID).Error; err != nil {
+			return err
+		}
+		if current.Status == models.StorageMigrationItemDeleted {
+			*item = current
+			return errStorageMigrationItemDeleted
+		}
+	}
+	return nil
+}
+
+func markStorageMigrationItemDeleted(db *gorm.DB, item *models.StorageMigrationItem) error {
+	updates := map[string]any{
+		"status": models.StorageMigrationItemDeleted, "error_code": "", "error_message": "",
+		"progress_message": "Deleted during migration", "bytes_total": 0, "bytes_copied": 0,
+		"objects_verified": 0,
+	}
+	if err := db.Model(item).Updates(updates).Error; err != nil {
+		return err
+	}
+	item.Status = models.StorageMigrationItemDeleted
+	item.ErrorCode = ""
+	item.ErrorMessage = ""
+	item.ProgressMessage = "Deleted during migration"
+	item.BytesTotal = 0
+	item.BytesCopied = 0
+	item.ObjectsVerified = 0
+	return nil
+}
+
+// cleanupDeletedStorageMigrationDestination removes any partial copy written
+// by a migration worker that overlapped deletion in another process. The file
+// deleter remains responsible for the source and releases the reservation only
+// after every application-owned copy has been removed.
+func (w *WorkerGroup) cleanupDeletedStorageMigrationDestination(ctx context.Context, item *models.StorageMigrationItem, workerWroteDestination bool) error {
+	ownedDestination := item.DestinationOwned || workerWroteDestination
+	if err := w.deps.DB.WithContext(ctx).First(item, item.ID).Error; err != nil {
+		return err
+	}
+	if item.Status != models.StorageMigrationItemDeleted || (!item.DestinationOwned && !ownedDestination) {
+		return nil
+	}
+	store, err := w.deps.Storage.Store(item.DestinationMountID)
+	if err != nil {
+		return err
+	}
+	prefix, err := w.deps.Storage.Layout().FilePrefix(item.FileUUID)
+	if err != nil {
+		return err
+	}
+	if err := storage.DeletePrefix(ctx, store, prefix); err != nil {
+		return err
+	}
+	return w.deps.DB.WithContext(ctx).Model(item).
+		Where("status = ?", models.StorageMigrationItemDeleted).
+		Update("destination_owned", false).Error
 }
 
 func (w *WorkerGroup) copyStorageMigrationPrefix(ctx context.Context, item *models.StorageMigrationItem, file models.File, finalSync bool) error {
@@ -299,7 +459,7 @@ func (w *WorkerGroup) copyStorageMigrationPrefix(ctx context.Context, item *mode
 		if len(existing) > 0 {
 			return fmt.Errorf("%w: destination prefix %s already contains data", errStorageMigrationStateConflict, prefix.String())
 		}
-		if err := w.deps.DB.WithContext(ctx).Model(item).Update("destination_owned", true).Error; err != nil {
+		if err := updateActiveStorageMigrationItem(w.deps.DB.WithContext(ctx), item, map[string]any{"destination_owned": true}); err != nil {
 			return err
 		}
 		item.DestinationOwned = true
@@ -319,9 +479,9 @@ func (w *WorkerGroup) copyStorageMigrationPrefix(ctx context.Context, item *mode
 	if finalSync {
 		status, message = models.StorageMigrationItemVerifying, "Final synchronization and verification"
 	}
-	if err := w.deps.DB.WithContext(ctx).Model(item).Updates(map[string]any{
+	if err := updateActiveStorageMigrationItem(w.deps.DB.WithContext(ctx), item, map[string]any{
 		"status": status, "bytes_total": total, "object_count": len(objects), "progress_message": message,
-	}).Error; err != nil {
+	}); err != nil {
 		return err
 	}
 	verifiedKeys := make(map[string]bool, len(objects))
@@ -335,10 +495,10 @@ func (w *WorkerGroup) copyStorageMigrationPrefix(ctx context.Context, item *mode
 		verifiedBytes += object.Size
 		now := time.Now()
 		if index+1 == len(objects) || lastProgressUpdate.IsZero() || now.Sub(lastProgressUpdate) >= 500*time.Millisecond {
-			if err := w.deps.DB.WithContext(ctx).Model(item).Updates(map[string]any{
+			if err := updateActiveStorageMigrationItem(w.deps.DB.WithContext(ctx), item, map[string]any{
 				"bytes_copied": verifiedBytes, "objects_verified": index + 1,
 				"progress_message": fmt.Sprintf("Verified %d of %d objects", index+1, len(objects)),
-			}).Error; err != nil {
+			}); err != nil {
 				return err
 			}
 			if err := w.refreshStorageMigrationProgress(ctx, item.MigrationID); err != nil {
@@ -369,29 +529,37 @@ func (w *WorkerGroup) refreshStorageMigrationProgress(ctx context.Context, migra
 		CopiedBytes  int64
 		CutoverCount int64
 		CleanedCount int64
+		DeletedCount int64
 		FileCount    int64
 	}
 	err := w.deps.DB.WithContext(ctx).Model(&models.StorageMigrationItem{}).
-		Select(`COALESCE(SUM(CASE WHEN bytes_total > 0 THEN bytes_total ELSE planned_bytes END), 0) AS actual_bytes,
-			COALESCE(SUM(bytes_copied), 0) AS copied_bytes,
+		Select(`COALESCE(SUM(CASE WHEN status = ? THEN 0 WHEN bytes_total > 0 THEN bytes_total ELSE planned_bytes END), 0) AS actual_bytes,
+			COALESCE(SUM(CASE WHEN status = ? THEN 0 ELSE bytes_copied END), 0) AS copied_bytes,
 			SUM(CASE WHEN status IN ? THEN 1 ELSE 0 END) AS cutover_count,
 			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS cleaned_count,
-			COUNT(*) AS file_count`, []string{models.StorageMigrationItemCleanupPending, models.StorageMigrationItemCleaning, models.StorageMigrationItemCleaned, models.StorageMigrationItemOriginalKept, models.StorageMigrationItemOriginalPartial}, models.StorageMigrationItemCleaned).
+			SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS deleted_count,
+			COUNT(*) AS file_count`, models.StorageMigrationItemDeleted, models.StorageMigrationItemDeleted, []string{models.StorageMigrationItemCleanupPending, models.StorageMigrationItemCleaning, models.StorageMigrationItemCleaned, models.StorageMigrationItemOriginalKept, models.StorageMigrationItemOriginalPartial}, models.StorageMigrationItemCleaned, models.StorageMigrationItemDeleted).
 		Where("migration_id = ?", migrationID).Scan(&aggregate).Error
 	if err != nil {
 		return err
 	}
 	if err := w.deps.DB.WithContext(ctx).Model(&models.StorageMigration{}).Where("id = ?", migrationID).Updates(map[string]any{
 		"actual_bytes": aggregate.ActualBytes, "copied_bytes": aggregate.CopiedBytes,
-		"cutover_count": aggregate.CutoverCount, "cleaned_count": aggregate.CleanedCount,
+		"cutover_count": aggregate.CutoverCount, "cleaned_count": aggregate.CleanedCount, "deleted_count": aggregate.DeletedCount,
 	}).Error; err != nil {
 		return err
 	}
 	progress := 0.0
 	if aggregate.ActualBytes > 0 {
 		progress = float64(aggregate.CopiedBytes) / float64(aggregate.ActualBytes)
+	} else if aggregate.FileCount > 0 {
+		progress = float64(aggregate.CutoverCount+aggregate.DeletedCount) / float64(aggregate.FileCount)
 	}
-	background.ReportProgress(ctx, progress, fmt.Sprintf("%d of %d videos active on destination", aggregate.CutoverCount, aggregate.FileCount))
+	message := fmt.Sprintf("%d of %d videos active on destination", aggregate.CutoverCount, aggregate.FileCount)
+	if aggregate.DeletedCount > 0 {
+		message = fmt.Sprintf("%d moved, %d deleted during migration", aggregate.CutoverCount, aggregate.DeletedCount)
+	}
+	background.ReportProgress(ctx, progress, message)
 	return nil
 }
 
@@ -401,6 +569,13 @@ func (w *WorkerGroup) scheduleStorageMigrationCleanup(ctx context.Context, runti
 	}
 	if err := w.deps.DB.WithContext(ctx).First(migration, migration.ID).Error; err != nil {
 		return err
+	}
+	if migration.FileCount > 0 && migration.DeletedCount >= migration.FileCount {
+		completedAt := time.Now().UTC()
+		return w.deps.DB.WithContext(ctx).Model(migration).Updates(map[string]any{
+			"status": models.StorageMigrationCompleted, "phase": "Migration complete; all videos were deleted",
+			"copy_completed_at": &completedAt, "completed_at": &completedAt, "cleanup_after": nil,
+		}).Error
 	}
 	if migration.CleanupJobID != "" {
 		return nil
@@ -454,7 +629,7 @@ func (w *WorkerGroup) storageMigrationCleanupHandler(ctx context.Context, task b
 		return background.Result{}, background.Transient("cleanup_state_failed", "Cleanup state could not be updated", err)
 	}
 	var items []models.StorageMigrationItem
-	if err := w.deps.DB.WithContext(ctx).Where("migration_id = ? AND status <> ?", migration.ID, models.StorageMigrationItemCleaned).Order("id ASC").Find(&items).Error; err != nil {
+	if err := w.deps.DB.WithContext(ctx).Where("migration_id = ? AND status NOT IN ?", migration.ID, []string{models.StorageMigrationItemCleaned, models.StorageMigrationItemDeleted}).Order("id ASC").Find(&items).Error; err != nil {
 		return background.Result{}, background.Transient("cleanup_items_failed", "Cleanup videos could not be loaded", err)
 	}
 	for index := range items {
@@ -489,8 +664,11 @@ func (w *WorkerGroup) storageMigrationCleanupHandler(ctx context.Context, task b
 		return background.Result{ResultType: "storage_migration", ResultID: migration.UUID, Phase: "Originals retained"}, nil
 	}
 	completedAt := time.Now().UTC()
+	if err := w.refreshStorageMigrationProgress(context.WithoutCancel(ctx), migration.ID); err != nil {
+		return background.Result{}, background.Transient("cleanup_progress_failed", "Original cleanup progress could not be finalized", err)
+	}
 	if err := w.deps.DB.WithContext(context.WithoutCancel(ctx)).Model(&migration).Updates(map[string]any{
-		"status": models.StorageMigrationCompleted, "phase": "Migration and cleanup complete", "cleaned_count": migration.FileCount,
+		"status": models.StorageMigrationCompleted, "phase": "Migration and cleanup complete",
 		"completed_at": &completedAt,
 	}).Error; err != nil {
 		return background.Result{}, background.Transient("cleanup_state_failed", "Cleanup completion could not be recorded", err)
@@ -502,7 +680,7 @@ func (w *WorkerGroup) cleanupStorageMigrationItem(ctx context.Context, item *mod
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if item.Status == models.StorageMigrationItemCleaned || item.Status == models.StorageMigrationItemOriginalKept || item.Status == models.StorageMigrationItemOriginalPartial {
+	if item.Status == models.StorageMigrationItemCleaned || item.Status == models.StorageMigrationItemOriginalKept || item.Status == models.StorageMigrationItemOriginalPartial || item.Status == models.StorageMigrationItemDeleted {
 		return nil
 	}
 	releaseFile := w.deps.StorageLifecycle.FileWriteLock(item.FileID)
@@ -515,7 +693,7 @@ func (w *WorkerGroup) cleanupStorageMigrationItem(ctx context.Context, item *mod
 	if err := w.deps.DB.WithContext(ctx).First(item, item.ID).Error; err != nil {
 		return err
 	}
-	if item.Status == models.StorageMigrationItemCleaned || item.Status == models.StorageMigrationItemOriginalKept || item.Status == models.StorageMigrationItemOriginalPartial {
+	if item.Status == models.StorageMigrationItemCleaned || item.Status == models.StorageMigrationItemOriginalKept || item.Status == models.StorageMigrationItemOriginalPartial || item.Status == models.StorageMigrationItemDeleted {
 		return nil
 	}
 	var file models.File
@@ -534,9 +712,12 @@ func (w *WorkerGroup) cleanupStorageMigrationItem(ctx context.Context, item *mod
 	if err != nil {
 		return err
 	}
-	if err := w.deps.DB.WithContext(ctx).Model(item).Updates(map[string]any{
+	if err := updateActiveStorageMigrationItem(w.deps.DB.WithContext(ctx), item, map[string]any{
 		"status": models.StorageMigrationItemCleaning, "progress_message": "Removing original copy",
-	}).Error; err != nil {
+	}); err != nil {
+		if errors.Is(err, errStorageMigrationItemDeleted) {
+			return nil
+		}
 		return err
 	}
 	// Once cleanup begins for a video, finish that whole video before honoring a
@@ -547,10 +728,14 @@ func (w *WorkerGroup) cleanupStorageMigrationItem(ctx context.Context, item *mod
 		return err
 	}
 	now := time.Now().UTC()
-	return w.deps.DB.WithContext(commitCtx).Model(item).Updates(map[string]any{
+	err = updateActiveStorageMigrationItem(w.deps.DB.WithContext(commitCtx), item, map[string]any{
 		"status": models.StorageMigrationItemCleaned, "cleaned_at": &now, "reservation_key": "",
 		"progress_message": "Original removed", "error_code": "", "error_message": "",
-	}).Error
+	})
+	if errors.Is(err, errStorageMigrationItemDeleted) {
+		return nil
+	}
+	return err
 }
 
 func (w *WorkerGroup) storageMigrationAbortHandler(runtime *background.Runtime) background.Handler {
@@ -616,16 +801,23 @@ func (w *WorkerGroup) cleanupCanceledStorageMigrationItem(ctx context.Context, i
 	if err := w.deps.DB.WithContext(ctx).First(item, item.ID).Error; err != nil {
 		return err
 	}
+	if item.Status == models.StorageMigrationItemDeleted {
+		return nil
+	}
 	var file models.File
 	err := w.deps.DB.WithContext(ctx).First(&file, item.FileID).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 	if err == nil && file.StorageID == item.DestinationMountID && item.CutoverAt != nil {
-		return w.deps.DB.WithContext(context.WithoutCancel(ctx)).Model(item).Updates(map[string]any{
+		err := updateActiveStorageMigrationItem(w.deps.DB.WithContext(context.WithoutCancel(ctx)), item, map[string]any{
 			"status": models.StorageMigrationItemOriginalKept, "reservation_key": "",
 			"progress_message": "Destination remains active; original retained",
-		}).Error
+		})
+		if errors.Is(err, errStorageMigrationItemDeleted) {
+			return nil
+		}
+		return err
 	}
 	if err == nil && file.StorageID != item.SourceMountID {
 		return fmt.Errorf("%w: file %d moved to unexpected mount %s", errStorageMigrationStateConflict, file.ID, file.StorageID)
@@ -643,10 +835,14 @@ func (w *WorkerGroup) cleanupCanceledStorageMigrationItem(ctx context.Context, i
 			return err
 		}
 	}
-	return w.deps.DB.WithContext(context.WithoutCancel(ctx)).Model(item).Updates(map[string]any{
+	err = updateActiveStorageMigrationItem(w.deps.DB.WithContext(context.WithoutCancel(ctx)), item, map[string]any{
 		"status": models.StorageMigrationItemCanceled, "reservation_key": "", "destination_owned": false,
 		"bytes_copied": 0, "objects_verified": 0, "progress_message": "Canceled before cutover",
-	}).Error
+	})
+	if errors.Is(err, errStorageMigrationItemDeleted) {
+		return nil
+	}
+	return err
 }
 
 func storageMigrationJobTerminal(status string) bool {
