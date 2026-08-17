@@ -176,6 +176,129 @@ func TestStorageMigrationCopiesFinalChangesBeforeAtomicCutover(t *testing.T) {
 	}
 }
 
+func TestStorageMigrationDeletionBetweenCopyAndCutoverIsTerminal(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+		t.Fatal(err)
+	}
+	source, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	destinationLocal, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := models.File{UUID: "550e8400-e29b-41d4-a716-446655440204", StorageID: "source", StorageState: models.FileStorageAvailable, Size: 5}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+	key := migrationTestKey(t, file.UUID+"/source/original.mp4")
+	putMigrationTestObject(t, source, key, "media")
+	destination := &migrationHookStore{Store: destinationLocal, hook: func() {
+		if err := db.Delete(&file).Error; err != nil {
+			t.Errorf("delete file during copy: %v", err)
+		}
+	}}
+	service, err := storage.NewService("source", storage.LegacyMediaLayout{}, map[string]storage.Store{"source": source, "destination": destination})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = service.Close() })
+	migration := models.StorageMigration{UUID: "deleted-during-copy", Status: models.StorageMigrationRunning, FileCount: 1, PlannedBytes: 5}
+	if err := db.Create(&migration).Error; err != nil {
+		t.Fatal(err)
+	}
+	item := models.StorageMigrationItem{
+		MigrationID: migration.ID, FileID: file.ID, FileUUID: file.UUID,
+		SourceMountID: "source", DestinationMountID: "destination", Status: models.StorageMigrationItemPending,
+		ReservationKey: fmt.Sprintf("file:%d", file.ID), PlannedBytes: 5,
+	}
+	if err := db.Create(&item).Error; err != nil {
+		t.Fatal(err)
+	}
+	worker := NewWorkerGroup(&app.Deps{DB: db, Storage: service}, nil)
+	if err := worker.migrateStorageItem(context.Background(), migration, &item); err != nil {
+		t.Fatalf("deleted video failed migration: %v", err)
+	}
+	if err := db.First(&item, item.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if item.Status != models.StorageMigrationItemDeleted || item.CutoverAt != nil || item.DestinationOwned {
+		t.Fatalf("unexpected deleted migration item: %#v", item)
+	}
+	if item.ReservationKey == "" {
+		t.Fatal("reservation was released before the file deleter removed the source")
+	}
+	var deletedFile models.File
+	if err := db.Unscoped().First(&deletedFile, file.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if deletedFile.StorageID != "source" {
+		t.Fatalf("deleted file cut over to %q", deletedFile.StorageID)
+	}
+	assertMigrationTestObject(t, source, key, "media")
+	if _, err := destination.Stat(context.Background(), key); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("partial destination remained: %v", err)
+	}
+	if err := worker.refreshStorageMigrationProgress(context.Background(), migration.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.First(&migration, migration.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if migration.DeletedCount != 1 || migration.CutoverCount != 0 || migration.ActualBytes != 0 || migration.CopiedBytes != 0 {
+		t.Fatalf("unexpected deletion-aware progress: %#v", migration)
+	}
+}
+
+func TestStorageMigrationCleanupSkipsDeletedVideo(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.StorageMigrationItem{}); err != nil {
+		t.Fatal(err)
+	}
+	source, _ := storage.NewLocalStore(t.TempDir())
+	destination, _ := storage.NewLocalStore(t.TempDir())
+	service, err := storage.NewService("source", storage.LegacyMediaLayout{}, map[string]storage.Store{"source": source, "destination": destination})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = service.Close() })
+	item := models.StorageMigrationItem{FileID: 42, FileUUID: "550e8400-e29b-41d4-a716-446655440205", SourceMountID: "source", DestinationMountID: "destination", Status: models.StorageMigrationItemDeleted, ReservationKey: "file:42"}
+	if err := db.Create(&item).Error; err != nil {
+		t.Fatal(err)
+	}
+	key := migrationTestKey(t, item.FileUUID+"/source/original.mp4")
+	putMigrationTestObject(t, source, key, "awaiting-deleter")
+	putMigrationTestObject(t, destination, key, "late-copy")
+	worker := NewWorkerGroup(&app.Deps{DB: db, Storage: service}, nil)
+	if err := worker.cleanupStorageMigrationItem(context.Background(), &item); err != nil {
+		t.Fatal(err)
+	}
+	if err := worker.cleanupCanceledStorageMigrationItem(context.Background(), &item); err != nil {
+		t.Fatal(err)
+	}
+	assertMigrationTestObject(t, source, key, "awaiting-deleter")
+	if err := db.First(&item, item.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if item.Status != models.StorageMigrationItemDeleted || item.ReservationKey == "" {
+		t.Fatalf("cleanup changed deletion ownership: %#v", item)
+	}
+	if err := worker.cleanupDeletedStorageMigrationDestination(context.Background(), &item, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := destination.Stat(context.Background(), key); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("late destination copy remained after deletion finalized: %v", err)
+	}
+}
+
 func TestStorageMigrationCleanupStopsOnlyBetweenVideos(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {

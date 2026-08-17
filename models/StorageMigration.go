@@ -22,6 +22,7 @@ const (
 	StorageMigrationItemCleaned         = "cleaned"
 	StorageMigrationItemOriginalKept    = "original_kept"
 	StorageMigrationItemOriginalPartial = "original_partial"
+	StorageMigrationItemDeleted         = "deleted"
 	StorageMigrationItemFailed          = "failed"
 	StorageMigrationItemCanceled        = "canceled"
 )
@@ -45,6 +46,7 @@ type StorageMigration struct {
 	CopiedBytes         int64
 	CutoverCount        int64
 	CleanedCount        int64
+	DeletedCount        int64
 	CreatedByID         uint   `gorm:"index"`
 	CreatedByName       string `gorm:"size:120"`
 	CancelGeneration    int
