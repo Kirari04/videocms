@@ -101,3 +101,17 @@ type StorageMigrationItem struct {
 	CutoverAt          *time.Time
 	CleanedAt          *time.Time
 }
+
+// StorageMigrationObject is a short-lived durable checkpoint. It allows a
+// retry to trust an object that this migration already uploaded and validated
+// without downloading the destination again. Checkpoints are removed at
+// cutover or when an incomplete destination is discarded.
+type StorageMigrationObject struct {
+	ItemID          uint   `gorm:"primaryKey;autoIncrement:false"`
+	ObjectKey       string `gorm:"primaryKey;size:1024"`
+	SourceRevision  string `gorm:"size:64"`
+	SourceSize      int64
+	DestinationETag string    `gorm:"size:255"`
+	Checksum        string    `gorm:"size:64"`
+	UpdatedAt       time.Time `gorm:"index"`
+}

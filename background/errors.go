@@ -19,6 +19,7 @@ const (
 	ErrorCanceled    ErrorClass = "canceled"
 	ErrorInterrupted ErrorClass = "interrupted"
 	ErrorPaused      ErrorClass = "paused"
+	ErrorDeferred    ErrorClass = "deferred"
 )
 
 type TaskError struct {
@@ -60,6 +61,12 @@ func Interrupted(cause error) error {
 
 func Paused(cause error) error {
 	return &TaskError{Code: "paused", Public: "Paused", Diagnostic: diagnostic(cause), Class: ErrorPaused, Cause: cause}
+}
+
+// Deferred requeues work that is waiting on an expected prerequisite. Unlike
+// a transient failure, a deferral does not consume the task's retry budget.
+func Deferred(code, public string, retryAfter time.Duration) error {
+	return &TaskError{Code: code, Public: public, Class: ErrorDeferred, RetryAfter: retryAfter}
 }
 
 func PauseRequested(ctx context.Context) bool {

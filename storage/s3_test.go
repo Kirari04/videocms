@@ -160,6 +160,55 @@ func TestS3StoreRejectsRangeResponseForWrongOffset(t *testing.T) {
 	}
 }
 
+func TestS3StoreResumesInterruptedReadWithPinnedRange(t *testing.T) {
+	backend := newMemoryS3(1000)
+	backend.interruptReads = 2
+	backend.interruptAfter = 4
+	store := newS3Store(S3Options{Bucket: "media"}, backend, backend)
+	key := mustParseKey(t, "file/source/original.mp4")
+	content := "resumable-media-data"
+	if _, err := store.Put(context.Background(), key, strings.NewReader(content), PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	object, err := store.Open(context.Background(), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer object.Body.Close()
+	data, err := io.ReadAll(object.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != content {
+		t.Fatalf("resumed data = %q, want %q", data, content)
+	}
+	ranges := backend.getRanges()
+	if len(ranges) != 3 || ranges[0] != "" || ranges[1] != "bytes=4-" || ranges[2] != "bytes=8-" {
+		t.Fatalf("resume ranges = %v, want [<full> bytes=4- bytes=8-]", ranges)
+	}
+	for _, match := range backend.getIfMatches() {
+		if match == "" {
+			t.Fatalf("resume request did not pin the object version: %v", backend.getIfMatches())
+		}
+	}
+}
+
+func TestS3StorePreservesExactEOFWhenFinalReadReturnsData(t *testing.T) {
+	reader := &s3ReadSeekCloser{
+		ctx:  context.Background(),
+		key:  "file/source/original.mp4",
+		size: 5,
+		body: &dataAndEOFReadCloser{data: []byte("media")},
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+	if string(data) != "media" {
+		t.Fatalf("ReadAll() = %q, want media", data)
+	}
+}
+
 func TestNormalizeS3Options(t *testing.T) {
 	valid, err := normalizeS3Options(S3Options{
 		Bucket:          " media ",
@@ -214,6 +263,8 @@ type memoryS3 struct {
 	lastContentLength int64
 	lastMultipartSize int64
 	wrongContentRange bool
+	interruptReads    int
+	interruptAfter    int
 }
 
 func newMemoryS3(pageSize int) *memoryS3 {
@@ -282,6 +333,11 @@ func (m *memoryS3) GetObject(ctx context.Context, input *s3.GetObjectInput, _ ..
 	m.ranges = append(m.ranges, rangeValue)
 	m.ifMatches = append(m.ifMatches, ifMatch)
 	wrongContentRange := m.wrongContentRange
+	interrupt := m.interruptReads > 0
+	if interrupt {
+		m.interruptReads--
+	}
+	interruptAfter := m.interruptAfter
 	m.mu.Unlock()
 	if !ok {
 		return nil, &smithy.GenericAPIError{Code: "NoSuchKey", Message: "missing"}
@@ -304,8 +360,12 @@ func (m *memoryS3) GetObject(ctx context.Context, input *s3.GetObjectInput, _ ..
 		contentRange = fmt.Sprintf("bytes %d-%d/%d", contentStart, len(object.data)-1, len(object.data))
 	}
 	data := append([]byte(nil), object.data[start:]...)
+	body := io.ReadCloser(io.NopCloser(bytes.NewReader(data)))
+	if interrupt {
+		body = &interruptingReadCloser{reader: bytes.NewReader(data), remaining: interruptAfter}
+	}
 	return &s3.GetObjectOutput{
-		Body:          io.NopCloser(bytes.NewReader(data)),
+		Body:          body,
 		ContentLength: aws.Int64(int64(len(data))),
 		ContentRange:  optionalString(contentRange),
 		ContentType:   aws.String(object.contentType),
@@ -314,6 +374,46 @@ func (m *memoryS3) GetObject(ctx context.Context, input *s3.GetObjectInput, _ ..
 		ETag:          aws.String(object.etag),
 	}, nil
 }
+
+type interruptingReadCloser struct {
+	reader    *bytes.Reader
+	remaining int
+}
+
+func (r *interruptingReadCloser) Read(buffer []byte) (int, error) {
+	if r.remaining <= 0 {
+		return 0, io.ErrUnexpectedEOF
+	}
+	if len(buffer) > r.remaining {
+		buffer = buffer[:r.remaining]
+	}
+	n, err := r.reader.Read(buffer)
+	r.remaining -= n
+	if r.remaining == 0 && err == nil {
+		err = io.ErrUnexpectedEOF
+	}
+	return n, err
+}
+
+func (r *interruptingReadCloser) Close() error { return nil }
+
+type dataAndEOFReadCloser struct {
+	data []byte
+}
+
+func (r *dataAndEOFReadCloser) Read(buffer []byte) (int, error) {
+	if len(r.data) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(buffer, r.data)
+	r.data = r.data[n:]
+	if len(r.data) == 0 {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
+func (r *dataAndEOFReadCloser) Close() error { return nil }
 
 func (m *memoryS3) DeleteObject(ctx context.Context, input *s3.DeleteObjectInput, _ ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
 	if err := ctx.Err(); err != nil {

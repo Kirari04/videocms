@@ -151,6 +151,15 @@ func (w *WorkerGroup) runDeleter() error {
 			}).Error; err != nil {
 				return err
 			}
+			if len(migrationItems) > 0 {
+				itemIDs := make([]uint, 0, len(migrationItems))
+				for _, item := range migrationItems {
+					itemIDs = append(itemIDs, item.ID)
+				}
+				if err := tx.Where("item_id IN ?", itemIDs).Delete(&models.StorageMigrationObject{}).Error; err != nil {
+					return err
+				}
+			}
 			if err := tx.Unscoped().Where("file_id = ?", todo.ID).Delete(&models.Subtitle{}).Error; err != nil {
 				return err
 			}

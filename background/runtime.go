@@ -778,6 +778,17 @@ func (r *Runtime) finish(task Task, attempt Attempt, result Result, taskErr *Tas
 				updates["max_attempts"] = gorm.Expr("max_attempts + 1")
 				eventType = "task_interrupted"
 				eventMessage = "Task interrupted and queued again"
+			case ErrorDeferred:
+				attemptStatus = AttemptInterrupted
+				taskStatus = TaskRetryWait
+				delay := retryDelay(current.AttemptCount, taskErr.RetryAfter)
+				runAfter := now.Add(delay)
+				updates["status"] = taskStatus
+				updates["run_after"] = &runAfter
+				updates["finished_at"] = nil
+				updates["max_attempts"] = gorm.Expr("max_attempts + 1")
+				eventType = "task_deferred"
+				eventMessage = fmt.Sprintf("Task deferred for %s", delay.Round(time.Second))
 			case ErrorCanceled:
 				attemptStatus = AttemptCanceled
 				taskStatus = TaskCanceled
