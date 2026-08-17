@@ -59,6 +59,7 @@ func MigrateModels(gormDB *gorm.DB) error {
 		&models.StoragePool{},
 		&models.StoragePoolMount{},
 		&models.StorageMigration{},
+		&models.StorageMigrationAccount{},
 		&models.StorageMigrationItem{},
 		&models.User{},
 		&models.Folder{},

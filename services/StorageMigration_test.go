@@ -25,7 +25,7 @@ func TestStorageMigrationBackgroundJobCutsOverAndSchedulesDeferredCleanup(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := background.Migrate(db); err != nil {
@@ -100,7 +100,7 @@ func TestStorageMigrationCopiesFinalChangesBeforeAtomicCutover(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}); err != nil {
 		t.Fatal(err)
 	}
 	source, err := storage.NewLocalStore(t.TempDir())
@@ -181,7 +181,7 @@ func TestStorageMigrationDeletionBetweenCopyAndCutoverIsTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}); err != nil {
 		t.Fatal(err)
 	}
 	source, err := storage.NewLocalStore(t.TempDir())
@@ -304,7 +304,7 @@ func TestStorageMigrationCleanupStopsOnlyBetweenVideos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}); err != nil {
 		t.Fatal(err)
 	}
 	sourceLocal, err := storage.NewLocalStore(t.TempDir())
@@ -382,7 +382,7 @@ func TestStorageMigrationRefusesUnownedDestinationPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}); err != nil {
 		t.Fatal(err)
 	}
 	source, _ := storage.NewLocalStore(t.TempDir())
@@ -420,7 +420,7 @@ func TestCanceledStorageMigrationRemovesOnlyUnreferencedDestinationData(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}); err != nil {
 		t.Fatal(err)
 	}
 	source, _ := storage.NewLocalStore(t.TempDir())
@@ -472,7 +472,7 @@ func TestStorageMigrationReconciliationRepairsCanceledJobCrashWindow(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := background.Migrate(db); err != nil {

@@ -76,7 +76,7 @@ func TestDeleterRemovesAllMigrationCopiesAndReleasesReservations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.Link{}, &models.Quality{}, &models.Audio{}, &models.Subtitle{}, &models.StorageMigration{}, &models.StorageMigrationItem{}); err != nil {
+	if err := db.AutoMigrate(&models.File{}, &models.Link{}, &models.Quality{}, &models.Audio{}, &models.Subtitle{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}); err != nil {
 		t.Fatal(err)
 	}
 	source, _ := storage.NewLocalStore(t.TempDir())

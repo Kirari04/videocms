@@ -7,9 +7,9 @@ type Link struct {
 	Name           string  `gorm:"size:128;"`
 	Thumbnail      string  `gorm:"size:128;" json:"-"`
 	File           File    `json:"-"`
-	FileID         uint    `json:"-"`
+	FileID         uint    `gorm:"index" json:"-"`
 	User           User    `json:"-"`
-	UserID         uint    `json:"-"`
+	UserID         uint    `gorm:"index" json:"-"`
 	ParentFolder   *Folder `json:"-"`
 	ParentFolderID uint
 	Tags           []*Tag `gorm:"many2many:tag_links;"`
