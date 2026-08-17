@@ -94,6 +94,7 @@ func TestAPIRoutesExposePauseResumeAndStorageMigrationAdminEndpoints(t *testing.
 		http.MethodPost + " /api/v2/admin/storage/migrations/preview",
 		http.MethodPost + " /api/v2/admin/storage/migrations",
 		http.MethodGet + " /api/v2/admin/storage/migrations",
+		http.MethodGet + " /api/v2/admin/storage/migrations/accounts",
 		http.MethodGet + " /api/v2/admin/storage/migrations/:id",
 		http.MethodGet + " /api/v2/admin/storage/migrations/:id/items",
 		http.MethodPost + " /api/v2/admin/storage/migrations/:id/cancel",

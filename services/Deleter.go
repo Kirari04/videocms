@@ -26,58 +26,82 @@ func (w *WorkerGroup) Deleter(ctx context.Context) {
 
 func (w *WorkerGroup) runDeleter() error {
 	var deletionErrors []error
-	var notReferencedFiles []uint
+	var candidateFileIDs []uint
 	if res := w.deps.DB.
 		Raw(`
-		SELECT files.id FROM files
-		JOIN links ON links.file_id = files.id
-		GROUP BY files.id
-		HAVING COUNT(links.id) = SUM(CASE WHEN links.deleted_at IS NULL THEN 0 ELSE 1 END);
-		`).Scan(&notReferencedFiles); res.Error != nil {
+		SELECT files.id
+		FROM files
+		WHERE files.deleted_at IS NOT NULL
+			OR NOT EXISTS (
+				SELECT 1 FROM links
+				WHERE links.file_id = files.id AND links.deleted_at IS NULL
+			)
+		ORDER BY files.id ASC;
+		`).Scan(&candidateFileIDs); res.Error != nil {
 		log.Printf("Failed to query unreferenced files: %v", res.Error)
 		return res.Error
 	}
 
-	if len(notReferencedFiles) > 0 {
-		if res := w.deps.DB.Delete(&models.File{}, notReferencedFiles); res.Error != nil {
-			log.Printf("Failed to delete unreferenced files: %v", res.Error)
-			return res.Error
-		}
-	}
-
-	var todos []models.File
-	if res := w.deps.DB.
-		Model(&models.File{}).
-		Preload("Qualitys").
-		Preload("Subtitles").
-		Preload("Audios").
-		Preload("Links").
-		Unscoped().
-		Where("deleted_at IS NOT NULL").
-		Find(&todos, todos); res.Error != nil {
-		log.Printf("Failed to query deleted files: %v", res.Error)
-		return res.Error
-	}
-
-	if len(todos) > 0 {
-		log.Printf("Queued %d file to delete", len(todos))
+	if len(candidateFileIDs) > 0 {
+		log.Printf("Queued %d file to delete", len(candidateFileIDs))
 	}
 	var skippingDeletion int
 	var successDeletion int
-	for _, todo := range todos {
-		w.CancelDownloadPreparationsForFile(todo.ID)
-		w.cancelActiveEncodingsForFile(todo.ID, "file queued for deletion")
-		releaseFile := w.deps.StorageLifecycle.FileWriteLock(todo.ID)
-		if err := w.deps.DB.Unscoped().Preload("Qualitys").Preload("Subtitles").Preload("Audios").Preload("Links").First(&todo, todo.ID).Error; err != nil {
+	for _, fileID := range candidateFileIDs {
+		w.CancelDownloadPreparationsForFile(fileID)
+		w.cancelActiveEncodingsForFile(fileID, "file queued for deletion")
+		releaseFile := w.deps.StorageLifecycle.FileWriteLock(fileID)
+		var todo models.File
+		if err := w.deps.DB.Unscoped().Preload("Qualitys").Preload("Subtitles").Preload("Audios").Preload("Links").First(&todo, fileID).Error; err != nil {
 			releaseFile()
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				deletionErrors = append(deletionErrors, err)
 			}
 			continue
 		}
+		if todo.DeletedAt == nil || !todo.DeletedAt.Valid {
+			var references int64
+			if err := w.deps.DB.Model(&models.Link{}).Where("file_id = ?", todo.ID).Count(&references).Error; err != nil {
+				deletionErrors = append(deletionErrors, err)
+				releaseFile()
+				continue
+			}
+			if references > 0 {
+				releaseFile()
+				continue
+			}
+			if err := w.deps.DB.Delete(&todo).Error; err != nil {
+				deletionErrors = append(deletionErrors, err)
+				releaseFile()
+				continue
+			}
+		}
+
+		var migrationItems []models.StorageMigrationItem
+		if err := w.deps.DB.Where("file_id = ?", todo.ID).Order("id ASC").Find(&migrationItems).Error; err != nil {
+			deletionErrors = append(deletionErrors, err)
+			releaseFile()
+			continue
+		}
+		migrationIDs := make(map[uint]struct{}, len(migrationItems))
+		if len(migrationItems) > 0 {
+			if err := w.deps.DB.Model(&models.StorageMigrationItem{}).Where("file_id = ?", todo.ID).Updates(map[string]any{
+				"status": models.StorageMigrationItemDeleted, "progress_message": "Deleted during migration",
+				"error_code": "", "error_message": "", "bytes_total": 0, "bytes_copied": 0,
+				"objects_verified": 0,
+			}).Error; err != nil {
+				deletionErrors = append(deletionErrors, err)
+				releaseFile()
+				continue
+			}
+			for index := range migrationItems {
+				migrationIDs[migrationItems[index].MigrationID] = struct{}{}
+			}
+		}
 		if w.HasActiveDownloadPreparationForFile(todo.ID) {
 			skippingDeletion++
 			releaseFile()
+			w.refreshDeletedFileMigrationProgress(migrationIDs, &deletionErrors)
 			continue
 		}
 
@@ -106,18 +130,36 @@ func (w *WorkerGroup) runDeleter() error {
 			// we will try again in the next loop (the encoding process may be finished until then)
 			skippingDeletion++
 			releaseFile()
+			w.refreshDeletedFileMigrationProgress(migrationIDs, &deletionErrors)
 			continue
 		}
 
-		if err := w.deleteStoredFile(todo); err != nil {
+		if err := w.deleteStoredFileCopies(todo, migrationItems); err != nil {
 			log.Printf("Failed to delete stored data for file %d: %v", todo.ID, err)
 			deletionErrors = append(deletionErrors, err)
 			skippingDeletion++
 			releaseFile()
+			w.refreshDeletedFileMigrationProgress(migrationIDs, &deletionErrors)
 			continue
 		}
 
 		if err := w.deps.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Model(&models.StorageMigrationItem{}).Where("file_id = ?", todo.ID).Updates(map[string]any{
+				"status": models.StorageMigrationItemDeleted, "reservation_key": "", "destination_owned": false,
+				"progress_message": "Deleted during migration", "error_code": "", "error_message": "",
+				"bytes_total": 0, "bytes_copied": 0, "objects_verified": 0,
+			}).Error; err != nil {
+				return err
+			}
+			if len(migrationItems) > 0 {
+				itemIDs := make([]uint, 0, len(migrationItems))
+				for _, item := range migrationItems {
+					itemIDs = append(itemIDs, item.ID)
+				}
+				if err := tx.Where("item_id IN ?", itemIDs).Delete(&models.StorageMigrationObject{}).Error; err != nil {
+					return err
+				}
+			}
 			if err := tx.Unscoped().Where("file_id = ?", todo.ID).Delete(&models.Subtitle{}).Error; err != nil {
 				return err
 			}
@@ -132,10 +174,12 @@ func (w *WorkerGroup) runDeleter() error {
 			log.Printf("Failed to delete file %d from database: %v", todo.ID, err)
 			deletionErrors = append(deletionErrors, err)
 			releaseFile()
+			w.refreshDeletedFileMigrationProgress(migrationIDs, &deletionErrors)
 			continue
 		}
 		successDeletion++
 		releaseFile()
+		w.refreshDeletedFileMigrationProgress(migrationIDs, &deletionErrors)
 	}
 	if skippingDeletion > 0 {
 		log.Printf("Skipped %d files from deletion", skippingDeletion)
@@ -147,8 +191,23 @@ func (w *WorkerGroup) runDeleter() error {
 }
 
 func (w *WorkerGroup) deleteStoredFile(file models.File) error {
-	releaseMount := w.deps.StorageLifecycle.ReadLock(file.StorageID)
-	defer releaseMount()
+	return w.deleteStoredFileCopies(file, nil)
+}
+
+func (w *WorkerGroup) deleteStoredFileCopies(file models.File, migrationItems []models.StorageMigrationItem) error {
+	mountIDs := []string{file.StorageID}
+	if w.deps.Storage != nil && w.deps.Storage.Layout() != nil {
+		for _, item := range migrationItems {
+			if item.CleanedAt == nil {
+				mountIDs = append(mountIDs, item.SourceMountID)
+			}
+			if item.DestinationOwned {
+				mountIDs = append(mountIDs, item.DestinationMountID)
+			}
+		}
+	}
+	releaseMounts := w.deps.StorageLifecycle.ReadLocks(mountIDs...)
+	defer releaseMounts()
 	if file.Path != "" {
 		info, err := os.Stat(file.Path)
 		switch {
@@ -162,15 +221,25 @@ func (w *WorkerGroup) deleteStoredFile(file models.File) error {
 	}
 
 	if w.deps.Storage != nil && w.deps.Storage.Layout() != nil {
-		store, err := w.deps.Storage.StoreOrDefault(file.StorageID)
-		if err != nil {
-			return err
-		}
 		prefix, err := w.deps.Storage.Layout().FilePrefix(file.UUID)
 		if err != nil {
 			return err
 		}
-		return storage.DeletePrefix(context.Background(), store, prefix)
+		seen := make(map[string]bool, len(mountIDs))
+		for _, mountID := range mountIDs {
+			if seen[mountID] {
+				continue
+			}
+			seen[mountID] = true
+			store, err := w.deps.Storage.StoreOrDefault(mountID)
+			if err != nil {
+				return err
+			}
+			if err := storage.DeletePrefix(context.Background(), store, prefix); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
 	if file.Folder == "" {
@@ -186,5 +255,13 @@ func (w *WorkerGroup) deleteStoredFile(file models.File) error {
 		return nil
 	default:
 		return os.RemoveAll(file.Folder)
+	}
+}
+
+func (w *WorkerGroup) refreshDeletedFileMigrationProgress(migrationIDs map[uint]struct{}, deletionErrors *[]error) {
+	for migrationID := range migrationIDs {
+		if err := w.refreshStorageMigrationProgress(context.Background(), migrationID); err != nil {
+			*deletionErrors = append(*deletionErrors, err)
+		}
 	}
 }

@@ -69,6 +69,14 @@ func (h *Handlers) ListStorageMigrations(c echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
+func (h *Handlers) ListStorageMigrationAccounts(c echo.Context) error {
+	accounts, err := h.Logic.ListStorageMigrationAccounts(c.Request().Context(), c.QueryParam("search"), 20)
+	if err != nil {
+		return storageMigrationError(c, err)
+	}
+	return c.JSON(http.StatusOK, echo.Map{"accounts": accounts})
+}
+
 func (h *Handlers) GetStorageMigration(c echo.Context) error {
 	migration, err := h.Logic.GetStorageMigration(c.Request().Context(), c.Param("id"))
 	if err != nil {
@@ -136,6 +144,8 @@ func storageMigrationError(c echo.Context, err error) error {
 		return c.JSON(http.StatusUnprocessableEntity, echo.Map{"error": "storage_migration_empty", "message": err.Error()})
 	case errors.Is(err, logic.ErrStorageMigrationUnavailable):
 		return c.JSON(http.StatusUnprocessableEntity, echo.Map{"error": "storage_migration_unavailable", "message": err.Error()})
+	case errors.Is(err, logic.ErrStorageMigrationAccounts):
+		return c.JSON(http.StatusUnprocessableEntity, echo.Map{"error": "storage_migration_accounts_invalid", "message": err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "storage_migration_failed"})
 	}
