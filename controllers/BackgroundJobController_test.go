@@ -28,11 +28,11 @@ func TestUserJobDetailStripsOperatorAndWorkerDiagnostics(t *testing.T) {
 	actorID := uint(4)
 	detail := &background.JobDetail{
 		Job:    background.Job{Tasks: []background.Task{{Attempts: []background.Attempt{{Worker: "host-1", Diagnostics: "secret"}}}}},
-		Events: []background.Event{{ActorID: &actorID, ActorName: "operator"}},
+		Events: []background.Event{{ActorID: &actorID, ActorName: "operator", Metadata: "copy object: unexpected EOF"}},
 	}
 	stripTaskDiagnostics(detail)
 	attempt := detail.Tasks[0].Attempts[0]
-	if attempt.Worker != "" || attempt.Diagnostics != "" || detail.Events[0].ActorID != nil || detail.Events[0].ActorName != "" {
+	if attempt.Worker != "" || attempt.Diagnostics != "" || detail.Events[0].ActorID != nil || detail.Events[0].ActorName != "" || detail.Events[0].Metadata != "" {
 		t.Fatalf("user detail leaked internal data: %#v %#v", attempt, detail.Events[0])
 	}
 }

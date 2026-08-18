@@ -763,6 +763,79 @@ func (s *Service) ensureStoragePoolNotMigrating(poolID uint) error {
 	return nil
 }
 
+func (s *Service) StartStorageMigrationCleanupNow(ctx context.Context, migrationUUID string, actorID uint, actorName string) (models.StorageMigration, error) {
+	migration, err := s.GetStorageMigration(ctx, migrationUUID)
+	if err != nil {
+		return models.StorageMigration{}, err
+	}
+	now := time.Now().UTC()
+	if s.Deps.Background == nil || migration.Status != models.StorageMigrationRetainingOriginals || migration.KeepOriginals ||
+		migration.CleanupJobID == "" || migration.CleanupAfter == nil || !migration.CleanupAfter.After(now) ||
+		migration.FileCount == 0 || migration.CutoverCount+migration.DeletedCount < migration.FileCount {
+		return models.StorageMigration{}, fmt.Errorf("%w: original cleanup is not waiting in its retention period", ErrStorageMigrationConflict)
+	}
+	cleanupJob, err := s.Deps.Background.Job(ctx, migration.CleanupJobID, nil, true)
+	if err != nil {
+		return models.StorageMigration{}, err
+	}
+	if cleanupJob.Kind != "storage.migration.cleanup" || cleanupJob.Status != background.JobQueued {
+		return models.StorageMigration{}, fmt.Errorf("%w: original cleanup has already changed state", ErrStorageMigrationConflict)
+	}
+
+	previousCleanupAfter := migration.CleanupAfter
+	previousPhase := migration.Phase
+	durableCtx := context.WithoutCancel(ctx)
+	updated := s.Deps.DB.WithContext(durableCtx).Model(&migration).
+		Where("status = ? AND keep_originals = ? AND cleanup_job_id = ?", models.StorageMigrationRetainingOriginals, false, migration.CleanupJobID).
+		Updates(map[string]any{"cleanup_after": &now, "phase": "Original cleanup starting"})
+	if updated.Error != nil {
+		return models.StorageMigration{}, updated.Error
+	}
+	if updated.RowsAffected == 0 {
+		return models.StorageMigration{}, fmt.Errorf("%w: original cleanup changed state before it could start", ErrStorageMigrationConflict)
+	}
+
+	if err := s.Deps.Background.RunJobNow(durableCtx, migration.CleanupJobID, actorID, actorName); err != nil {
+		if errors.Is(err, background.ErrConflict) {
+			if current, loadErr := s.Deps.Background.Job(durableCtx, migration.CleanupJobID, nil, true); loadErr == nil && cleanupJobIsRunningOrDue(current, time.Now().UTC()) {
+				s.Deps.Background.Wake()
+				if loadErr := s.Deps.DB.WithContext(durableCtx).First(&migration, migration.ID).Error; loadErr != nil {
+					return models.StorageMigration{}, loadErr
+				}
+				return migration, nil
+			}
+		}
+		_ = s.Deps.DB.WithContext(durableCtx).Model(&migration).
+			Where("status = ? AND keep_originals = ? AND cleanup_job_id = ? AND phase = ?", models.StorageMigrationRetainingOriginals, false, migration.CleanupJobID, "Original cleanup starting").
+			Updates(map[string]any{"cleanup_after": previousCleanupAfter, "phase": previousPhase}).Error
+		if errors.Is(err, background.ErrConflict) {
+			return models.StorageMigration{}, fmt.Errorf("%w: original cleanup changed state before it could start", ErrStorageMigrationConflict)
+		}
+		return models.StorageMigration{}, err
+	}
+	if err := s.Deps.DB.WithContext(durableCtx).First(&migration, migration.ID).Error; err != nil {
+		return models.StorageMigration{}, err
+	}
+	return migration, nil
+}
+
+func cleanupJobIsRunningOrDue(job *background.JobDetail, now time.Time) bool {
+	if job == nil || job.Kind != "storage.migration.cleanup" {
+		return false
+	}
+	switch job.Status {
+	case background.JobRunning, background.JobSucceeded, background.JobSucceededWithWarnings:
+		return true
+	case background.JobQueued:
+		for _, task := range job.Tasks {
+			if task.Status == background.TaskQueued && (task.RunAfter == nil || !task.RunAfter.After(now)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (s *Service) KeepStorageMigrationOriginals(ctx context.Context, migrationUUID string, actorID uint, actorName string) (models.StorageMigration, error) {
 	migration, err := s.GetStorageMigration(ctx, migrationUUID)
 	if err != nil {

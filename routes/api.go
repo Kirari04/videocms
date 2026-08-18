@@ -83,6 +83,7 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	adminV2.GET("/storage/migrations/:id/items", handlers.ListStorageMigrationItems)
 	adminV2.POST("/storage/migrations/:id/cancel", handlers.CancelFailedStorageMigration)
 	adminV2.POST("/storage/migrations/:id/keep-originals", handlers.KeepStorageMigrationOriginals)
+	adminV2.POST("/storage/migrations/:id/start-cleanup", handlers.StartStorageMigrationCleanupNow)
 	protectedApi.POST("/folder", handlers.CreateFolder)
 	protectedApi.PUT("/folder", handlers.UpdateFolder)
 	protectedApi.DELETE("/folder", handlers.DeleteFolderLegacy)

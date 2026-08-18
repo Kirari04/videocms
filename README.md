@@ -1,8 +1,11 @@
 # Video-CMS 🎬
 
-[![Go Version](https://img.shields.io/badge/go-1.25-blue.svg)](https://golang.org/)
+[![CI](https://github.com/Kirari04/videocms/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/Kirari04/videocms/actions/workflows/ci.yml?query=branch%3Adev)
+[![Staging Image](https://github.com/Kirari04/videocms/actions/workflows/staging-image.yml/badge.svg?branch=staging)](https://github.com/Kirari04/videocms/actions/workflows/staging-image.yml?query=branch%3Astaging)
+[![Release](https://github.com/Kirari04/videocms/actions/workflows/release.yml/badge.svg?branch=master)](https://github.com/Kirari04/videocms/actions/workflows/release.yml?query=branch%3Amaster)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/Kirari04/videocms?filename=go.mod&logo=go)](https://go.dev/)
+[![Docker Pulls](https://img.shields.io/docker/pulls/kirari04/videocms?logo=docker)](https://hub.docker.com/r/kirari04/videocms)
 [![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Docker Build](https://img.shields.io/badge/docker-build-brightgreen.svg)](https://hub.docker.com/r/kirari04/videocms)
 
 A self-hosted Content Management System for your videos. 🎞️
 

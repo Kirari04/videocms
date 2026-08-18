@@ -744,6 +744,7 @@ func (r *Runtime) finish(task Task, attempt Attempt, result Result, taskErr *Tas
 		}
 		eventType := "task_succeeded"
 		eventMessage := "Task completed"
+		eventMetadata := ""
 
 		if taskErr != nil {
 			code := boundedMessage(taskErr.Code, 80)
@@ -805,25 +806,29 @@ func (r *Runtime) finish(task Task, attempt Attempt, result Result, taskErr *Tas
 					updates["run_after"] = &runAfter
 					updates["finished_at"] = nil
 					eventType = "task_retry_scheduled"
-					eventMessage = fmt.Sprintf("Retry scheduled in %s", delay.Round(time.Second))
+					eventMessage = fmt.Sprintf("Attempt %d failed; retry scheduled in %s", attempt.Number, delay.Round(time.Second))
 				} else {
 					taskStatus = TaskFailed
 					updates["status"] = taskStatus
 					eventType = "task_failed"
-					eventMessage = "Task exhausted its automatic retries"
+					eventMessage = fmt.Sprintf("Attempt %d failed; automatic retries exhausted", attempt.Number)
 				}
 			default:
 				attemptStatus = AttemptFailed
 				taskStatus = TaskFailed
 				updates["status"] = taskStatus
 				eventType = "task_failed"
-				eventMessage = "Task failed"
+				eventMessage = fmt.Sprintf("Attempt %d failed", attempt.Number)
+			}
+			diagnostics := RedactDiagnostic(taskErr.Diagnostic)
+			if attemptStatus == AttemptFailed {
+				eventMetadata = diagnostics
 			}
 			if err := tx.Model(&Attempt{}).Where("id = ?", attempt.ID).Updates(map[string]any{
 				"status":        attemptStatus,
 				"error_code":    code,
 				"error_message": public,
-				"diagnostics":   RedactDiagnostic(taskErr.Diagnostic),
+				"diagnostics":   diagnostics,
 				"finished_at":   &now,
 			}).Error; err != nil {
 				return err
@@ -863,7 +868,7 @@ func (r *Runtime) finish(task Task, attempt Attempt, result Result, taskErr *Tas
 				}
 			}
 		}
-		if err := addEvent(tx, Event{JobID: task.JobID, TaskID: task.ID, Type: eventType, Message: eventMessage}); err != nil {
+		if err := addEvent(tx, Event{JobID: task.JobID, TaskID: task.ID, Type: eventType, Message: eventMessage, Metadata: eventMetadata}); err != nil {
 			return err
 		}
 		var job Job
@@ -1228,6 +1233,42 @@ func (r *Runtime) ResumeJob(ctx context.Context, jobID string, actorID uint, act
 		job.PauseRequestedAt = nil
 		job.PausedAt = nil
 		if err := addEvent(tx, Event{JobID: jobID, Type: "job_resumed", ActorID: optionalActor(actorID), ActorName: actorName, Message: "Job resumed"}); err != nil {
+			return err
+		}
+		return recomputeJob(tx, &job, now)
+	})
+	if err == nil {
+		r.Wake()
+	}
+	return err
+}
+
+// RunJobNow releases future-scheduled queued tasks without creating a second
+// job or discarding their durable history. It is intentionally limited to jobs
+// that have not started; retry backoff and active work use their own controls.
+func (r *Runtime) RunJobNow(ctx context.Context, jobID string, actorID uint, actorName string) error {
+	now := time.Now()
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var job Job
+		if err := tx.First(&job, "id = ?", jobID).Error; err != nil {
+			return err
+		}
+		if job.Status != JobQueued || job.PauseRequestedAt != nil || job.CancelRequestedAt != nil {
+			return ErrConflict
+		}
+		result := tx.Model(&Task{}).
+			Where("job_id = ? AND status = ? AND run_after IS NOT NULL AND run_after > ?", jobID, TaskQueued, now).
+			Update("run_after", nil)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrConflict
+		}
+		if err := addEvent(tx, Event{
+			JobID: jobID, Type: "job_run_requested", ActorID: optionalActor(actorID), ActorName: actorName,
+			Message: "Scheduled wait skipped; job released for immediate execution",
+		}); err != nil {
 			return err
 		}
 		return recomputeJob(tx, &job, now)
