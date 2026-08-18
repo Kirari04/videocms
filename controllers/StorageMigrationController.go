@@ -126,6 +126,16 @@ func (h *Handlers) KeepStorageMigrationOriginals(c echo.Context) error {
 	return c.JSON(http.StatusOK, migration)
 }
 
+func (h *Handlers) StartStorageMigrationCleanupNow(c echo.Context) error {
+	actorID, actorName := backgroundActor(c)
+	migration, err := h.Logic.StartStorageMigrationCleanupNow(c.Request().Context(), c.Param("id"), actorID, actorName)
+	if err != nil {
+		return storageMigrationError(c, err)
+	}
+	c.Response().Header().Set("Retry-After", "1")
+	return c.JSON(http.StatusAccepted, migration)
+}
+
 func (h *Handlers) CancelFailedStorageMigration(c echo.Context) error {
 	migration, err := h.Logic.CancelFailedStorageMigration(c.Request().Context(), c.Param("id"))
 	if err != nil {

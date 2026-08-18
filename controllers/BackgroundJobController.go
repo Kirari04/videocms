@@ -325,6 +325,7 @@ func stripTaskDiagnostics(detail *background.JobDetail) {
 	for eventIndex := range detail.Events {
 		detail.Events[eventIndex].ActorID = nil
 		detail.Events[eventIndex].ActorName = ""
+		detail.Events[eventIndex].Metadata = ""
 	}
 }
 

@@ -26,7 +26,13 @@ func TestStorageMigrationBackgroundJobCutsOverAndSchedulesDeferredCleanup(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.File{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}, &models.StorageMigrationObject{}); err != nil {
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db.AutoMigrate(&models.File{}, &models.Quality{}, &models.Audio{}, &models.Subtitle{}, &models.StorageMigration{}, &models.StorageMigrationAccount{}, &models.StorageMigrationItem{}, &models.StorageMigrationObject{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := background.Migrate(db); err != nil {
@@ -43,7 +49,8 @@ func TestStorageMigrationBackgroundJobCutsOverAndSchedulesDeferredCleanup(t *tes
 	if err := db.Create(&file).Error; err != nil {
 		t.Fatal(err)
 	}
-	putMigrationTestObject(t, source, migrationTestKey(t, file.UUID+"/source/original.mp4"), "media")
+	sourceKey := migrationTestKey(t, file.UUID+"/source/original.mp4")
+	putMigrationTestObject(t, source, sourceKey, "media")
 	migration := models.StorageMigration{UUID: "background-migration", SourcePoolName: "Source", DestinationPoolName: "Destination", Status: models.StorageMigrationQueued, FileCount: 1, PlannedBytes: 5}
 	if err := db.Create(&migration).Error; err != nil {
 		t.Fatal(err)
@@ -93,6 +100,39 @@ func TestStorageMigrationBackgroundJobCutsOverAndSchedulesDeferredCleanup(t *tes
 	}
 	if cleanup.Status != background.JobQueued || len(cleanup.Tasks) != 1 || cleanup.Tasks[0].RunAfter == nil {
 		t.Fatalf("unexpected cleanup job: %#v", cleanup)
+	}
+	if _, err := source.Stat(context.Background(), sourceKey); err != nil {
+		t.Fatalf("source object was not retained before cleanup override: %v", err)
+	}
+	if _, err := worker.logic.StartStorageMigrationCleanupNow(context.Background(), migration.UUID, 7, "admin"); err != nil {
+		t.Fatalf("start cleanup now: %v", err)
+	}
+	waitStorageMigrationJob(t, runtime, migration.CleanupJobID, background.JobSucceeded)
+	cleanup, err = runtime.Job(context.Background(), migration.CleanupJobID, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.First(&migration, migration.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if migration.Status != models.StorageMigrationCompleted || migration.CompletedAt == nil {
+		t.Fatalf("immediate cleanup did not complete migration: %#v", migration)
+	}
+	if _, err := source.Stat(context.Background(), sourceKey); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("source object remained after immediate cleanup: %v", err)
+	}
+	foundReleaseEvent := false
+	for _, event := range cleanup.Events {
+		if event.Type == "job_run_requested" && event.ActorName == "admin" {
+			foundReleaseEvent = true
+			break
+		}
+	}
+	if !foundReleaseEvent {
+		t.Fatalf("immediate cleanup override was not recorded: %#v", cleanup.Events)
+	}
+	if _, err := worker.logic.StartStorageMigrationCleanupNow(context.Background(), migration.UUID, 7, "admin"); err == nil {
+		t.Fatal("completed cleanup override was accepted a second time")
 	}
 }
 

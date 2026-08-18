@@ -268,7 +268,7 @@ func TestTransientFailureRetriesThenSucceeds(t *testing.T) {
 	var calls atomic.Int32
 	if err := runtime.Register("test.retry", func(context.Context, Task) (Result, error) {
 		if calls.Add(1) < 3 {
-			return Result{}, &TaskError{Code: "temporary", Public: "Temporary failure", Diagnostic: "retry diagnostic", Class: ErrorTransient, RetryAfter: time.Millisecond}
+			return Result{}, &TaskError{Code: "temporary", Public: "Temporary failure", Diagnostic: "copy video/out288.ts: unexpected EOF password=topsecret", Class: ErrorTransient, RetryAfter: time.Millisecond}
 		}
 		return Result{}, nil
 	}); err != nil {
@@ -282,6 +282,20 @@ func TestTransientFailureRetriesThenSucceeds(t *testing.T) {
 	}
 	if len(detail.Tasks[0].Attempts) != 3 || detail.Tasks[0].Attempts[0].Status != AttemptFailed || detail.Tasks[0].Attempts[2].Status != AttemptSucceeded {
 		t.Fatalf("unexpected attempt history: %#v", detail.Tasks[0].Attempts)
+	}
+	retryEvents := make([]Event, 0, 2)
+	for _, event := range detail.Events {
+		if event.Type == "task_retry_scheduled" {
+			retryEvents = append(retryEvents, event)
+		}
+	}
+	if len(retryEvents) != 2 {
+		t.Fatalf("retry events = %#v, want 2", retryEvents)
+	}
+	for _, event := range retryEvents {
+		if !strings.Contains(event.Message, "failed; retry scheduled") || !strings.Contains(event.Metadata, "unexpected EOF") || strings.Contains(event.Metadata, "topsecret") {
+			t.Fatalf("retry event did not preserve a redacted diagnostic: %#v", event)
+		}
 	}
 }
 
@@ -339,6 +353,16 @@ func TestPermanentFailureDoesNotRetryAndRedactsDiagnostics(t *testing.T) {
 	diagnostic := attempts[0].Diagnostics
 	if strings.Contains(diagnostic, "super-secret") || strings.Contains(diagnostic, "bearer-secret") || strings.Contains(diagnostic, "json-secret") || strings.Contains(diagnostic, "alice:pw") || strings.Contains(diagnostic, "bob:key") || strings.Contains(diagnostic, "?token=") || !strings.Contains(diagnostic, "[redacted]") {
 		t.Fatalf("diagnostic was not safely redacted: %q", diagnostic)
+	}
+	var failureEvent *Event
+	for index := range detail.Events {
+		if detail.Events[index].Type == "task_failed" {
+			failureEvent = &detail.Events[index]
+			break
+		}
+	}
+	if failureEvent == nil || failureEvent.Metadata != diagnostic || failureEvent.Message != "Attempt 1 failed" {
+		t.Fatalf("failure event did not retain the redacted attempt diagnostic: %#v", failureEvent)
 	}
 }
 
@@ -429,6 +453,53 @@ func TestQueuedJobCanBePausedAndCanceledWithoutExecution(t *testing.T) {
 	detail = waitForJob(t, runtime, job.ID, JobCanceled)
 	if detail.Tasks[0].Status != TaskCanceled || detail.PauseRequestedAt != nil || detail.PausedAt != nil {
 		t.Fatalf("unexpected canceled pause state: %#v", detail)
+	}
+}
+
+func TestRunJobNowReleasesFutureScheduledTask(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	called := make(chan struct{}, 1)
+	if err := runtime.Register("test.scheduled", func(context.Context, Task) (Result, error) {
+		called <- struct{}{}
+		return Result{}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	startTestRuntime(t, runtime)
+	runAfter := time.Now().Add(time.Hour)
+	job, _, err := runtime.Enqueue(context.Background(), JobSpec{
+		Kind: "test.scheduled", Visibility: VisibilityAdmin, IdempotencyKey: "scheduled-now", Label: "Scheduled work",
+		Tasks: []TaskSpec{{Kind: "test.scheduled", Queue: QueueStorage, Required: true, RunAfter: &runAfter}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-called:
+		t.Fatal("future-scheduled task ran before it was released")
+	case <-time.After(30 * time.Millisecond):
+	}
+	if err := runtime.RunJobNow(context.Background(), job.ID, 12, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	detail := waitForJob(t, runtime, job.ID, JobSucceeded)
+	select {
+	case <-called:
+	default:
+		t.Fatal("released task did not run")
+	}
+	found := false
+	for _, event := range detail.Events {
+		if event.Type == "job_run_requested" && event.ActorName == "admin" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("release event was not recorded: %#v", detail.Events)
+	}
+	if err := runtime.RunJobNow(context.Background(), job.ID, 12, "admin"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("completed job release = %v, want conflict", err)
 	}
 }
 
