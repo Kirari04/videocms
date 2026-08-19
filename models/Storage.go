@@ -12,6 +12,9 @@ const (
 
 	FileStorageAvailable   = "available"
 	FileStorageUnavailable = "unavailable"
+
+	StoragePoolMountPrimary = "primary"
+	StoragePoolMountCache   = "cache"
 )
 
 // StorageMount is a durable identity for a configured storage backend. A
@@ -41,10 +44,35 @@ type StoragePool struct {
 }
 
 type StoragePoolMount struct {
-	StoragePoolID  uint `gorm:"primaryKey"`
-	StorageMountID uint `gorm:"primaryKey"`
-	CreatedAt      *time.Time
+	StoragePoolID    uint   `gorm:"primaryKey"`
+	StorageMountID   uint   `gorm:"primaryKey"`
+	Role             string `gorm:"size:16;index;default:primary"`
+	CacheMaxBytes    int64
+	CacheLastError   string `gorm:"size:1000"`
+	CacheLastErrorAt *time.Time
+	CreatedAt        *time.Time
 
 	StoragePool  StoragePool  `gorm:"foreignKey:StoragePoolID" json:"-"`
 	StorageMount StorageMount `gorm:"foreignKey:StorageMountID" json:"-"`
+}
+
+// StorageCacheEntry records a disposable, verified playback copy. Files keep
+// their authoritative StorageID; deleting this row or its object must never
+// affect media ownership or availability.
+type StorageCacheEntry struct {
+	Model
+	StoragePoolID    uint   `gorm:"index;uniqueIndex:idx_storage_cache_origin"`
+	OriginMountID    string `gorm:"size:64;index;uniqueIndex:idx_storage_cache_origin"`
+	ObjectKeyHash    string `gorm:"size:64;uniqueIndex:idx_storage_cache_origin"`
+	ObjectKey        string `gorm:"type:text"`
+	CacheMountID     uint   `gorm:"index"`
+	CacheObjectKey   string `gorm:"type:text"`
+	FileID           uint   `gorm:"index"`
+	FileCacheVersion uint64
+	Size             int64
+	SourceETag       string `gorm:"size:255"`
+	ContentType      string `gorm:"size:255"`
+	CacheControl     string `gorm:"size:255"`
+	SourceModTime    *time.Time
+	LastAccessedAt   time.Time `gorm:"index"`
 }

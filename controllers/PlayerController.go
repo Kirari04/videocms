@@ -454,12 +454,20 @@ func buildMediaClaims(dbLink *models.Link) auth.MediaClaims {
 		LinkUUID:      dbLink.UUID,
 		FileUUID:      dbLink.File.UUID,
 		StorageID:     dbLink.File.StorageID,
+		StoragePoolID: valueOrZero(dbLink.File.StoragePoolID),
 		UserID:        dbLink.UserID,
 		FileID:        dbLink.FileID,
 		QualityIDs:    qualityIDs,
 		AudioIDs:      audioIDs,
 		SubtitleUUIDs: subtitleUUIDs,
 	}
+}
+
+func valueOrZero(value *uint) uint {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 func (h *Handlers) mediaCookie(c echo.Context, linkUUID string, token string, expiration time.Time) *http.Cookie {

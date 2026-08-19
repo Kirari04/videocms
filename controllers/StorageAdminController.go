@@ -34,9 +34,16 @@ type sftpHostKeyRequest struct {
 }
 
 type storagePoolRequest struct {
-	Name      string `json:"name" validate:"required,min=1,max=120"`
-	MountIDs  []uint `json:"mount_ids" validate:"required,min=1"`
-	IsDefault bool   `json:"is_default"`
+	Name            string                     `json:"name" validate:"required,min=1,max=120"`
+	MountIDs        []uint                     `json:"mount_ids"`
+	PrimaryMountIDs []uint                     `json:"primary_mount_ids"`
+	CacheMounts     []storageCacheMountRequest `json:"cache_mounts"`
+	IsDefault       bool                       `json:"is_default"`
+}
+
+type storageCacheMountRequest struct {
+	MountID  uint  `json:"mount_id"`
+	MaxBytes int64 `json:"max_bytes"`
 }
 
 type storageReconnectRequest struct {
@@ -185,7 +192,8 @@ func (h *Handlers) CreateStoragePool(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 	pool, err := h.Logic.CreateStoragePool(logic.StoragePoolInput{
-		Name: request.Name, MountIDs: request.MountIDs, IsDefault: request.IsDefault,
+		Name: request.Name, MountIDs: request.MountIDs, PrimaryMountIDs: request.PrimaryMountIDs,
+		CacheMounts: storageCacheInputs(request.CacheMounts), IsDefault: request.IsDefault,
 	})
 	if err != nil {
 		return storageAdminError(c, err)
@@ -203,12 +211,21 @@ func (h *Handlers) UpdateStoragePool(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 	pool, err := h.Logic.UpdateStoragePool(poolID, logic.StoragePoolInput{
-		Name: request.Name, MountIDs: request.MountIDs, IsDefault: request.IsDefault,
+		Name: request.Name, MountIDs: request.MountIDs, PrimaryMountIDs: request.PrimaryMountIDs,
+		CacheMounts: storageCacheInputs(request.CacheMounts), IsDefault: request.IsDefault,
 	})
 	if err != nil {
 		return storageAdminError(c, err)
 	}
 	return c.JSON(http.StatusOK, pool)
+}
+
+func storageCacheInputs(requests []storageCacheMountRequest) []logic.StorageCacheMountInput {
+	result := make([]logic.StorageCacheMountInput, 0, len(requests))
+	for _, request := range requests {
+		result = append(result, logic.StorageCacheMountInput{MountID: request.MountID, MaxBytes: request.MaxBytes})
+	}
+	return result
 }
 
 func (h *Handlers) SetDefaultStoragePool(c echo.Context) error {

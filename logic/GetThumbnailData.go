@@ -10,6 +10,7 @@ import (
 type ThumbnailObject struct {
 	FileUUID string
 	StoreID  string
+	PoolID   uint
 	UserID   uint
 	FileID   uint
 }
@@ -53,7 +54,15 @@ func (s *Service) ResolveThumbnailObject(fileName string, UUID string) (status i
 	return http.StatusOK, ThumbnailObject{
 		FileUUID: dbLink.File.UUID,
 		StoreID:  dbLink.File.StorageID,
+		PoolID:   valueOrZeroUint(dbLink.File.StoragePoolID),
 		UserID:   dbLink.UserID,
 		FileID:   dbLink.FileID,
 	}, nil
+}
+
+func valueOrZeroUint(value *uint) uint {
+	if value == nil {
+		return 0
+	}
+	return *value
 }

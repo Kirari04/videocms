@@ -177,6 +177,19 @@ func (s *managedStore) Check(ctx context.Context) error {
 	return checker.Check(ctx)
 }
 
+func (s *managedStore) Capacity(ctx context.Context) (CapacityInfo, error) {
+	store, release, err := s.acquire()
+	if err != nil {
+		return CapacityInfo{}, err
+	}
+	defer release()
+	reporter, ok := store.(CapacityReporter)
+	if !ok {
+		return CapacityInfo{}, ErrCapacityUnavailable
+	}
+	return reporter.Capacity(ctx)
+}
+
 func (s *managedStore) Close() error {
 	s.retire()
 	return s.waitClosed()
@@ -214,3 +227,4 @@ func (r *managedReadSeekCloser) Close() error {
 var _ Store = (*managedStore)(nil)
 var _ Store = (*managedLocalPathStore)(nil)
 var _ HealthChecker = (*managedStore)(nil)
+var _ CapacityReporter = (*managedStore)(nil)

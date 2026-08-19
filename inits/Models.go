@@ -58,6 +58,7 @@ func MigrateModels(gormDB *gorm.DB) error {
 		&models.StorageMount{},
 		&models.StoragePool{},
 		&models.StoragePoolMount{},
+		&models.StorageCacheEntry{},
 		&models.StorageMigration{},
 		&models.StorageMigrationAccount{},
 		&models.StorageMigrationItem{},
@@ -111,6 +112,9 @@ func MigrateModels(gormDB *gorm.DB) error {
 		return fmt.Errorf("failed to backfill file storage state: %w", err)
 	}
 	if err := ensureLocalStorageDefaults(gormDB); err != nil {
+		return err
+	}
+	if err := backfillFileStoragePools(gormDB); err != nil {
 		return err
 	}
 
@@ -174,9 +178,17 @@ func ensureLocalStorageDefaults(gormDB *gorm.DB) error {
 	if err := gormDB.Where("uuid = ?", localPool.UUID).FirstOrCreate(&localPool).Error; err != nil {
 		return fmt.Errorf("failed to initialize local storage pool: %w", err)
 	}
-	membership := models.StoragePoolMount{StoragePoolID: localPool.ID, StorageMountID: localMount.ID}
-	if err := gormDB.FirstOrCreate(&membership).Error; err != nil {
+	membership := models.StoragePoolMount{
+		StoragePoolID: localPool.ID, StorageMountID: localMount.ID, Role: models.StoragePoolMountPrimary,
+	}
+	if err := gormDB.Where("storage_pool_id = ? AND storage_mount_id = ?", localPool.ID, localMount.ID).
+		FirstOrCreate(&membership).Error; err != nil {
 		return fmt.Errorf("failed to initialize local storage pool membership: %w", err)
+	}
+	if err := gormDB.Model(&models.StoragePoolMount{}).
+		Where("role IS NULL OR role = ''").
+		Update("role", models.StoragePoolMountPrimary).Error; err != nil {
+		return fmt.Errorf("failed to backfill storage pool mount roles: %w", err)
 	}
 	var defaultPoolCount int64
 	if err := gormDB.Model(&models.StoragePool{}).Where("is_default = ?", true).Count(&defaultPoolCount).Error; err != nil {
@@ -185,6 +197,34 @@ func ensureLocalStorageDefaults(gormDB *gorm.DB) error {
 	if defaultPoolCount == 0 {
 		if err := gormDB.Model(&localPool).Update("is_default", true).Error; err != nil {
 			return fmt.Errorf("failed to select local storage pool: %w", err)
+		}
+	}
+	return nil
+}
+
+func backfillFileStoragePools(gormDB *gorm.DB) error {
+	type candidate struct {
+		StorageID string
+		PoolID    uint
+		Count     int64
+	}
+	var candidates []candidate
+	if err := gormDB.Table("storage_mounts AS mounts").
+		Select("mounts.uuid AS storage_id, MIN(members.storage_pool_id) AS pool_id, COUNT(*) AS count").
+		Joins("JOIN storage_pool_mounts AS members ON members.storage_mount_id = mounts.id").
+		Where("members.role = ?", models.StoragePoolMountPrimary).
+		Group("mounts.uuid").
+		Scan(&candidates).Error; err != nil {
+		return fmt.Errorf("inspect file storage pool candidates: %w", err)
+	}
+	for _, candidate := range candidates {
+		if candidate.Count != 1 {
+			continue
+		}
+		if err := gormDB.Unscoped().Model(&models.File{}).
+			Where("storage_pool_id IS NULL AND storage_id = ?", candidate.StorageID).
+			Update("storage_pool_id", candidate.PoolID).Error; err != nil {
+			return fmt.Errorf("backfill file storage pool for %s: %w", candidate.StorageID, err)
 		}
 	}
 	return nil

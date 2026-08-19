@@ -613,6 +613,9 @@ func (s *Service) storageMigrationMounts(ctx context.Context, pool models.Storag
 	mounts := make([]StorageMigrationMountPreview, 0, len(pool.Members))
 	ids := make([]string, 0, len(pool.Members))
 	for _, member := range pool.Members {
+		if member.Role != models.StoragePoolMountPrimary {
+			continue
+		}
 		mount := member.StorageMount
 		if !mount.Mounted || strings.TrimSpace(mount.LastError) != "" {
 			return nil, nil, fmt.Errorf("%w: mount %s is not available", ErrStorageMigrationUnavailable, mount.Name)
@@ -629,6 +632,9 @@ func (s *Service) storageMigrationMounts(ctx context.Context, pool models.Storag
 			ID: mount.ID, UUID: mount.UUID, Name: mount.Name, Provider: mount.Provider, UsedBytes: usedBytes,
 		})
 		ids = append(ids, mount.UUID)
+	}
+	if len(ids) == 0 {
+		return nil, nil, fmt.Errorf("%w: pool %s has no primary mounts", ErrStorageMigrationUnavailable, pool.Name)
 	}
 	sort.Slice(mounts, func(i, j int) bool { return mounts[i].UUID < mounts[j].UUID })
 	sort.Strings(ids)

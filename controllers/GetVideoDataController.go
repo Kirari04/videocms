@@ -48,6 +48,7 @@ func (h *Handlers) GetVideoData(c echo.Context) error {
 	return h.serveMediaObject(c, claims.StorageID, key, "Video doesn't exist", mediaTraffic{
 		userID:    claims.UserID,
 		fileID:    claims.FileID,
+		poolID:    claims.StoragePoolID,
 		qualityID: qualityID,
 	})
 }

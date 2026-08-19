@@ -352,10 +352,18 @@ func (w *WorkerGroup) migrateStorageItem(ctx context.Context, migration models.S
 		return err
 	}
 	cutoverAt := time.Now().UTC()
+	if w.deps.MediaCache != nil {
+		if err = w.deps.MediaCache.InvalidateFile(context.WithoutCancel(ctx), file.ID); err != nil {
+			return fmt.Errorf("invalidate playback cache before cutover: %w", err)
+		}
+	}
 	err = w.deps.DB.WithContext(context.WithoutCancel(ctx)).Transaction(func(tx *gorm.DB) error {
 		updated := tx.Model(&models.File{}).
 			Where("id = ? AND storage_id = ? AND storage_state = ?", file.ID, item.SourceMountID, models.FileStorageAvailable).
-			Update("storage_id", item.DestinationMountID)
+			Updates(map[string]any{
+				"storage_id": item.DestinationMountID, "storage_pool_id": migration.DestinationPoolID,
+				"storage_cache_version": gorm.Expr("storage_cache_version + 1"),
+			})
 		if updated.Error != nil {
 			return updated.Error
 		}
