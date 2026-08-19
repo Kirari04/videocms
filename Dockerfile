@@ -55,6 +55,7 @@ COPY download ./download
 COPY helpers ./helpers
 COPY inits ./inits
 COPY logic ./logic
+COPY mediacache ./mediacache
 COPY middlewares ./middlewares
 COPY models ./models
 COPY routes ./routes

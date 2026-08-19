@@ -133,6 +133,15 @@ func (w *WorkerGroup) runDeleter() error {
 			w.refreshDeletedFileMigrationProgress(migrationIDs, &deletionErrors)
 			continue
 		}
+		if w.deps.MediaCache != nil {
+			if err := w.deps.MediaCache.InvalidateFile(context.Background(), todo.ID); err != nil {
+				deletionErrors = append(deletionErrors, err)
+				skippingDeletion++
+				releaseFile()
+				w.refreshDeletedFileMigrationProgress(migrationIDs, &deletionErrors)
+				continue
+			}
+		}
 
 		if err := w.deleteStoredFileCopies(todo, migrationItems); err != nil {
 			log.Printf("Failed to delete stored data for file %d: %v", todo.ID, err)

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"ch/kirari04/videocms/background"
+	"ch/kirari04/videocms/mediacache"
 	"ch/kirari04/videocms/models"
 	"ch/kirari04/videocms/services/tusupload"
 	"ch/kirari04/videocms/storage"
@@ -41,6 +42,8 @@ const (
 	taskStorageCleanup    = "storage.migration.cleanup"
 	taskStorageAbort      = "storage.migration.abort_cleanup"
 	taskStorageReconcile  = "maintenance.storage_migrations"
+	taskStorageCacheFill  = "storage.cache.fill"
+	taskStorageCachePrune = "maintenance.storage_cache"
 )
 
 type encodingTaskPayload struct {
@@ -105,6 +108,8 @@ func (w *WorkerGroup) RegisterBackgroundHandlers(runtime *background.Runtime, tu
 		taskStorageCleanup:    w.storageMigrationCleanupHandler,
 		taskStorageAbort:      w.storageMigrationAbortHandler(runtime),
 		taskStorageReconcile:  w.storageMigrationReconcileHandler(runtime),
+		taskStorageCacheFill:  w.storageCacheFillHandler,
+		taskStorageCachePrune: w.storageCachePruneHandler,
 	}
 	for _, kind := range sortedHandlerKinds(registrations) {
 		if err := runtime.Register(kind, registrations[kind]); err != nil {
@@ -121,6 +126,7 @@ func (w *WorkerGroup) RegisterBackgroundHandlers(runtime *background.Runtime, tu
 		maintenanceSchedule("resource-retention", taskResourceCleanup, time.Hour, false),
 		maintenanceSchedule("background-history-retention", taskJobRetention, 24*time.Hour, false),
 		maintenanceSchedule("storage-migration-reconciliation", taskStorageReconcile, time.Minute, true),
+		maintenanceSchedule("storage-cache-eviction", taskStorageCachePrune, time.Minute, true),
 	}
 	for _, schedule := range schedules {
 		if err := runtime.RegisterSchedule(schedule); err != nil {
@@ -152,9 +158,44 @@ func sortedHandlerKinds(handlers map[string]background.Handler) []string {
 		taskRemoteFetch, taskDownloadPrepare, taskContentDelete, taskAuditRecord, taskSourceCleanup,
 		taskDeletionReconcile, taskDownloadCleanup, taskUploadCleanup, taskAuditCleanup, taskResourceCleanup, taskJobRetention,
 		taskStorageMigration, taskStorageCleanup, taskStorageAbort,
-		taskStorageReconcile,
+		taskStorageReconcile, taskStorageCacheFill, taskStorageCachePrune,
 	}
 	return order
+}
+
+func (w *WorkerGroup) storageCacheFillHandler(ctx context.Context, task background.Task) (background.Result, error) {
+	if w.deps.MediaCache == nil {
+		return background.Result{Phase: "Cache disabled"}, nil
+	}
+	var payload mediacache.PromotionPayload
+	if err := decodeTaskPayload(task, &payload); err != nil {
+		return background.Result{}, err
+	}
+	if err := w.deps.MediaCache.Promote(ctx, payload); err != nil {
+		if mediacache.AdmissionSkipped(err) {
+			_ = os.Remove(payload.TemporaryPath)
+			return background.Result{Phase: "Cache admission skipped"}, nil
+		}
+		if ctx.Err() != nil {
+			return background.Result{}, ctx.Err()
+		}
+		if os.IsNotExist(err) {
+			return background.Result{}, background.Permanent("cache_source_missing", "The captured playback data is no longer available", err)
+		}
+		return background.Result{}, background.Transient("cache_fill_failed", "Playback data could not be added to the cache", err)
+	}
+	_ = os.Remove(payload.TemporaryPath)
+	return background.Result{Phase: "Playback data cached"}, nil
+}
+
+func (w *WorkerGroup) storageCachePruneHandler(ctx context.Context, _ background.Task) (background.Result, error) {
+	if w.deps.MediaCache == nil {
+		return background.Result{Phase: "Cache disabled"}, nil
+	}
+	if err := w.deps.MediaCache.Prune(ctx); err != nil {
+		return background.Result{}, background.Transient("cache_eviction_failed", "Old playback cache data could not be removed", err)
+	}
+	return background.Result{Phase: "Playback cache within limits"}, nil
 }
 
 func decodeTaskPayload(task background.Task, target any) error {
@@ -180,6 +221,11 @@ func (w *WorkerGroup) encodingHandler(ctx context.Context, task background.Task)
 		return background.Result{}, background.Permanent("source_unavailable", "The source video is no longer available", err)
 	}
 	legacyTask := EncodingTask{Type: payload.Type, FileID: file.ID, FileUUID: file.UUID, StorageID: file.StorageID, ID: payload.ID}
+	if w.deps.MediaCache != nil {
+		if err := w.deps.MediaCache.InvalidateFile(context.WithoutCancel(ctx), file.ID); err != nil {
+			return background.Result{}, background.Transient("cache_invalidation_failed", "Existing playback cache data could not be invalidated", err)
+		}
+	}
 	if err := w.markEncodingStarted(payload.Type, payload.ID, task.ID); err != nil {
 		return background.Result{}, background.Transient("state_update_failed", "The encoding state could not be updated", err)
 	}
@@ -191,9 +237,16 @@ func (w *WorkerGroup) encodingHandler(ctx context.Context, task background.Task)
 	}()
 	background.ReportProgress(encodeCtx, 0, "Starting encoder")
 	err := w.runEncode(encodeCtx, legacyTask)
+	var cacheErr error
+	if w.deps.MediaCache != nil {
+		cacheErr = w.deps.MediaCache.InvalidateFile(context.WithoutCancel(ctx), file.ID)
+	}
 	if encodeCtx.Err() != nil {
 		_ = w.resetEncodingProjection(payload.Type, payload.ID)
 		return background.Result{}, encodeCtx.Err()
+	}
+	if cacheErr != nil {
+		return background.Result{}, background.Transient("cache_invalidation_failed", "Playback cache data could not be refreshed after encoding", cacheErr)
 	}
 	if err != nil {
 		message := strings.ToLower(err.Error())

@@ -36,7 +36,8 @@ func TestUploadStoreCandidatesUsesLeastTrackedBytesAndUserOverride(t *testing.T)
 	mountB := models.StorageMount{UUID: "mount-b", Name: "B", Provider: models.StorageProviderS3, Mounted: true}
 	mountC := models.StorageMount{UUID: "mount-c", Name: "C", Provider: models.StorageProviderS3, Mounted: true}
 	mountD := models.StorageMount{UUID: "mount-d", Name: "Unhealthy", Provider: models.StorageProviderS3, Mounted: true, LastError: "connection failed"}
-	for _, mount := range []*models.StorageMount{&mountA, &mountB, &mountC, &mountD} {
+	mountE := models.StorageMount{UUID: "mount-e", Name: "Built-in cache", Provider: models.StorageProviderLocal, Mounted: true, System: true}
+	for _, mount := range []*models.StorageMount{&mountA, &mountB, &mountC, &mountD, &mountE} {
 		if err := db.Create(mount).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -53,6 +54,7 @@ func TestUploadStoreCandidatesUsesLeastTrackedBytesAndUserOverride(t *testing.T)
 		{StoragePoolID: defaultPool.ID, StorageMountID: mountA.ID},
 		{StoragePoolID: defaultPool.ID, StorageMountID: mountB.ID},
 		{StoragePoolID: defaultPool.ID, StorageMountID: mountD.ID},
+		{StoragePoolID: defaultPool.ID, StorageMountID: mountE.ID, Role: models.StoragePoolMountCache, CacheMaxBytes: 1024},
 		{StoragePoolID: overridePool.ID, StorageMountID: mountC.ID},
 	} {
 		if err := db.Create(&member).Error; err != nil {
@@ -78,7 +80,7 @@ func TestUploadStoreCandidatesUsesLeastTrackedBytesAndUserOverride(t *testing.T)
 	}
 
 	stores := map[string]storage.Store{}
-	for _, id := range []string{mountA.UUID, mountB.UUID, mountC.UUID, mountD.UUID} {
+	for _, id := range []string{mountA.UUID, mountB.UUID, mountC.UUID, mountD.UUID, mountE.UUID} {
 		store, err := storage.NewLocalStore(t.TempDir())
 		if err != nil {
 			t.Fatal(err)

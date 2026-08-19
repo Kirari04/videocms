@@ -2,6 +2,7 @@ package app
 
 import (
 	"ch/kirari04/videocms/background"
+	"ch/kirari04/videocms/mediacache"
 	"sync"
 	"sync/atomic"
 
@@ -61,6 +62,7 @@ type Deps struct {
 	Cache            *cache.Cache
 	RequestGate      *RequestGate
 	Storage          *storage.Service
+	MediaCache       *mediacache.Service
 	StorageCipher    *storage.CredentialCipher
 	StorageLifecycle StorageLifecycle
 	Background       *background.Runtime

@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/shirou/gopsutil/v3/disk"
 )
 
 type LocalStore struct {
@@ -79,6 +81,20 @@ func (s *LocalStore) Open(ctx context.Context, key Key) (*Object, error) {
 		Body: file,
 		Info: localObjectInfo(key, info),
 	}, nil
+}
+
+func (s *LocalStore) Capacity(ctx context.Context) (CapacityInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return CapacityInfo{}, err
+	}
+	if s == nil || s.root == "" {
+		return CapacityInfo{}, ErrStoreNotConfigured
+	}
+	usage, err := disk.Usage(s.root)
+	if err != nil {
+		return CapacityInfo{}, fmt.Errorf("inspect local storage capacity: %w", err)
+	}
+	return CapacityInfo{Total: usage.Total, Free: usage.Free}, nil
 }
 
 func (s *LocalStore) Put(ctx context.Context, key Key, src io.Reader, opts PutOptions) (ObjectInfo, error) {

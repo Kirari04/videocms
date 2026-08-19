@@ -183,7 +183,7 @@ func (s *Service) CreateFileContext(ctx context.Context, fromFile *string, toFol
 	if err != nil {
 		return http.StatusInternalServerError, nil, false, err
 	}
-	storeID, releaseStore, err := s.publishUploadSource(ctx, userId, sourceKey, *fromFile)
+	storeID, storagePoolID, releaseStore, err := s.publishUploadSourceWithPool(ctx, userId, sourceKey, *fromFile)
 	if err != nil {
 		log.Printf("Failed to publish source file to storage pool: %v", err)
 		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
@@ -209,19 +209,20 @@ func (s *Service) CreateFileContext(ctx context.Context, fromFile *string, toFol
 	// a transaction is necessary so the service Deleter wont mark an file as unreferenced by accident
 	if err := s.Deps.DB.Transaction(func(tx *gorm.DB) error {
 		dbFile = models.File{
-			UUID:         fileId,
-			Hash:         FileHash,
-			Thumbnail:    thumbnailFileName,
-			StorageID:    storeID,
-			StorageState: models.FileStorageAvailable,
-			SourceKey:    sourceKey.String(),
-			Folder:       fmt.Sprintf("%s/%s", s.Config().FolderVideoQualitysPriv, fileId),
-			UserID:       userId,
-			Height:       int64(videoHeight),
-			Width:        int64(videoWidth),
-			Duration:     videoDuration,
-			AvgFrameRate: avgFramerate,
-			Size:         fileSize,
+			UUID:          fileId,
+			Hash:          FileHash,
+			Thumbnail:     thumbnailFileName,
+			StorageID:     storeID,
+			StoragePoolID: &storagePoolID,
+			StorageState:  models.FileStorageAvailable,
+			SourceKey:     sourceKey.String(),
+			Folder:        fmt.Sprintf("%s/%s", s.Config().FolderVideoQualitysPriv, fileId),
+			UserID:        userId,
+			Height:        int64(videoHeight),
+			Width:         int64(videoWidth),
+			Duration:      videoDuration,
+			AvgFrameRate:  avgFramerate,
+			Size:          fileSize,
 		}
 		if err := tx.Create(&dbFile).Error; err != nil {
 			return err

@@ -6,6 +6,7 @@ import (
 	"ch/kirari04/videocms/controllers"
 	"ch/kirari04/videocms/inits"
 	"ch/kirari04/videocms/logic"
+	"ch/kirari04/videocms/mediacache"
 	"ch/kirari04/videocms/middlewares"
 	"ch/kirari04/videocms/routes"
 	"ch/kirari04/videocms/services"
@@ -59,6 +60,8 @@ func ServeMain() {
 		},
 	})
 	deps.Background = backgroundRuntime
+	deps.MediaCache = mediacache.New(deps.DB, deps.Storage, backgroundRuntime)
+	defer deps.MediaCache.Close()
 	if err := workerGroup.RegisterBackgroundHandlers(backgroundRuntime, tusSvc); err != nil {
 		log.Println("failed to register background handlers:", err)
 		return

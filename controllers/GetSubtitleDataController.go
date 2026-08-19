@@ -43,6 +43,7 @@ func (h *Handlers) GetSubtitleData(c echo.Context) error {
 	return h.serveMediaObject(c, claims.StorageID, key, "Subtitle file not found", mediaTraffic{
 		userID: claims.UserID,
 		fileID: claims.FileID,
+		poolID: claims.StoragePoolID,
 	})
 }
 

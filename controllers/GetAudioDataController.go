@@ -40,6 +40,7 @@ func (h *Handlers) GetAudioData(c echo.Context) error {
 	return h.serveMediaObject(c, claims.StorageID, key, "Audio doesn't exist", mediaTraffic{
 		userID:  claims.UserID,
 		fileID:  claims.FileID,
+		poolID:  claims.StoragePoolID,
 		audioID: audioID,
 	})
 }
