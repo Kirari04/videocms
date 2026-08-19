@@ -307,6 +307,70 @@ func TestDeleteStoragePoolFallsBackToLocalAndClearsUserOverrides(t *testing.T) {
 	}
 }
 
+func TestStoragePoolAllowsBuiltInLocalMountAsDedicatedCache(t *testing.T) {
+	db := newStorageAdminTestDB(t)
+	localMount := models.StorageMount{
+		UUID: models.StorageMountLocalUUID, Name: "Local storage", Provider: models.StorageProviderLocal, Mounted: true, System: true,
+	}
+	remoteMount := models.StorageMount{UUID: "remote", Name: "Remote", Provider: models.StorageProviderS3, Mounted: true}
+	if err := db.Create(&localMount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&remoteMount).Error; err != nil {
+		t.Fatal(err)
+	}
+	service := &Service{Deps: &app.Deps{DB: db}}
+	pool, err := service.CreateStoragePool(StoragePoolInput{
+		Name: "Remote with local cache", PrimaryMountIDs: []uint{remoteMount.ID},
+		CacheMounts: []StorageCacheMountInput{{MountID: localMount.ID, MaxBytes: 50 * 1024 * 1024}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var memberships []models.StoragePoolMount
+	if err := db.Where("storage_pool_id = ?", pool.ID).Order("storage_mount_id ASC").Find(&memberships).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(memberships) != 2 {
+		t.Fatalf("memberships=%#v", memberships)
+	}
+	roles := map[uint]models.StoragePoolMount{}
+	for _, membership := range memberships {
+		roles[membership.StorageMountID] = membership
+	}
+	if roles[remoteMount.ID].Role != models.StoragePoolMountPrimary {
+		t.Fatalf("remote role=%q", roles[remoteMount.ID].Role)
+	}
+	if roles[localMount.ID].Role != models.StoragePoolMountCache || roles[localMount.ID].CacheMaxBytes != 50*1024*1024 {
+		t.Fatalf("local cache membership=%#v", roles[localMount.ID])
+	}
+	overview, err := service.StorageAdminOverview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response *StoragePoolResponse
+	for index := range overview.Pools {
+		if overview.Pools[index].ID == pool.ID {
+			response = &overview.Pools[index]
+			break
+		}
+	}
+	if response == nil || len(response.PrimaryMountIDs) != 1 || response.PrimaryMountIDs[0] != remoteMount.ID {
+		t.Fatalf("pool overview=%#v", response)
+	}
+	if len(response.CacheMounts) != 1 || response.CacheMounts[0].MountID != localMount.ID ||
+		response.CacheMounts[0].MaxBytes != 50*1024*1024 || response.CacheMounts[0].MinimumFreePct != 10 {
+		t.Fatalf("cache overview=%#v", response.CacheMounts)
+	}
+	_, err = service.UpdateStoragePool(pool.ID, StoragePoolInput{
+		Name: pool.Name, PrimaryMountIDs: []uint{remoteMount.ID},
+		CacheMounts: []StorageCacheMountInput{{MountID: remoteMount.ID, MaxBytes: 1}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "cannot be primary") {
+		t.Fatalf("same-role validation error=%v", err)
+	}
+}
+
 func TestStorageAdminOverviewReportsRuntimeAvailability(t *testing.T) {
 	db := newStorageAdminTestDB(t)
 	localStore, err := storage.NewLocalStore(t.TempDir())

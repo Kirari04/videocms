@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 
+	"ch/kirari04/videocms/mediacache"
 	"ch/kirari04/videocms/storage"
 
 	"github.com/labstack/echo/v4"
@@ -14,6 +15,7 @@ import (
 type mediaTraffic struct {
 	userID    uint
 	fileID    uint
+	poolID    uint
 	qualityID uint
 	audioID   uint
 }
@@ -53,16 +55,23 @@ func (h *Handlers) serveMediaObject(c echo.Context, storeID string, key storage.
 		c.Logger().Error("media storage is not configured")
 		return mediaStorageResponse(c, http.StatusInternalServerError, "")
 	}
-	store, err := h.Deps.Storage.StoreOrDefault(storeID)
+	var object *storage.Object
+	var err error
+	if h.Deps.MediaCache != nil {
+		object, _, err = h.Deps.MediaCache.Open(c.Request().Context(), mediacache.OpenRequest{
+			PoolID: traffic.poolID, OriginMountID: storeID, FileID: traffic.fileID, Key: key,
+		})
+	} else {
+		var store storage.Store
+		store, err = h.Deps.Storage.StoreOrDefault(storeID)
+		if err == nil {
+			object, err = store.Open(c.Request().Context(), key)
+		}
+	}
 	if err != nil {
-		c.Logger().Error("failed to resolve media storage", err)
 		if errors.Is(err, storage.ErrStoreNotConfigured) {
 			return mediaStorageResponse(c, http.StatusServiceUnavailable, "Media storage is currently unavailable")
 		}
-		return mediaStorageResponse(c, http.StatusInternalServerError, "")
-	}
-	object, err := store.Open(c.Request().Context(), key)
-	if err != nil {
 		if !errors.Is(err, storage.ErrNotFound) {
 			c.Logger().Errorf("failed to open media object %s: %v", key.String(), err)
 			return mediaStorageResponse(c, http.StatusInternalServerError, "")

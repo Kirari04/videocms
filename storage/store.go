@@ -8,6 +8,7 @@ import (
 )
 
 var ErrNotFound = errors.New("storage object not found")
+var ErrCapacityUnavailable = errors.New("storage capacity is unavailable")
 
 type ReadSeekCloser interface {
 	io.Reader
@@ -52,4 +53,16 @@ type Store interface {
 
 type HealthChecker interface {
 	Check(context.Context) error
+}
+
+type CapacityInfo struct {
+	Total uint64
+	Free  uint64
+}
+
+// CapacityReporter is optional. Cache eviction uses it to preserve free disk
+// on local and supporting remote filesystems without making it part of the
+// common object-store contract.
+type CapacityReporter interface {
+	Capacity(context.Context) (CapacityInfo, error)
 }

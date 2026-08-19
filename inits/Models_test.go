@@ -157,6 +157,12 @@ func TestMigrateModelsBackfillsLegacyFileStorageID(t *testing.T) {
 	if !localPool.IsDefault || !localPool.System {
 		t.Fatalf("local storage pool = %#v", localPool)
 	}
+	if file.StoragePoolID == nil || *file.StoragePoolID != localPool.ID {
+		t.Fatalf("file storage pool = %v, want local pool %d", file.StoragePoolID, localPool.ID)
+	}
+	if deleted.StoragePoolID == nil || *deleted.StoragePoolID != localPool.ID {
+		t.Fatalf("deleted file storage pool = %v, want local pool %d", deleted.StoragePoolID, localPool.ID)
+	}
 	var membership models.StoragePoolMount
 	if err := db.Where("storage_pool_id = ? AND storage_mount_id = ?", localPool.ID, localMount.ID).First(&membership).Error; err != nil {
 		t.Fatalf("load local storage pool membership: %v", err)

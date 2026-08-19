@@ -205,6 +205,24 @@ func (s *SFTPStore) Open(ctx context.Context, key Key) (*Object, error) {
 	}, nil
 }
 
+func (s *SFTPStore) Capacity(ctx context.Context) (CapacityInfo, error) {
+	type capacityResult struct {
+		total uint64
+		free  uint64
+	}
+	result, _, err := withSFTPConnection(ctx, s, func(connection *sftpConnection) (capacityResult, error) {
+		usage, err := connection.client.StatVFS(connection.root)
+		if err != nil {
+			return capacityResult{}, fmt.Errorf("inspect SFTP storage capacity: %w", err)
+		}
+		return capacityResult{total: usage.TotalSpace(), free: usage.FreeSpace()}, nil
+	}, nil)
+	if err != nil {
+		return CapacityInfo{}, err
+	}
+	return CapacityInfo{Total: result.total, Free: result.free}, nil
+}
+
 func (s *SFTPStore) Put(ctx context.Context, key Key, src io.Reader, options PutOptions) (ObjectInfo, error) {
 	if err := ctx.Err(); err != nil {
 		return ObjectInfo{}, err

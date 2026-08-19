@@ -55,7 +55,23 @@ type StoragePoolResponse struct {
 	IsDefault         bool
 	System            bool
 	MountIDs          []uint
+	PrimaryMountIDs   []uint
+	CacheMounts       []StorageCacheMountResponse
 	UserOverrideCount int64
+}
+
+type StorageCacheMountResponse struct {
+	MountID        uint
+	MaxBytes       int64
+	UsedBytes      int64
+	EntryCount     int64
+	CapacityKnown  bool
+	CapacityTotal  uint64
+	CapacityFree   uint64
+	FreePercent    float64
+	MinimumFreePct int
+	LastError      string
+	LastErrorAt    *time.Time
 }
 
 type StorageAdminOverview struct {
@@ -68,9 +84,16 @@ type StorageAdminOverview struct {
 }
 
 type StoragePoolInput struct {
-	Name      string
-	MountIDs  []uint
-	IsDefault bool
+	Name            string
+	MountIDs        []uint
+	PrimaryMountIDs []uint
+	CacheMounts     []StorageCacheMountInput
+	IsDefault       bool
+}
+
+type StorageCacheMountInput struct {
+	MountID  uint
+	MaxBytes int64
 }
 
 type StorageReconnectResult struct {
@@ -156,11 +179,38 @@ func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
 	}
 	poolResponses := make([]StoragePoolResponse, 0, len(pools))
 	for _, pool := range pools {
-		mountIDs := make([]uint, 0, len(pool.Members))
-		for _, member := range pool.Members {
-			mountIDs = append(mountIDs, member.StorageMountID)
+		primaryMountIDs := make([]uint, 0, len(pool.Members))
+		cacheMounts := make([]StorageCacheMountResponse, 0)
+		statsByMount := make(map[uint]StorageCacheMountResponse)
+		if s.Deps.MediaCache != nil {
+			stats, err := s.Deps.MediaCache.MembershipStats(context.Background(), pool.ID)
+			if err != nil {
+				return StorageAdminOverview{}, err
+			}
+			for _, stat := range stats {
+				statsByMount[stat.MountID] = StorageCacheMountResponse{
+					MountID: stat.MountID, MaxBytes: stat.MaxBytes, UsedBytes: stat.UsedBytes,
+					EntryCount: stat.EntryCount, CapacityKnown: stat.CapacityKnown,
+					CapacityTotal: stat.CapacityTotal, CapacityFree: stat.CapacityFree,
+					FreePercent: stat.FreePercent, MinimumFreePct: stat.MinimumFreePct,
+				}
+			}
 		}
-		sort.Slice(mountIDs, func(i, j int) bool { return mountIDs[i] < mountIDs[j] })
+		for _, member := range pool.Members {
+			if member.Role == models.StoragePoolMountCache {
+				cache := statsByMount[member.StorageMountID]
+				cache.MountID = member.StorageMountID
+				cache.MaxBytes = member.CacheMaxBytes
+				cache.MinimumFreePct = 10
+				cache.LastError = member.CacheLastError
+				cache.LastErrorAt = member.CacheLastErrorAt
+				cacheMounts = append(cacheMounts, cache)
+				continue
+			}
+			primaryMountIDs = append(primaryMountIDs, member.StorageMountID)
+		}
+		sort.Slice(primaryMountIDs, func(i, j int) bool { return primaryMountIDs[i] < primaryMountIDs[j] })
+		sort.Slice(cacheMounts, func(i, j int) bool { return cacheMounts[i].MountID < cacheMounts[j].MountID })
 		var userCount int64
 		if err := s.Deps.DB.Model(&models.User{}).Where("storage_pool_id = ?", pool.ID).Count(&userCount).Error; err != nil {
 			return StorageAdminOverview{}, err
@@ -171,7 +221,9 @@ func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
 			Name:              pool.Name,
 			IsDefault:         pool.IsDefault,
 			System:            pool.System,
-			MountIDs:          mountIDs,
+			MountIDs:          primaryMountIDs,
+			PrimaryMountIDs:   primaryMountIDs,
+			CacheMounts:       cacheMounts,
 			UserOverrideCount: userCount,
 		})
 	}
@@ -667,6 +719,7 @@ func (s *Service) reconnectStorageFileBatch(ctx context.Context, mount models.St
 	if err != nil {
 		return err
 	}
+	storagePoolID := s.uniquePrimaryPoolForMount(mount.ID)
 	type scanResult struct {
 		fileID  uint
 		matched bool
@@ -713,12 +766,15 @@ func (s *Service) reconnectStorageFileBatch(ctx context.Context, mount models.St
 			matchedIDs = matchedIDs[:0]
 			return nil
 		}
+		updates := map[string]any{
+			"storage_id": mount.UUID, "storage_state": models.FileStorageAvailable,
+		}
+		if storagePoolID != nil {
+			updates["storage_pool_id"] = *storagePoolID
+		}
 		update := s.Deps.DB.Model(&models.File{}).
 			Where("id IN ? AND storage_state = ?", matchedIDs, models.FileStorageUnavailable).
-			Updates(map[string]any{
-				"storage_id":    mount.UUID,
-				"storage_state": models.FileStorageAvailable,
-			})
+			Updates(updates)
 		if update.Error != nil {
 			return update.Error
 		}
@@ -758,6 +814,16 @@ func (s *Service) reconnectStorageFileBatch(ctx context.Context, mount models.St
 		return err
 	}
 	return nil
+}
+
+func (s *Service) uniquePrimaryPoolForMount(mountID uint) *uint {
+	var poolIDs []uint
+	if err := s.Deps.DB.Model(&models.StoragePoolMount{}).
+		Where("storage_mount_id = ? AND role = ?", mountID, models.StoragePoolMountPrimary).
+		Order("storage_pool_id ASC").Pluck("storage_pool_id", &poolIDs).Error; err != nil || len(poolIDs) != 1 {
+		return nil
+	}
+	return &poolIDs[0]
 }
 
 func (s *Service) storageFileMatches(ctx context.Context, store storage.Store, file models.File) (bool, error) {
@@ -867,10 +933,23 @@ func (s *Service) saveStoragePool(pool *models.StoragePool, input StoragePoolInp
 			return err
 		}
 	}
-	mountIDs := uniqueUintValues(input.MountIDs)
-	if len(mountIDs) == 0 {
-		return errors.New("storage pool requires at least one mount")
+	primaryMountIDs := input.PrimaryMountIDs
+	if len(primaryMountIDs) == 0 {
+		primaryMountIDs = input.MountIDs
 	}
+	primaryMountIDs = uniqueUintValues(primaryMountIDs)
+	if len(primaryMountIDs) == 0 {
+		return errors.New("storage pool requires at least one primary mount")
+	}
+	cacheMounts, err := normalizeStorageCacheMounts(input.CacheMounts, primaryMountIDs)
+	if err != nil {
+		return err
+	}
+	mountIDs := append([]uint(nil), primaryMountIDs...)
+	for _, cache := range cacheMounts {
+		mountIDs = append(mountIDs, cache.MountID)
+	}
+	mountIDs = uniqueUintValues(mountIDs)
 	var mountCount int64
 	if err := s.Deps.DB.Model(&models.StorageMount{}).Where("id IN ?", mountIDs).Count(&mountCount).Error; err != nil {
 		return err
@@ -901,13 +980,47 @@ func (s *Service) saveStoragePool(pool *models.StoragePool, input StoragePoolInp
 		if err := tx.Where("storage_pool_id = ?", pool.ID).Delete(&models.StoragePoolMount{}).Error; err != nil {
 			return err
 		}
-		for _, mountID := range mountIDs {
-			if err := tx.Create(&models.StoragePoolMount{StoragePoolID: pool.ID, StorageMountID: mountID}).Error; err != nil {
+		for _, mountID := range primaryMountIDs {
+			if err := tx.Create(&models.StoragePoolMount{
+				StoragePoolID: pool.ID, StorageMountID: mountID, Role: models.StoragePoolMountPrimary,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		for _, cache := range cacheMounts {
+			if err := tx.Create(&models.StoragePoolMount{
+				StoragePoolID: pool.ID, StorageMountID: cache.MountID,
+				Role: models.StoragePoolMountCache, CacheMaxBytes: cache.MaxBytes,
+			}).Error; err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+}
+
+func normalizeStorageCacheMounts(values []StorageCacheMountInput, primaryMountIDs []uint) ([]StorageCacheMountInput, error) {
+	primary := make(map[uint]bool, len(primaryMountIDs))
+	for _, mountID := range primaryMountIDs {
+		primary[mountID] = true
+	}
+	seen := make(map[uint]bool, len(values))
+	result := make([]StorageCacheMountInput, 0, len(values))
+	for _, value := range values {
+		if value.MountID == 0 || seen[value.MountID] {
+			return nil, errors.New("each cache mount must be selected once")
+		}
+		if primary[value.MountID] {
+			return nil, errors.New("a mount cannot be primary storage and read cache in the same pool")
+		}
+		if value.MaxBytes <= 0 {
+			return nil, errors.New("cache size must be greater than zero")
+		}
+		seen[value.MountID] = true
+		result = append(result, value)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].MountID < result[j].MountID })
+	return result, nil
 }
 
 func (s *Service) SetDefaultStoragePool(poolID uint) error {
@@ -947,6 +1060,9 @@ func (s *Service) DeleteStoragePool(poolID uint) error {
 			}
 		}
 		if err := tx.Model(&models.User{}).Where("storage_pool_id = ?", pool.ID).Update("storage_pool_id", nil).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&models.File{}).Where("storage_pool_id = ?", pool.ID).Update("storage_pool_id", nil).Error; err != nil {
 			return err
 		}
 		if err := tx.Where("storage_pool_id = ?", pool.ID).Delete(&models.StoragePoolMount{}).Error; err != nil {

@@ -28,5 +28,7 @@ func (h *Handlers) GetThumbnailData(c echo.Context) error {
 	if err != nil {
 		return c.NoContent(http.StatusBadRequest)
 	}
-	return h.serveMediaObject(c, object.StoreID, key, "", mediaTraffic{userID: object.UserID, fileID: object.FileID})
+	return h.serveMediaObject(c, object.StoreID, key, "", mediaTraffic{
+		userID: object.UserID, fileID: object.FileID, poolID: object.PoolID,
+	})
 }

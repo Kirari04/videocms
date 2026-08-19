@@ -172,7 +172,7 @@ func TestStorageMigrationCopiesFinalChangesBeforeAtomicCutover(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = storageService.Close() })
 	worker := NewWorkerGroup(&app.Deps{DB: db, Storage: storageService}, nil)
-	migration := models.StorageMigration{UUID: "migration", Status: models.StorageMigrationRunning, FileCount: 1}
+	migration := models.StorageMigration{UUID: "migration", Status: models.StorageMigrationRunning, FileCount: 1, DestinationPoolID: 99}
 	if err := db.Create(&migration).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -192,6 +192,9 @@ func TestStorageMigrationCopiesFinalChangesBeforeAtomicCutover(t *testing.T) {
 	}
 	if file.StorageID != "destination" {
 		t.Fatalf("storage id = %q, want destination", file.StorageID)
+	}
+	if file.StoragePoolID == nil || *file.StoragePoolID != migration.DestinationPoolID {
+		t.Fatalf("storage pool id = %v, want %d", file.StoragePoolID, migration.DestinationPoolID)
 	}
 	if err := db.First(&item, item.ID).Error; err != nil {
 		t.Fatal(err)

@@ -7,6 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
+	"time"
+
+	"github.com/shirou/gopsutil/v3/disk"
 )
 
 var safePurpose = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
@@ -17,6 +21,10 @@ var safeSuffix = regexp.MustCompile(`^(\.[a-z0-9]{1,16})?$`)
 type Workspace interface {
 	TempFile(ctx context.Context, purpose string, suffix string) (*os.File, func() error, error)
 	TempDir(ctx context.Context, purpose string) (string, func() error, error)
+}
+
+type WorkspaceJanitor interface {
+	CleanupTemporaryFiles(ctx context.Context, purpose string, olderThan time.Time) error
 }
 
 type LocalWorkspace struct {
@@ -68,6 +76,55 @@ func (w *LocalWorkspace) TempDir(ctx context.Context, purpose string) (string, f
 	}
 	return directory, func() error { return os.RemoveAll(directory) }, nil
 }
+
+func (w *LocalWorkspace) Capacity(ctx context.Context) (CapacityInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return CapacityInfo{}, err
+	}
+	if w == nil || w.root == "" {
+		return CapacityInfo{}, ErrStoreNotConfigured
+	}
+	usage, err := disk.Usage(w.root)
+	if err != nil {
+		return CapacityInfo{}, fmt.Errorf("inspect workspace capacity: %w", err)
+	}
+	return CapacityInfo{Total: usage.Total, Free: usage.Free}, nil
+}
+
+func (w *LocalWorkspace) CleanupTemporaryFiles(ctx context.Context, purpose string, olderThan time.Time) error {
+	if err := validateWorkspaceRequest(ctx, w, purpose); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(w.root)
+	if err != nil {
+		return err
+	}
+	prefix := "videocms-" + purpose + "-"
+	var combined error
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(combined, err)
+		}
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), prefix) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			combined = errors.Join(combined, err)
+			continue
+		}
+		if info.ModTime().After(olderThan) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(w.root, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+			combined = errors.Join(combined, err)
+		}
+	}
+	return combined
+}
+
+var _ CapacityReporter = (*LocalWorkspace)(nil)
+var _ WorkspaceJanitor = (*LocalWorkspace)(nil)
 
 func validateWorkspaceRequest(ctx context.Context, workspace *LocalWorkspace, purpose string) error {
 	if err := ctx.Err(); err != nil {
