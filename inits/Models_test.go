@@ -96,6 +96,12 @@ func TestMigrateModelsPreservesLegacyWebPages(t *testing.T) {
 	if traffic.Source != models.TrafficSourcePlayer || traffic.Bytes != 512 {
 		t.Fatalf("migrated traffic = %#v, want player source with 512 bytes", traffic)
 	}
+	if traffic.StoragePoolID != 0 || traffic.StorageMountUUID != "" || traffic.DeliverySource != "" {
+		t.Fatalf("legacy traffic received guessed storage attribution: %#v", traffic)
+	}
+	if !db.Migrator().HasIndex(&models.TrafficLog{}, "idx_traffic_logs_storage_window") {
+		t.Fatal("storage traffic window index was not created")
+	}
 }
 
 func TestMigrateModelsBackfillsLegacyFileStorageID(t *testing.T) {
