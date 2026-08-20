@@ -41,6 +41,14 @@ type OpenRequest struct {
 	Key           storage.Key
 }
 
+// OpenResult identifies the mount that actually served the response. On a
+// miss this is the authoritative mount; on a hit it is the cache mount.
+type OpenResult struct {
+	CacheHit  bool
+	PoolID    uint
+	MountUUID string
+}
+
 type PromotionPayload struct {
 	PoolID           uint               `json:"poolId"`
 	OriginMountID    string             `json:"originMountId"`
@@ -96,56 +104,65 @@ func New(db *gorm.DB, stores *storage.Service, runtime *background.Runtime) *Ser
 }
 
 func (s *Service) Open(ctx context.Context, request OpenRequest) (*storage.Object, bool, error) {
+	object, result, err := s.OpenWithResult(ctx, request)
+	return object, result.CacheHit, err
+}
+
+func (s *Service) OpenWithResult(ctx context.Context, request OpenRequest) (*storage.Object, OpenResult, error) {
+	result := OpenResult{PoolID: request.PoolID, MountUUID: request.OriginMountID}
 	if s == nil || s.db == nil || s.storage == nil || request.OriginMountID == "" || request.Key.IsZero() {
-		return nil, false, storage.ErrStoreNotConfigured
+		return nil, result, storage.ErrStoreNotConfigured
 	}
 	poolID := request.PoolID
 	if poolID == 0 {
 		poolID = s.resolvePoolID(ctx, request.OriginMountID)
 	}
+	result.PoolID = poolID
 	if poolID != 0 {
-		if object, ok := s.openCached(ctx, poolID, request); ok {
-			return object, true, nil
+		if object, mountUUID, ok := s.openCached(ctx, poolID, request); ok {
+			result.CacheHit = true
+			result.MountUUID = mountUUID
+			return object, result, nil
 		}
 	}
 
 	origin, err := s.storage.StoreOrDefault(request.OriginMountID)
 	if err != nil {
-		return nil, false, err
+		return nil, result, err
 	}
 	object, err := origin.Open(ctx, request.Key)
 	if err != nil {
-		return nil, false, err
+		return nil, result, err
 	}
 	if poolID == 0 || request.FileID == 0 || object.Info.Size <= 0 {
-		return object, false, nil
+		return object, result, nil
 	}
 	fileCacheVersion, err := s.fileCacheVersion(ctx, request.FileID)
 	if err != nil {
-		return object, false, nil
+		return object, result, nil
 	}
 	targets, err := s.targets(ctx, poolID, request.OriginMountID, object.Info.Size)
 	if err != nil || len(targets) == 0 {
 		if err != nil {
 			s.logger.Printf("component=storage_cache event=target_resolution_failed pool=%d error=%q", poolID, err)
 		}
-		return object, false, nil
+		return object, result, nil
 	}
 	claimKey := cacheIdentity(poolID, request.OriginMountID, request.Key.String())
 	if !s.claim(claimKey) {
-		return object, false, nil
+		return object, result, nil
 	}
 	selected := targets[0]
 	releaseWorkspace, ok := s.reserveWorkspace(ctx, object.Info.Size)
 	if !ok {
 		s.release(claimKey)
-		return object, false, nil
+		return object, result, nil
 	}
 	temporary, cleanup, err := s.storage.Workspace().TempFile(ctx, "playback-cache", "")
 	if err != nil {
 		releaseWorkspace()
 		s.release(claimKey)
-		return object, false, nil
+		return object, result, nil
 	}
 	payload := PromotionPayload{
 		PoolID: poolID, OriginMountID: request.OriginMountID, FileID: request.FileID,
@@ -161,10 +178,10 @@ func (s *Service) Open(ctx context.Context, request OpenRequest) (*storage.Objec
 		}
 		s.promoteAsync(claimKey, payload, cleanup)
 	})
-	return object, false, nil
+	return object, result, nil
 }
 
-func (s *Service) openCached(ctx context.Context, poolID uint, request OpenRequest) (*storage.Object, bool) {
+func (s *Service) openCached(ctx context.Context, poolID uint, request OpenRequest) (*storage.Object, string, bool) {
 	hash := objectKeyHash(request.Key.String())
 	var entry models.StorageCacheEntry
 	err := s.db.WithContext(ctx).
@@ -173,32 +190,32 @@ func (s *Service) openCached(ctx context.Context, poolID uint, request OpenReque
 		Where("storage_cache_entries.storage_pool_id = ? AND storage_cache_entries.origin_mount_id = ? AND storage_cache_entries.object_key_hash = ?", poolID, request.OriginMountID, hash).
 		First(&entry).Error
 	if err != nil {
-		return nil, false
+		return nil, "", false
 	}
 	var mount models.StorageMount
 	if err := s.db.WithContext(ctx).First(&mount, entry.CacheMountID).Error; err != nil || !mount.Mounted || mount.LastError != "" {
-		return nil, false
+		return nil, "", false
 	}
 	store, err := s.storage.Store(mount.UUID)
 	if err != nil {
-		return nil, false
+		return nil, "", false
 	}
 	key, err := storage.ParseKey(entry.CacheObjectKey)
 	if err != nil {
 		s.dropEntry(context.WithoutCancel(ctx), entry, false)
-		return nil, false
+		return nil, "", false
 	}
 	object, err := store.Open(ctx, key)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			s.dropEntry(context.WithoutCancel(ctx), entry, false)
 		}
-		return nil, false
+		return nil, "", false
 	}
 	if object.Info.Size != entry.Size {
 		_ = object.Body.Close()
 		s.dropEntry(context.WithoutCancel(ctx), entry, true)
-		return nil, false
+		return nil, "", false
 	}
 	object.Info.Key = request.Key
 	object.Info.Size = entry.Size
@@ -212,7 +229,7 @@ func (s *Service) openCached(ctx context.Context, poolID uint, request OpenReque
 	_ = s.db.WithContext(context.WithoutCancel(ctx)).Model(&models.StorageCacheEntry{}).
 		Where("id = ? AND last_accessed_at < ?", entry.ID, now.Add(-5*time.Minute)).
 		Update("last_accessed_at", now).Error
-	return object, true
+	return object, mount.UUID, true
 }
 
 func (s *Service) promoteAsync(claimKey string, payload PromotionPayload, cleanup func() error) {

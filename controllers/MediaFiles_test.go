@@ -119,6 +119,9 @@ func TestGetVideoDataSupportsRangesAndTracksDeliveredBytes(t *testing.T) {
 	if traffic.Bytes != 4 || traffic.UserID != 1 || traffic.FileID != 2 || traffic.QualityID != 3 {
 		t.Fatalf("traffic log = %#v, want four delivered bytes for the selected quality", traffic)
 	}
+	if traffic.StorageMountUUID != "local" || traffic.DeliverySource != models.TrafficDeliverySourceOrigin {
+		t.Fatalf("storage attribution = mount %q source %q, want local origin", traffic.StorageMountUUID, traffic.DeliverySource)
+	}
 }
 
 func TestGetVideoDataRejectsMissingMediaClaims(t *testing.T) {

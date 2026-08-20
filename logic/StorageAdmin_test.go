@@ -426,6 +426,87 @@ func TestStorageAdminOverviewReportsRuntimeAvailability(t *testing.T) {
 	}
 }
 
+func TestStorageAdminOverviewAttributesRecentTrafficToPoolsAndServingMounts(t *testing.T) {
+	db := newStorageAdminTestDB(t)
+	origin := models.StorageMount{UUID: "remote-origin", Name: "Remote origin", Provider: models.StorageProviderS3, Mounted: true}
+	cache := models.StorageMount{UUID: "local-cache", Name: "Local cache", Provider: models.StorageProviderLocal, Mounted: true}
+	if err := db.Create(&origin).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&cache).Error; err != nil {
+		t.Fatal(err)
+	}
+	pool := models.StoragePool{UUID: "traffic-pool", Name: "Traffic pool"}
+	if err := db.Create(&pool).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, membership := range []models.StoragePoolMount{
+		{StoragePoolID: pool.ID, StorageMountID: origin.ID, Role: models.StoragePoolMountPrimary},
+		{StoragePoolID: pool.ID, StorageMountID: cache.ID, Role: models.StoragePoolMountCache, CacheMaxBytes: 1024},
+	} {
+		if err := db.Create(&membership).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rows := []models.TrafficLog{
+		{Source: models.TrafficSourcePlayer, Bytes: 100, StoragePoolID: pool.ID, StorageMountUUID: origin.UUID, DeliverySource: models.TrafficDeliverySourceOrigin},
+		{Source: models.TrafficSourcePlayer, Bytes: 60, StoragePoolID: pool.ID, StorageMountUUID: cache.UUID, DeliverySource: models.TrafficDeliverySourceCache},
+		{Source: models.TrafficSourcePlayer, Bytes: 999},
+	}
+	for index := range rows {
+		if err := db.Create(&rows[index]).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().UTC().AddDate(0, 0, -31)
+	oldRow := models.TrafficLog{
+		Source: models.TrafficSourcePlayer, Bytes: 500, StoragePoolID: pool.ID,
+		StorageMountUUID: origin.UUID, DeliverySource: models.TrafficDeliverySourceOrigin,
+	}
+	if err := db.Create(&oldRow).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&oldRow).UpdateColumn("created_at", old).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	overview, err := NewService(&app.Deps{DB: db}).StorageAdminOverview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.TrafficWindowDays != 30 {
+		t.Fatalf("traffic window = %d, want 30", overview.TrafficWindowDays)
+	}
+	assertStorageTraffic(t, overview.Traffic, 160, 2, 100, 1, 60, 1)
+	if len(overview.Pools) != 1 {
+		t.Fatalf("pools = %#v", overview.Pools)
+	}
+	assertStorageTraffic(t, overview.Pools[0].Traffic, 160, 2, 100, 1, 60, 1)
+
+	mountTraffic := make(map[string]StorageTrafficSummary)
+	for _, mount := range overview.Mounts {
+		mountTraffic[mount.UUID] = mount.Traffic
+	}
+	assertStorageTraffic(t, mountTraffic[origin.UUID], 100, 1, 100, 1, 0, 0)
+	assertStorageTraffic(t, mountTraffic[cache.UUID], 60, 1, 0, 0, 60, 1)
+}
+
+func assertStorageTraffic(
+	t *testing.T,
+	got StorageTrafficSummary,
+	bytes, requests, originBytes, originRequests, cacheBytes, cacheRequests uint64,
+) {
+	t.Helper()
+	want := StorageTrafficSummary{
+		Bytes: bytes, Requests: requests, OriginBytes: originBytes, OriginRequests: originRequests,
+		CacheBytes: cacheBytes, CacheRequests: cacheRequests,
+	}
+	if got != want {
+		t.Fatalf("storage traffic = %#v, want %#v", got, want)
+	}
+}
+
 func TestUpdatingDefaultStoragePoolWithoutDefaultFallsBackToLocal(t *testing.T) {
 	db := newStorageAdminTestDB(t)
 	localMount := models.StorageMount{UUID: models.StorageMountLocalUUID, Name: "Local", Provider: models.StorageProviderLocal, Mounted: true, System: true}
@@ -788,6 +869,7 @@ func newStorageAdminTestDB(t *testing.T) *gorm.DB {
 		&models.Audio{},
 		&models.Subtitle{},
 		&models.Link{},
+		&models.TrafficLog{},
 	); err != nil {
 		t.Fatal(err)
 	}
