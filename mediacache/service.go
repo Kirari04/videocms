@@ -15,6 +15,7 @@ import (
 	"ch/kirari04/videocms/background"
 	"ch/kirari04/videocms/models"
 	"ch/kirari04/videocms/storage"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -44,10 +45,18 @@ type OpenRequest struct {
 // OpenResult identifies the mount that actually served the response. On a
 // miss this is the authoritative mount; on a hit it is the cache mount.
 type OpenResult struct {
-	CacheHit  bool
-	PoolID    uint
-	MountUUID string
+	CacheHit    bool
+	CacheStatus string
+	PoolID      uint
+	MountUUID   string
 }
+
+const (
+	CacheStatusBypass  = "BYPASS"
+	CacheStatusHit     = "HIT"
+	CacheStatusMiss    = "MISS"
+	CacheStatusFilling = "FILLING"
+)
 
 type PromotionPayload struct {
 	PoolID           uint               `json:"poolId"`
@@ -109,7 +118,7 @@ func (s *Service) Open(ctx context.Context, request OpenRequest) (*storage.Objec
 }
 
 func (s *Service) OpenWithResult(ctx context.Context, request OpenRequest) (*storage.Object, OpenResult, error) {
-	result := OpenResult{PoolID: request.PoolID, MountUUID: request.OriginMountID}
+	result := OpenResult{CacheStatus: CacheStatusBypass, PoolID: request.PoolID, MountUUID: request.OriginMountID}
 	if s == nil || s.db == nil || s.storage == nil || request.OriginMountID == "" || request.Key.IsZero() {
 		return nil, result, storage.ErrStoreNotConfigured
 	}
@@ -121,6 +130,7 @@ func (s *Service) OpenWithResult(ctx context.Context, request OpenRequest) (*sto
 	if poolID != 0 {
 		if object, mountUUID, ok := s.openCached(ctx, poolID, request); ok {
 			result.CacheHit = true
+			result.CacheStatus = CacheStatusHit
 			result.MountUUID = mountUUID
 			return object, result, nil
 		}
@@ -143,6 +153,9 @@ func (s *Service) OpenWithResult(ctx context.Context, request OpenRequest) (*sto
 	}
 	targets, err := s.targets(ctx, poolID, request.OriginMountID, object.Info.Size)
 	if err != nil || len(targets) == 0 {
+		if s.cacheConfigured(ctx, poolID) {
+			result.CacheStatus = CacheStatusMiss
+		}
 		if err != nil {
 			s.logger.Printf("component=storage_cache event=target_resolution_failed pool=%d error=%q", poolID, err)
 		}
@@ -150,35 +163,206 @@ func (s *Service) OpenWithResult(ctx context.Context, request OpenRequest) (*sto
 	}
 	claimKey := cacheIdentity(poolID, request.OriginMountID, request.Key.String())
 	if !s.claim(claimKey) {
+		result.CacheStatus = CacheStatusFilling
 		return object, result, nil
 	}
 	selected := targets[0]
+	payload := PromotionPayload{
+		PoolID: poolID, OriginMountID: request.OriginMountID, FileID: request.FileID,
+		FileCacheVersion: fileCacheVersion, ObjectKey: request.Key.String(), TargetMountID: selected.MountID,
+		TargetMountIDs: targetMountIDs(targets), Info: object.Info,
+	}
+	result.CacheStatus = CacheStatusFilling
 	releaseWorkspace, ok := s.reserveWorkspace(ctx, object.Info.Size)
 	if !ok {
-		s.release(claimKey)
+		s.fillWithoutResponseCapture(claimKey, payload)
 		return object, result, nil
 	}
 	temporary, cleanup, err := s.storage.Workspace().TempFile(ctx, "playback-cache", "")
 	if err != nil {
 		releaseWorkspace()
-		s.release(claimKey)
+		s.fillWithoutResponseCapture(claimKey, payload)
 		return object, result, nil
 	}
-	payload := PromotionPayload{
-		PoolID: poolID, OriginMountID: request.OriginMountID, FileID: request.FileID,
-		FileCacheVersion: fileCacheVersion, ObjectKey: request.Key.String(), TargetMountID: selected.MountID,
-		TargetMountIDs: targetMountIDs(targets), TemporaryPath: temporary.Name(), Info: object.Info,
-	}
-	object.Body = newCaptureBody(object.Body, temporary, object.Info.Size, func(complete bool) {
+	payload.TemporaryPath = temporary.Name()
+	object.Body = newCaptureBody(object.Body, temporary, object.Info.Size, func(outcome captureOutcome) {
 		releaseWorkspace()
-		if !complete {
+		if !outcome.Started {
 			_ = cleanup()
 			s.release(claimKey)
+			return
+		}
+		if !outcome.Complete {
+			// Browsers are allowed to cancel, seek, or range-read media. That must
+			// not make an on-demand cache permanently ineffective. Discard the
+			// partial capture and finish the requested object independently of the
+			// client connection.
+			_ = cleanup()
+			payload.TemporaryPath = ""
+			if s.enqueuePromotion(payload, "Fill requested playback data", background.VisibilitySystem, errors.New("client response did not consume the complete object")) {
+				s.release(claimKey)
+				return
+			}
+			s.promoteAsync(claimKey, payload, func() error { return nil })
 			return
 		}
 		s.promoteAsync(claimKey, payload, cleanup)
 	})
 	return object, result, nil
+}
+
+func (s *Service) cacheConfigured(ctx context.Context, poolID uint) bool {
+	if poolID == 0 {
+		return false
+	}
+	var count int64
+	err := s.db.WithContext(ctx).Model(&models.StoragePoolMount{}).
+		Where("storage_pool_id = ? AND role = ?", poolID, models.StoragePoolMountCache).
+		Limit(1).Count(&count).Error
+	return err == nil && count > 0
+}
+
+func (s *Service) fillWithoutResponseCapture(claimKey string, payload PromotionPayload) {
+	payload.TemporaryPath = ""
+	if s.enqueuePromotion(payload, "Fill requested playback data", background.VisibilitySystem, errors.New("response capture workspace is unavailable")) {
+		s.release(claimKey)
+		return
+	}
+	s.promoteAsync(claimKey, payload, func() error { return nil })
+}
+
+// Fill completes a cache promotion. A payload with TemporaryPath set promotes
+// a completed response capture. Without one, it performs a fresh on-demand
+// origin read so interrupted and range-based playback can still populate the
+// cache without depending on the lifetime of the HTTP request.
+func (s *Service) Fill(ctx context.Context, payload PromotionPayload) error {
+	if payload.TemporaryPath != "" {
+		return s.Promote(ctx, payload)
+	}
+	return s.captureFromOrigin(ctx, payload)
+}
+
+func (s *Service) captureFromOrigin(ctx context.Context, payload PromotionPayload) error {
+	if payload.OriginMountID == "" || payload.ObjectKey == "" || payload.FileID == 0 || payload.Info.Size <= 0 {
+		return errors.New("cache origin capture payload is incomplete")
+	}
+	key, err := storage.ParseKey(payload.ObjectKey)
+	if err != nil {
+		return err
+	}
+	if object, _, ok := s.openCached(ctx, payload.PoolID, OpenRequest{
+		PoolID: payload.PoolID, OriginMountID: payload.OriginMountID, FileID: payload.FileID, Key: key,
+	}); ok {
+		_ = object.Body.Close()
+		return nil
+	}
+	version, err := s.fileCacheVersion(ctx, payload.FileID)
+	if errors.Is(err, gorm.ErrRecordNotFound) || (err == nil && version != payload.FileCacheVersion) {
+		return errCacheAdmissionSkipped
+	}
+	if err != nil {
+		return err
+	}
+	var combined error
+	for _, targetMountID := range uniqueTargetMountIDs(payload) {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(combined, err)
+		}
+		err = s.promoteOriginToTarget(ctx, payload, key, targetMountID)
+		if err == nil {
+			return nil
+		}
+		if errors.Is(err, errCacheCaptureStale) {
+			return errCacheAdmissionSkipped
+		}
+		if AdmissionSkipped(err) {
+			continue
+		}
+		s.recordMembershipError(payload.PoolID, targetMountID, err)
+		combined = errors.Join(combined, fmt.Errorf("cache mount %d: %w", targetMountID, err))
+	}
+	if combined != nil {
+		return combined
+	}
+	return errCacheAdmissionSkipped
+}
+
+func (s *Service) promoteOriginToTarget(ctx context.Context, payload PromotionPayload, objectKey storage.Key, targetMountID uint) error {
+	unlock := s.lockMembership(payload.PoolID, targetMountID)
+	defer unlock()
+	var membership models.StoragePoolMount
+	if err := s.db.WithContext(ctx).
+		Where("storage_pool_id = ? AND storage_mount_id = ? AND role = ?", payload.PoolID, targetMountID, models.StoragePoolMountCache).
+		First(&membership).Error; err != nil {
+		return errCacheAdmissionSkipped
+	}
+	var mount models.StorageMount
+	if err := s.db.WithContext(ctx).First(&mount, targetMountID).Error; err != nil {
+		return err
+	}
+	if !mount.Mounted || mount.LastError != "" || mount.UUID == payload.OriginMountID {
+		return errCacheAdmissionSkipped
+	}
+	target, err := s.storage.Store(mount.UUID)
+	if err != nil {
+		return err
+	}
+	if err := s.pruneMembership(ctx, membership, target, payload.Info.Size); err != nil {
+		return err
+	}
+	if membership.CacheMaxBytes <= 0 || payload.Info.Size > membership.CacheMaxBytes {
+		return errCacheAdmissionSkipped
+	}
+	origin, err := s.storage.StoreOrDefault(payload.OriginMountID)
+	if err != nil {
+		return err
+	}
+	object, err := origin.Open(ctx, objectKey)
+	if err != nil {
+		return err
+	}
+	if object.Info.Size != payload.Info.Size {
+		_ = object.Body.Close()
+		return fmt.Errorf("cache origin size changed from %d to %d: %w", payload.Info.Size, object.Info.Size, errCacheAdmissionSkipped)
+	}
+	if payload.Info.ETag != "" && object.Info.ETag != "" && payload.Info.ETag != object.Info.ETag {
+		_ = object.Body.Close()
+		return fmt.Errorf("cache origin entity changed: %w", errCacheAdmissionSkipped)
+	}
+	cacheKey, err := s.cacheKey(payload.PoolID, payload.OriginMountID, payload.ObjectKey)
+	if err != nil {
+		_ = object.Body.Close()
+		return err
+	}
+	expected := object.Info.Size
+	written, putErr := target.Put(ctx, cacheKey, object.Body, storage.PutOptions{
+		ExpectedSize: &expected, ContentType: object.Info.ContentType, CacheControl: object.Info.CacheControl,
+	})
+	closeErr := object.Body.Close()
+	if putErr != nil || closeErr != nil {
+		_ = target.Delete(context.WithoutCancel(ctx), cacheKey)
+		return errors.Join(putErr, closeErr)
+	}
+	if written.Size != expected {
+		_ = target.Delete(context.WithoutCancel(ctx), cacheKey)
+		return fmt.Errorf("cache object size mismatch: wrote %d, expected %d", written.Size, expected)
+	}
+	now := time.Now().UTC()
+	modTime := object.Info.ModTime
+	entry := models.StorageCacheEntry{
+		StoragePoolID: payload.PoolID, OriginMountID: payload.OriginMountID,
+		ObjectKeyHash: objectKeyHash(payload.ObjectKey), ObjectKey: payload.ObjectKey,
+		CacheMountID: targetMountID, CacheObjectKey: cacheKey.String(), FileID: payload.FileID,
+		FileCacheVersion: payload.FileCacheVersion,
+		Size:             expected, SourceETag: object.Info.ETag, ContentType: object.Info.ContentType,
+		CacheControl: object.Info.CacheControl, SourceModTime: &modTime, LastAccessedAt: now,
+	}
+	if err := s.commitPromotion(context.WithoutCancel(ctx), &entry); err != nil {
+		_ = target.Delete(context.WithoutCancel(ctx), cacheKey)
+		return err
+	}
+	s.clearMembershipError(payload.PoolID, targetMountID)
+	return nil
 }
 
 func (s *Service) openCached(ctx context.Context, poolID uint, request OpenRequest) (*storage.Object, string, bool) {
@@ -247,7 +431,7 @@ func (s *Service) promoteAsync(claimKey string, payload PromotionPayload, cleanu
 		defer s.release(claimKey)
 		ctx, cancel := context.WithTimeout(context.Background(), promotionTimeout)
 		defer cancel()
-		err := s.Promote(ctx, payload)
+		err := s.Fill(ctx, payload)
 		if err == nil || errors.Is(err, errCacheAdmissionSkipped) {
 			_ = cleanup()
 			return
@@ -388,15 +572,26 @@ func targetMountIDs(targets []target) []uint {
 }
 
 func (s *Service) enqueuePromotionRetry(payload PromotionPayload, cause error) bool {
+	return s.enqueuePromotion(payload, "Retry playback cache fill", background.VisibilityAdmin, cause)
+}
+
+func (s *Service) enqueuePromotion(payload PromotionPayload, label string, visibility string, cause error) bool {
 	if s.runtime == nil {
 		return false
 	}
-	key := cacheIdentity(payload.PoolID, payload.OriginMountID, payload.ObjectKey) + ":" + objectKeyHash(payload.TemporaryPath)
+	attemptKey := objectKeyHash(payload.TemporaryPath)
+	if payload.TemporaryPath == "" {
+		// A direct origin fill has no unique temporary path. Give each new
+		// playback-triggered retry cycle its own identity so a previously failed
+		// job cannot permanently suppress future attempts for the same object.
+		attemptKey = uuid.NewString()
+	}
+	key := cacheIdentity(payload.PoolID, payload.OriginMountID, payload.ObjectKey) + ":" + attemptKey
 	job, _, err := s.runtime.Enqueue(context.Background(), background.JobSpec{
-		Kind: "storage.cache.fill", Visibility: background.VisibilityAdmin,
+		Kind: "storage.cache.fill", Visibility: visibility,
 		SubjectType: "storage_pool", SubjectID: fmt.Sprintf("%d", payload.PoolID),
-		IdempotencyKey: "storage-cache-retry:" + key,
-		Label:          "Retry playback cache fill", Tasks: []background.TaskSpec{{
+		IdempotencyKey: "storage-cache-fill:" + key,
+		Label:          label, Tasks: []background.TaskSpec{{
 			Kind: "storage.cache.fill", Queue: background.QueueStorage, Phase: "Caching playback data",
 			PayloadVersion: 1, Payload: payload, DedupeKey: key, Priority: 5, Required: true, Weight: 1, MaxAttempts: 4,
 		}},

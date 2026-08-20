@@ -171,7 +171,7 @@ func (w *WorkerGroup) storageCacheFillHandler(ctx context.Context, task backgrou
 	if err := decodeTaskPayload(task, &payload); err != nil {
 		return background.Result{}, err
 	}
-	if err := w.deps.MediaCache.Promote(ctx, payload); err != nil {
+	if err := w.deps.MediaCache.Fill(ctx, payload); err != nil {
 		if mediacache.AdmissionSkipped(err) {
 			_ = os.Remove(payload.TemporaryPath)
 			return background.Result{Phase: "Cache admission skipped"}, nil
@@ -179,8 +179,8 @@ func (w *WorkerGroup) storageCacheFillHandler(ctx context.Context, task backgrou
 		if ctx.Err() != nil {
 			return background.Result{}, ctx.Err()
 		}
-		if os.IsNotExist(err) {
-			return background.Result{}, background.Permanent("cache_source_missing", "The captured playback data is no longer available", err)
+		if os.IsNotExist(err) || errors.Is(err, storage.ErrNotFound) {
+			return background.Result{}, background.Permanent("cache_source_missing", "The requested playback data is no longer available from primary storage", err)
 		}
 		return background.Result{}, background.Transient("cache_fill_failed", "Playback data could not be added to the cache", err)
 	}
