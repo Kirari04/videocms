@@ -362,7 +362,7 @@ func (w *WorkerGroup) migrateStorageItem(ctx context.Context, migration models.S
 			Where("id = ? AND storage_id = ? AND storage_state = ?", file.ID, item.SourceMountID, models.FileStorageAvailable).
 			Updates(map[string]any{
 				"storage_id": item.DestinationMountID, "storage_pool_id": migration.DestinationPoolID,
-				"storage_cache_version": gorm.Expr("storage_cache_version + 1"),
+				"storage_cache_version": gorm.Expr("COALESCE(storage_cache_version, 0) + 1"),
 			})
 		if updated.Error != nil {
 			return updated.Error
