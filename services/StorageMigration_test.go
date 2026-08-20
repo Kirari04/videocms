@@ -156,6 +156,9 @@ func TestStorageMigrationCopiesFinalChangesBeforeAtomicCutover(t *testing.T) {
 	if err := db.Create(&file).Error; err != nil {
 		t.Fatal(err)
 	}
+	if err := db.Exec("UPDATE files SET storage_cache_version = NULL WHERE id = ?", file.ID).Error; err != nil {
+		t.Fatal(err)
+	}
 	prefix, err := storage.LegacyMediaLayout{}.FilePrefix(file.UUID)
 	if err != nil {
 		t.Fatal(err)
@@ -195,6 +198,9 @@ func TestStorageMigrationCopiesFinalChangesBeforeAtomicCutover(t *testing.T) {
 	}
 	if file.StoragePoolID == nil || *file.StoragePoolID != migration.DestinationPoolID {
 		t.Fatalf("storage pool id = %v, want %d", file.StoragePoolID, migration.DestinationPoolID)
+	}
+	if file.StorageCacheVersion != 1 {
+		t.Fatalf("storage cache generation = %d, want 1", file.StorageCacheVersion)
 	}
 	if err := db.First(&item, item.ID).Error; err != nil {
 		t.Fatal(err)

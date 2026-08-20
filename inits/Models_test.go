@@ -174,3 +174,36 @@ func TestMigrateModelsBackfillsLegacyFileStorageID(t *testing.T) {
 		t.Fatalf("load local storage pool membership: %v", err)
 	}
 }
+
+func TestMigrateModelsBackfillsNullStorageCacheVersions(t *testing.T) {
+	db, err := gorm.Open(
+		sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"),
+		&gorm.Config{},
+	)
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
+	}
+	if err := db.AutoMigrate(&models.File{}); err != nil {
+		t.Fatalf("migrate pre-cache file: %v", err)
+	}
+	file := models.File{UUID: "pre-cache-file", StorageID: models.StorageMountLocalUUID}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatalf("create pre-cache file: %v", err)
+	}
+	if err := db.Exec("UPDATE files SET storage_cache_version = NULL WHERE id = ?", file.ID).Error; err != nil {
+		t.Fatalf("simulate nullable legacy generation: %v", err)
+	}
+
+	if err := MigrateModels(db); err != nil {
+		t.Fatalf("MigrateModels() error = %v", err)
+	}
+
+	var nullVersions int64
+	if err := db.Unscoped().Model(&models.File{}).
+		Where("storage_cache_version IS NULL").Count(&nullVersions).Error; err != nil {
+		t.Fatalf("count null cache versions: %v", err)
+	}
+	if nullVersions != 0 {
+		t.Fatalf("null storage cache versions = %d, want 0", nullVersions)
+	}
+}

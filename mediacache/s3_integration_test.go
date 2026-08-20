@@ -88,6 +88,11 @@ func TestS3OriginPartialPlaybackFillsLocalCacheIntegration(t *testing.T) {
 	if err := db.Create(&file).Error; err != nil {
 		t.Fatal(err)
 	}
+	// Production libraries created before read caching can carry a nullable
+	// generation. Exercise that upgrade path against a real S3 origin too.
+	if err := db.Exec("UPDATE files SET storage_cache_version = NULL WHERE id = ?", file.ID).Error; err != nil {
+		t.Fatal(err)
+	}
 	service := New(db, stores, nil)
 	t.Cleanup(service.Close)
 
