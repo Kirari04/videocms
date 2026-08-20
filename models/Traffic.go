@@ -3,6 +3,9 @@ package models
 const (
 	TrafficSourcePlayer   = "player"
 	TrafficSourceDownload = "download"
+
+	TrafficDeliverySourceOrigin = "origin"
+	TrafficDeliverySourceCache  = "cache"
 )
 
 type TrafficLog struct {
@@ -13,6 +16,13 @@ type TrafficLog struct {
 	AudioID   uint   `gorm:"index"`
 	Source    string `gorm:"size:16;not null;default:player;index"`
 	Bytes     uint64
+
+	// Storage attribution is intentionally recorded only for responses that
+	// read a configured storage mount. Older traffic and generated responses
+	// keep these fields empty instead of being guessed during an upgrade.
+	StoragePoolID    uint
+	StorageMountUUID string `gorm:"size:64"`
+	DeliverySource   string `gorm:"size:16"`
 }
 
 type TrafficStatsGetValidation struct {

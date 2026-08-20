@@ -123,6 +123,44 @@ func TestReadThroughCachesCompletedPlaybackAndFallsBackToCache(t *testing.T) {
 	}
 }
 
+func TestOpenWithResultReportsTheMountThatServedPlayback(t *testing.T) {
+	fixture := newCacheFixture(t, 1024*1024)
+	key, _ := storage.ParseKey("video/1080p/attributed.ts")
+	body := []byte("attributed-playback")
+	expected := int64(len(body))
+	if _, err := fixture.originStore.Put(context.Background(), key, bytesReader(body), storage.PutOptions{ExpectedSize: &expected}); err != nil {
+		t.Fatal(err)
+	}
+
+	object, result, err := fixture.cache.OpenWithResult(context.Background(), OpenRequest{
+		PoolID: fixture.pool.ID, OriginMountID: fixture.origin.UUID, FileID: fixture.file.ID, Key: key,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.CacheHit || result.PoolID != fixture.pool.ID || result.MountUUID != fixture.origin.UUID {
+		t.Fatalf("origin result = %#v", result)
+	}
+	if _, err := io.ReadAll(object.Body); err != nil {
+		t.Fatal(err)
+	}
+	if err := object.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	waitForCacheEntries(t, fixture.db, 1)
+
+	object, result, err = fixture.cache.OpenWithResult(context.Background(), OpenRequest{
+		PoolID: fixture.pool.ID, OriginMountID: fixture.origin.UUID, FileID: fixture.file.ID, Key: key,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer object.Body.Close()
+	if !result.CacheHit || result.PoolID != fixture.pool.ID || result.MountUUID != fixture.target.UUID {
+		t.Fatalf("cache result = %#v", result)
+	}
+}
+
 func TestReadThroughDoesNotCachePartialRange(t *testing.T) {
 	fixture := newCacheFixture(t, 1024*1024)
 	key, _ := storage.ParseKey("video/1080p/out2.ts")

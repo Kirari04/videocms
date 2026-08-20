@@ -89,6 +89,12 @@ func MigrateModels(gormDB *gorm.DB) error {
 	); err != nil {
 		return err
 	}
+	if !gormDB.Migrator().HasIndex(&models.TrafficLog{}, "idx_traffic_logs_storage_window") {
+		if err := gormDB.Exec(`CREATE INDEX idx_traffic_logs_storage_window
+			ON traffic_logs (delivery_source, created_at)`).Error; err != nil {
+			return fmt.Errorf("failed to index storage traffic attribution: %w", err)
+		}
+	}
 	if err := background.Migrate(gormDB); err != nil {
 		return fmt.Errorf("failed to migrate background work tables: %w", err)
 	}

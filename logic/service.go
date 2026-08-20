@@ -23,24 +23,50 @@ func (s *Service) Qualities() []models.AvailableQuality {
 }
 
 func (s *Service) TrackTraffic(userID, fileID, qualityID, audioID uint, bytes uint64) {
-	s.trackTraffic(userID, fileID, qualityID, audioID, models.TrafficSourcePlayer, bytes)
+	s.trackTraffic(userID, fileID, qualityID, audioID, models.TrafficSourcePlayer, bytes, 0, "", "")
 }
 
 func (s *Service) TrackDownloadTraffic(userID, fileID, qualityID uint, bytes uint64) {
-	s.trackTraffic(userID, fileID, qualityID, 0, models.TrafficSourceDownload, bytes)
+	s.trackTraffic(userID, fileID, qualityID, 0, models.TrafficSourceDownload, bytes, 0, "", "")
 }
 
-func (s *Service) trackTraffic(userID, fileID, qualityID, audioID uint, source string, bytes uint64) {
+func (s *Service) TrackStorageTraffic(
+	userID, fileID, qualityID, audioID uint,
+	bytes uint64,
+	storagePoolID uint,
+	storageMountUUID string,
+	cacheHit bool,
+) {
+	deliverySource := models.TrafficDeliverySourceOrigin
+	if cacheHit {
+		deliverySource = models.TrafficDeliverySourceCache
+	}
+	s.trackTraffic(
+		userID, fileID, qualityID, audioID, models.TrafficSourcePlayer, bytes,
+		storagePoolID, storageMountUUID, deliverySource,
+	)
+}
+
+func (s *Service) trackTraffic(
+	userID, fileID, qualityID, audioID uint,
+	source string,
+	bytes uint64,
+	storagePoolID uint,
+	storageMountUUID, deliverySource string,
+) {
 	if bytes == 0 {
 		return
 	}
 	s.Deps.DB.Create(&models.TrafficLog{
-		UserID:    userID,
-		FileID:    fileID,
-		QualityID: qualityID,
-		AudioID:   audioID,
-		Source:    source,
-		Bytes:     bytes,
+		UserID:           userID,
+		FileID:           fileID,
+		QualityID:        qualityID,
+		AudioID:          audioID,
+		Source:           source,
+		Bytes:            bytes,
+		StoragePoolID:    storagePoolID,
+		StorageMountUUID: storageMountUUID,
+		DeliverySource:   deliverySource,
 	})
 }
 

@@ -57,13 +57,18 @@ func (h *Handlers) serveMediaObject(c echo.Context, storeID string, key storage.
 	}
 	var object *storage.Object
 	var err error
+	resolvedStoreID := storeID
+	if resolvedStoreID == "" {
+		resolvedStoreID = h.Deps.Storage.DefaultStoreID()
+	}
+	delivery := mediacache.OpenResult{PoolID: traffic.poolID, MountUUID: resolvedStoreID}
 	if h.Deps.MediaCache != nil {
-		object, _, err = h.Deps.MediaCache.Open(c.Request().Context(), mediacache.OpenRequest{
-			PoolID: traffic.poolID, OriginMountID: storeID, FileID: traffic.fileID, Key: key,
+		object, delivery, err = h.Deps.MediaCache.OpenWithResult(c.Request().Context(), mediacache.OpenRequest{
+			PoolID: traffic.poolID, OriginMountID: resolvedStoreID, FileID: traffic.fileID, Key: key,
 		})
 	} else {
 		var store storage.Store
-		store, err = h.Deps.Storage.StoreOrDefault(storeID)
+		store, err = h.Deps.Storage.StoreOrDefault(resolvedStoreID)
 		if err == nil {
 			object, err = store.Open(c.Request().Context(), key)
 		}
@@ -90,12 +95,15 @@ func (h *Handlers) serveMediaObject(c echo.Context, storeID string, key storage.
 	counter := &countingResponseWriter{ResponseWriter: c.Response().Writer}
 	http.ServeContent(counter, c.Request(), key.String(), object.Info.ModTime, object.Body)
 	if counter.bytes > 0 && (counter.status == http.StatusOK || counter.status == http.StatusPartialContent) {
-		h.Logic.TrackTraffic(
+		h.Logic.TrackStorageTraffic(
 			traffic.userID,
 			traffic.fileID,
 			traffic.qualityID,
 			traffic.audioID,
 			counter.bytes,
+			delivery.PoolID,
+			delivery.MountUUID,
+			delivery.CacheHit,
 		)
 	}
 	return nil

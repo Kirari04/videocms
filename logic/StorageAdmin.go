@@ -46,6 +46,7 @@ type StorageMountResponse struct {
 	LastError             string
 	LastCheckedAt         *time.Time
 	UnmountedAt           *time.Time
+	Traffic               StorageTrafficSummary
 }
 
 type StoragePoolResponse struct {
@@ -58,6 +59,7 @@ type StoragePoolResponse struct {
 	PrimaryMountIDs   []uint
 	CacheMounts       []StorageCacheMountResponse
 	UserOverrideCount int64
+	Traffic           StorageTrafficSummary
 }
 
 type StorageCacheMountResponse struct {
@@ -79,8 +81,29 @@ type StorageAdminOverview struct {
 	UsedBytes            int64
 	FileCount            int64
 	UnavailableFileCount int64
+	TrafficWindowDays    int
+	Traffic              StorageTrafficSummary
 	Mounts               []StorageMountResponse
 	Pools                []StoragePoolResponse
+}
+
+type StorageTrafficSummary struct {
+	Bytes          uint64
+	Requests       uint64
+	OriginBytes    uint64
+	OriginRequests uint64
+	CacheBytes     uint64
+	CacheRequests  uint64
+}
+
+const storageTrafficWindowDays = 30
+
+type storageTrafficAggregate struct {
+	StoragePoolID    uint
+	StorageMountUUID string
+	DeliverySource   string
+	Bytes            uint64
+	Requests         uint64
 }
 
 type StoragePoolInput struct {
@@ -139,6 +162,10 @@ func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
 		totalFileCount += usage.FileCount
 		totalUnavailableFileCount += usage.UnavailableFileCount
 	}
+	traffic, trafficByPool, trafficByMount, err := s.storageTrafficSummaries(time.Now().UTC().AddDate(0, 0, -storageTrafficWindowDays))
+	if err != nil {
+		return StorageAdminOverview{}, err
+	}
 	mountResponses := make([]StorageMountResponse, 0, len(mounts))
 	for _, mount := range mounts {
 		usage := usageByMount[mount.UUID]
@@ -162,6 +189,7 @@ func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
 			LastError:             mount.LastError,
 			LastCheckedAt:         mount.LastCheckedAt,
 			UnmountedAt:           mount.UnmountedAt,
+			Traffic:               trafficByMount[mount.UUID],
 		}
 		if !mount.System && mount.Configuration != "" {
 			configuration, err := storage.DecodeMountConfiguration(mount.Provider, mount.Configuration)
@@ -225,6 +253,7 @@ func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
 			PrimaryMountIDs:   primaryMountIDs,
 			CacheMounts:       cacheMounts,
 			UserOverrideCount: userCount,
+			Traffic:           trafficByPool[pool.ID],
 		})
 	}
 	return StorageAdminOverview{
@@ -232,9 +261,61 @@ func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
 		UsedBytes:            totalUsedBytes,
 		FileCount:            totalFileCount,
 		UnavailableFileCount: totalUnavailableFileCount,
+		TrafficWindowDays:    storageTrafficWindowDays,
+		Traffic:              traffic,
 		Mounts:               mountResponses,
 		Pools:                poolResponses,
 	}, nil
+}
+
+func (s *Service) storageTrafficSummaries(since time.Time) (
+	StorageTrafficSummary,
+	map[uint]StorageTrafficSummary,
+	map[string]StorageTrafficSummary,
+	error,
+) {
+	var rows []storageTrafficAggregate
+	if err := s.Deps.DB.Model(&models.TrafficLog{}).
+		Select(`storage_pool_id, storage_mount_uuid, delivery_source,
+			COALESCE(SUM(bytes), 0) AS bytes, COUNT(*) AS requests`).
+		Where("created_at >= ? AND delivery_source IN ?", since, []string{
+			models.TrafficDeliverySourceOrigin,
+			models.TrafficDeliverySourceCache,
+		}).
+		Group("storage_pool_id, storage_mount_uuid, delivery_source").
+		Scan(&rows).Error; err != nil {
+		return StorageTrafficSummary{}, nil, nil, err
+	}
+
+	total := StorageTrafficSummary{}
+	byPool := make(map[uint]StorageTrafficSummary)
+	byMount := make(map[string]StorageTrafficSummary)
+	for _, row := range rows {
+		addStorageTraffic(&total, row)
+		if row.StoragePoolID != 0 {
+			summary := byPool[row.StoragePoolID]
+			addStorageTraffic(&summary, row)
+			byPool[row.StoragePoolID] = summary
+		}
+		if row.StorageMountUUID != "" {
+			summary := byMount[row.StorageMountUUID]
+			addStorageTraffic(&summary, row)
+			byMount[row.StorageMountUUID] = summary
+		}
+	}
+	return total, byPool, byMount, nil
+}
+
+func addStorageTraffic(summary *StorageTrafficSummary, row storageTrafficAggregate) {
+	summary.Bytes += row.Bytes
+	summary.Requests += row.Requests
+	if row.DeliverySource == models.TrafficDeliverySourceCache {
+		summary.CacheBytes += row.Bytes
+		summary.CacheRequests += row.Requests
+		return
+	}
+	summary.OriginBytes += row.Bytes
+	summary.OriginRequests += row.Requests
 }
 
 func (s *Service) CreateStorageMount(ctx context.Context, input StorageMountInput) (models.StorageMount, StorageReconnectResult, error) {
