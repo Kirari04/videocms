@@ -2,12 +2,14 @@ package mediacache
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"ch/kirari04/videocms/background"
 	"ch/kirari04/videocms/models"
 	"ch/kirari04/videocms/storage"
 	"gorm.io/driver/sqlite"
@@ -138,7 +140,7 @@ func TestOpenWithResultReportsTheMountThatServedPlayback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.CacheHit || result.PoolID != fixture.pool.ID || result.MountUUID != fixture.origin.UUID {
+	if result.CacheHit || result.CacheStatus != CacheStatusFilling || result.PoolID != fixture.pool.ID || result.MountUUID != fixture.origin.UUID {
 		t.Fatalf("origin result = %#v", result)
 	}
 	if _, err := io.ReadAll(object.Body); err != nil {
@@ -156,12 +158,12 @@ func TestOpenWithResultReportsTheMountThatServedPlayback(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer object.Body.Close()
-	if !result.CacheHit || result.PoolID != fixture.pool.ID || result.MountUUID != fixture.target.UUID {
+	if !result.CacheHit || result.CacheStatus != CacheStatusHit || result.PoolID != fixture.pool.ID || result.MountUUID != fixture.target.UUID {
 		t.Fatalf("cache result = %#v", result)
 	}
 }
 
-func TestReadThroughDoesNotCachePartialRange(t *testing.T) {
+func TestReadThroughCompletesPartialRangeFromOrigin(t *testing.T) {
 	fixture := newCacheFixture(t, 1024*1024)
 	key, _ := storage.ParseKey("video/1080p/out2.ts")
 	body := []byte("playback-segment")
@@ -185,12 +187,116 @@ func TestReadThroughDoesNotCachePartialRange(t *testing.T) {
 	if err := object.Body.Close(); err != nil {
 		t.Fatal(err)
 	}
+	waitForCacheEntries(t, fixture.db, 1)
+	if err := fixture.originStore.Delete(context.Background(), key); err != nil {
+		t.Fatal(err)
+	}
+	object, hit, err := fixture.cache.Open(context.Background(), OpenRequest{
+		PoolID: fixture.pool.ID, OriginMountID: fixture.origin.UUID, FileID: fixture.file.ID, Key: key,
+	})
+	if err != nil || !hit {
+		t.Fatalf("cached open after partial range hit=%v err=%v", hit, err)
+	}
+	defer object.Body.Close()
+	read, err := io.ReadAll(object.Body)
+	if err != nil || string(read) != string(body) {
+		t.Fatalf("cached read=%q err=%v", read, err)
+	}
+}
+
+func TestReadThroughDoesNotFillForAnUnreadObject(t *testing.T) {
+	fixture := newCacheFixture(t, 1024*1024)
+	key, _ := storage.ParseKey("video/1080p/unread.ts")
+	body := []byte("playback-segment")
+	expected := int64(len(body))
+	if _, err := fixture.originStore.Put(context.Background(), key, bytesReader(body), storage.PutOptions{ExpectedSize: &expected}); err != nil {
+		t.Fatal(err)
+	}
+	object, result, err := fixture.cache.OpenWithResult(context.Background(), OpenRequest{
+		PoolID: fixture.pool.ID, OriginMountID: fixture.origin.UUID, FileID: fixture.file.ID, Key: key,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.CacheStatus != CacheStatusFilling {
+		t.Fatalf("cache status = %q, want %q", result.CacheStatus, CacheStatusFilling)
+	}
+	if err := object.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(20 * time.Millisecond)
 	var count int64
 	if err := fixture.db.Model(&models.StorageCacheEntry{}).Count(&count).Error; err != nil {
 		t.Fatal(err)
 	}
 	if count != 0 {
-		t.Fatalf("partial request created %d cache entries", count)
+		t.Fatalf("unread request created %d cache entries", count)
+	}
+}
+
+func TestDirectFillFailuresCanEnqueueANewRetryCycle(t *testing.T) {
+	fixture := newCacheFixture(t, 1024*1024)
+	if err := background.Migrate(fixture.db); err != nil {
+		t.Fatal(err)
+	}
+	fixture.cache.runtime = background.New(fixture.db, background.Options{})
+	payload := writePromotionFile(t, fixture, "video/retryable-range.ts", 48)
+	payload.TemporaryPath = ""
+	for attempt := 0; attempt < 2; attempt++ {
+		if !fixture.cache.enqueuePromotionRetry(payload, errors.New("origin read failed")) {
+			t.Fatalf("retry cycle %d was not enqueued", attempt+1)
+		}
+	}
+	var jobs int64
+	if err := fixture.db.Model(&background.Job{}).Where("kind = ?", "storage.cache.fill").Count(&jobs).Error; err != nil {
+		t.Fatal(err)
+	}
+	if jobs != 2 {
+		t.Fatalf("retry jobs = %d, want 2 independent cycles", jobs)
+	}
+}
+
+func TestInterruptedPlaybackHandsFillToDurableRuntime(t *testing.T) {
+	fixture := newCacheFixture(t, 1024*1024)
+	if err := background.Migrate(fixture.db); err != nil {
+		t.Fatal(err)
+	}
+	fixture.cache.runtime = background.New(fixture.db, background.Options{})
+	key, _ := storage.ParseKey("video/durable-range.ts")
+	body := []byte("playback-segment")
+	expected := int64(len(body))
+	if _, err := fixture.originStore.Put(context.Background(), key, bytesReader(body), storage.PutOptions{ExpectedSize: &expected}); err != nil {
+		t.Fatal(err)
+	}
+	object, _, err := fixture.cache.Open(context.Background(), OpenRequest{
+		PoolID: fixture.pool.ID, OriginMountID: fixture.origin.UUID, FileID: fixture.file.ID, Key: key,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := object.Body.Seek(3, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	buffer := make([]byte, 4)
+	if _, err := object.Body.Read(buffer); err != nil && err != io.EOF {
+		t.Fatal(err)
+	}
+	if err := object.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var job background.Job
+	if err := fixture.db.Where("kind = ?", "storage.cache.fill").First(&job).Error; err != nil {
+		t.Fatal(err)
+	}
+	if job.Visibility != background.VisibilitySystem || job.Label != "Fill requested playback data" {
+		t.Fatalf("durable fill job = %#v", job)
+	}
+	var count int64
+	if err := fixture.db.Model(&models.StorageCacheEntry{}).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("fill ran outside durable runtime: %d entries", count)
 	}
 }
 
