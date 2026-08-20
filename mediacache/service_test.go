@@ -125,6 +125,36 @@ func TestReadThroughCachesCompletedPlaybackAndFallsBackToCache(t *testing.T) {
 	}
 }
 
+func TestReadThroughCachesLegacyFileWithNullGeneration(t *testing.T) {
+	fixture := newCacheFixture(t, 1024*1024)
+	if err := fixture.db.Exec("UPDATE files SET storage_cache_version = NULL WHERE id = ?", fixture.file.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	key, _ := storage.ParseKey("video/1080p/legacy.ts")
+	body := []byte("legacy-playback-segment")
+	expected := int64(len(body))
+	if _, err := fixture.originStore.Put(context.Background(), key, bytesReader(body), storage.PutOptions{ExpectedSize: &expected}); err != nil {
+		t.Fatal(err)
+	}
+
+	object, result, err := fixture.cache.OpenWithResult(context.Background(), OpenRequest{
+		PoolID: fixture.pool.ID, OriginMountID: fixture.origin.UUID, FileID: fixture.file.ID, Key: key,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.CacheStatus != CacheStatusFilling {
+		t.Fatalf("legacy cache status = %q, want %q", result.CacheStatus, CacheStatusFilling)
+	}
+	if _, err := io.ReadAll(object.Body); err != nil {
+		t.Fatal(err)
+	}
+	if err := object.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	waitForCacheEntries(t, fixture.db, 1)
+}
+
 func TestOpenWithResultReportsTheMountThatServedPlayback(t *testing.T) {
 	fixture := newCacheFixture(t, 1024*1024)
 	key, _ := storage.ParseKey("video/1080p/attributed.ts")
@@ -364,6 +394,23 @@ func TestPromotionCapturedBeforeInvalidationIsDiscarded(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("stale promotion created %d cache entries", count)
+	}
+}
+
+func TestInvalidationAdvancesNullLegacyGeneration(t *testing.T) {
+	fixture := newCacheFixture(t, 1024*1024)
+	if err := fixture.db.Exec("UPDATE files SET storage_cache_version = NULL WHERE id = ?", fixture.file.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.cache.InvalidateFile(context.Background(), fixture.file.ID); err != nil {
+		t.Fatal(err)
+	}
+	version, err := fixture.cache.fileCacheVersion(context.Background(), fixture.file.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version != 1 {
+		t.Fatalf("invalidated generation = %d, want 1", version)
 	}
 }
 

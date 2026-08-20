@@ -149,6 +149,10 @@ func (s *Service) OpenWithResult(ctx context.Context, request OpenRequest) (*sto
 	}
 	fileCacheVersion, err := s.fileCacheVersion(ctx, request.FileID)
 	if err != nil {
+		if s.cacheConfigured(ctx, poolID) {
+			result.CacheStatus = CacheStatusMiss
+		}
+		s.logger.Printf("component=storage_cache event=file_generation_lookup_failed file=%d pool=%d error=%q", request.FileID, poolID, err)
 		return object, result, nil
 	}
 	targets, err := s.targets(ctx, poolID, request.OriginMountID, object.Info.Size)
@@ -370,7 +374,7 @@ func (s *Service) openCached(ctx context.Context, poolID uint, request OpenReque
 	var entry models.StorageCacheEntry
 	err := s.db.WithContext(ctx).
 		Joins("JOIN storage_pool_mounts AS cache_membership ON cache_membership.storage_pool_id = storage_cache_entries.storage_pool_id AND cache_membership.storage_mount_id = storage_cache_entries.cache_mount_id AND cache_membership.role = ?", models.StoragePoolMountCache).
-		Joins("JOIN files AS cache_file ON cache_file.id = storage_cache_entries.file_id AND cache_file.storage_cache_version = storage_cache_entries.file_cache_version AND cache_file.deleted_at IS NULL").
+		Joins("JOIN files AS cache_file ON cache_file.id = storage_cache_entries.file_id AND COALESCE(cache_file.storage_cache_version, 0) = storage_cache_entries.file_cache_version AND cache_file.deleted_at IS NULL").
 		Where("storage_cache_entries.storage_pool_id = ? AND storage_cache_entries.origin_mount_id = ? AND storage_cache_entries.object_key_hash = ?", poolID, request.OriginMountID, hash).
 		First(&entry).Error
 	if err != nil {
@@ -610,7 +614,7 @@ func (s *Service) InvalidateFile(ctx context.Context, fileID uint) error {
 	var entries []models.StorageCacheEntry
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Unscoped().Model(&models.File{}).Where("id = ?", fileID).
-			UpdateColumn("storage_cache_version", gorm.Expr("storage_cache_version + 1")).Error; err != nil {
+			UpdateColumn("storage_cache_version", gorm.Expr("COALESCE(storage_cache_version, 0) + 1")).Error; err != nil {
 			return err
 		}
 		if err := tx.Where("file_id = ?", fileID).Find(&entries).Error; err != nil {
@@ -873,7 +877,7 @@ func (s *Service) pruneMembership(ctx context.Context, membership models.Storage
 func (s *Service) pruneOrphans(ctx context.Context) error {
 	var entries []models.StorageCacheEntry
 	err := s.db.WithContext(ctx).
-		Where("NOT EXISTS (SELECT 1 FROM storage_pool_mounts members WHERE members.storage_pool_id = storage_cache_entries.storage_pool_id AND members.storage_mount_id = storage_cache_entries.cache_mount_id AND members.role = ?) OR NOT EXISTS (SELECT 1 FROM files cache_file WHERE cache_file.id = storage_cache_entries.file_id AND cache_file.storage_cache_version = storage_cache_entries.file_cache_version AND cache_file.deleted_at IS NULL)", models.StoragePoolMountCache).
+		Where("NOT EXISTS (SELECT 1 FROM storage_pool_mounts members WHERE members.storage_pool_id = storage_cache_entries.storage_pool_id AND members.storage_mount_id = storage_cache_entries.cache_mount_id AND members.role = ?) OR NOT EXISTS (SELECT 1 FROM files cache_file WHERE cache_file.id = storage_cache_entries.file_id AND COALESCE(cache_file.storage_cache_version, 0) = storage_cache_entries.file_cache_version AND cache_file.deleted_at IS NULL)", models.StoragePoolMountCache).
 		Find(&entries).Error
 	if err != nil {
 		return err
@@ -909,7 +913,9 @@ func (s *Service) deleteEntryObject(ctx context.Context, entry models.StorageCac
 
 func (s *Service) fileCacheVersion(ctx context.Context, fileID uint) (uint64, error) {
 	var file struct{ StorageCacheVersion uint64 }
-	if err := s.db.WithContext(ctx).Model(&models.File{}).Select("storage_cache_version").First(&file, fileID).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&models.File{}).
+		Select("COALESCE(storage_cache_version, 0) AS storage_cache_version").
+		First(&file, fileID).Error; err != nil {
 		return 0, err
 	}
 	return file.StorageCacheVersion, nil
@@ -921,8 +927,8 @@ func (s *Service) commitPromotion(ctx context.Context, entry *models.StorageCach
 		// invalidation commits first the row no longer matches; if this commits
 		// first, invalidation removes the newly inserted entry immediately after.
 		matched := tx.Model(&models.File{}).
-			Where("id = ? AND storage_cache_version = ?", entry.FileID, entry.FileCacheVersion).
-			UpdateColumn("storage_cache_version", gorm.Expr("storage_cache_version"))
+			Where("id = ? AND COALESCE(storage_cache_version, 0) = ?", entry.FileID, entry.FileCacheVersion).
+			UpdateColumn("storage_cache_version", gorm.Expr("COALESCE(storage_cache_version, 0)"))
 		if matched.Error != nil {
 			return matched.Error
 		}

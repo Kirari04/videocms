@@ -89,6 +89,15 @@ func MigrateModels(gormDB *gorm.DB) error {
 	); err != nil {
 		return err
 	}
+	// The first cache release added this nullable column through AutoMigrate.
+	// Existing file rows therefore retained NULL while newly inserted rows used
+	// Go's zero value. A NULL generation makes otherwise valid legacy media
+	// silently ineligible for read caching, so normalize every row on upgrade.
+	if err := gormDB.Unscoped().Model(&models.File{}).
+		Where("storage_cache_version IS NULL").
+		UpdateColumn("storage_cache_version", 0).Error; err != nil {
+		return fmt.Errorf("failed to backfill file storage cache versions: %w", err)
+	}
 	if !gormDB.Migrator().HasIndex(&models.TrafficLog{}, "idx_traffic_logs_storage_window") {
 		if err := gormDB.Exec(`CREATE INDEX idx_traffic_logs_storage_window
 			ON traffic_logs (delivery_source, created_at)`).Error; err != nil {
