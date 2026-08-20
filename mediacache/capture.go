@@ -17,12 +17,18 @@ type captureBody struct {
 	written  int64
 	started  bool
 	valid    bool
-	done     func(bool)
+	done     func(captureOutcome)
 	once     sync.Once
 	closeErr error
 }
 
-func newCaptureBody(source storage.ReadSeekCloser, target *os.File, expected int64, done func(bool)) *captureBody {
+type captureOutcome struct {
+	Started  bool
+	Complete bool
+	Captured int64
+}
+
+func newCaptureBody(source storage.ReadSeekCloser, target *os.File, expected int64, done func(captureOutcome)) *captureBody {
 	return &captureBody{source: source, target: target, expected: expected, valid: true, done: done}
 }
 
@@ -66,7 +72,7 @@ func (r *captureBody) Close() error {
 		r.closeErr = errors.Join(r.source.Close(), r.target.Close())
 		complete := r.closeErr == nil && r.valid && r.started && r.written == r.expected
 		if r.done != nil {
-			r.done(complete)
+			r.done(captureOutcome{Started: r.started, Complete: complete, Captured: r.written})
 		}
 	})
 	return r.closeErr

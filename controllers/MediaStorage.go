@@ -91,6 +91,9 @@ func (h *Handlers) serveMediaObject(c echo.Context, storeID string, key storage.
 	if object.Info.CacheControl != "" {
 		c.Response().Header().Set("Cache-Control", object.Info.CacheControl)
 	}
+	if delivery.CacheStatus != "" {
+		c.Response().Header().Set("X-VideoCMS-Cache", delivery.CacheStatus)
+	}
 
 	counter := &countingResponseWriter{ResponseWriter: c.Response().Writer}
 	http.ServeContent(counter, c.Request(), key.String(), object.Info.ModTime, object.Body)

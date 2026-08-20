@@ -5,6 +5,7 @@ import (
 	"ch/kirari04/videocms/auth"
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/logic"
+	"ch/kirari04/videocms/mediacache"
 	"ch/kirari04/videocms/middlewares"
 	"ch/kirari04/videocms/models"
 	"ch/kirari04/videocms/storage"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"gorm.io/driver/sqlite"
@@ -121,6 +123,105 @@ func TestGetVideoDataSupportsRangesAndTracksDeliveredBytes(t *testing.T) {
 	}
 	if traffic.StorageMountUUID != "local" || traffic.DeliverySource != models.TrafficDeliverySourceOrigin {
 		t.Fatalf("storage attribution = mount %q source %q, want local origin", traffic.StorageMountUUID, traffic.DeliverySource)
+	}
+}
+
+func TestGetVideoDataRangeFillsAndThenServesReadCache(t *testing.T) {
+	cacheRoot := t.TempDir()
+	originRoot := t.TempDir()
+	h := mediaTestHandlersWithStores(t, cacheRoot, map[string]string{
+		"local": cacheRoot, "archive": originRoot,
+	}, true)
+	if err := h.Deps.DB.AutoMigrate(
+		&models.StorageMount{}, &models.StoragePool{}, &models.StoragePoolMount{},
+		&models.StorageCacheEntry{}, &models.File{},
+	); err != nil {
+		t.Fatal(err)
+	}
+	cacheMount := models.StorageMount{UUID: "local", Name: "Local cache", Provider: models.StorageProviderLocal, Mounted: true, System: true}
+	originMount := models.StorageMount{UUID: "archive", Name: "Remote origin", Provider: models.StorageProviderS3, Mounted: true}
+	pool := models.StoragePool{UUID: "remote-pool", Name: "Remote pool"}
+	for _, value := range []any{&cacheMount, &originMount, &pool} {
+		if err := h.Deps.DB.Create(value).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, membership := range []models.StoragePoolMount{
+		{StoragePoolID: pool.ID, StorageMountID: originMount.ID, Role: models.StoragePoolMountPrimary},
+		{StoragePoolID: pool.ID, StorageMountID: cacheMount.ID, Role: models.StoragePoolMountCache, CacheMaxBytes: 1024 * 1024},
+	} {
+		if err := h.Deps.DB.Create(&membership).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	file := models.File{
+		UUID: "file-uuid", StorageID: originMount.UUID, StoragePoolID: &pool.ID,
+		StorageState: models.FileStorageAvailable,
+	}
+	if err := h.Deps.DB.Create(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+	h.Deps.MediaCache = mediacache.New(h.Deps.DB, h.Deps.Storage, nil)
+	t.Cleanup(h.Deps.MediaCache.Close)
+	body := []byte("0123456789")
+	mustWriteFile(t, filepath.Join(originRoot, "file-uuid", "720p", "out0.ts"), body)
+
+	request := func(rangeHeader string) *httptest.ResponseRecorder {
+		t.Helper()
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/videos/qualitys/"+testLinkUUID+"/720p/out0.ts", nil)
+		if rangeHeader != "" {
+			req.Header.Set("Range", rangeHeader)
+		}
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("UUID", "QUALITY", "FILE")
+		c.SetParamValues(testLinkUUID, "720p", "out0.ts")
+		c.Set(middlewares.MediaClaimsContextKey, &auth.MediaClaims{
+			LinkUUID: testLinkUUID, FileUUID: file.UUID, StorageID: originMount.UUID,
+			StoragePoolID: pool.ID, UserID: 1, FileID: file.ID, QualityIDs: map[string]uint{"720p": 3},
+		})
+		if err := h.GetVideoData(c); err != nil {
+			t.Fatalf("GetVideoData() error = %v", err)
+		}
+		return rec
+	}
+
+	first := request("bytes=2-5")
+	if first.Code != http.StatusPartialContent || first.Body.String() != "2345" {
+		t.Fatalf("first response = %d %q", first.Code, first.Body.String())
+	}
+	if status := first.Header().Get("X-VideoCMS-Cache"); status != mediacache.CacheStatusFilling {
+		t.Fatalf("first cache status = %q, want %q", status, mediacache.CacheStatusFilling)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		var count int64
+		if err := h.Deps.DB.Model(&models.StorageCacheEntry{}).Count(&count).Error; err == nil && count == 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	var entries int64
+	if err := h.Deps.DB.Model(&models.StorageCacheEntry{}).Count(&entries).Error; err != nil || entries != 1 {
+		t.Fatalf("cache entries = %d, err=%v", entries, err)
+	}
+	if err := os.Remove(filepath.Join(originRoot, "file-uuid", "720p", "out0.ts")); err != nil {
+		t.Fatal(err)
+	}
+	second := request("")
+	if second.Code != http.StatusOK || second.Body.String() != string(body) {
+		t.Fatalf("second response = %d %q", second.Code, second.Body.String())
+	}
+	if status := second.Header().Get("X-VideoCMS-Cache"); status != mediacache.CacheStatusHit {
+		t.Fatalf("second cache status = %q, want %q", status, mediacache.CacheStatusHit)
+	}
+	var traffic []models.TrafficLog
+	if err := h.Deps.DB.Order("id ASC").Find(&traffic).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(traffic) != 2 || traffic[0].DeliverySource != models.TrafficDeliverySourceOrigin || traffic[1].DeliverySource != models.TrafficDeliverySourceCache {
+		t.Fatalf("traffic attribution = %#v", traffic)
 	}
 }
 
