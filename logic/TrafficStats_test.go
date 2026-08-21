@@ -3,6 +3,8 @@ package logic
 import (
 	"ch/kirari04/videocms/app"
 	"ch/kirari04/videocms/models"
+	"ch/kirari04/videocms/traffic"
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +12,42 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+func TestTrackTrafficUsesBufferedRollupsWhenRecorderConfigured(t *testing.T) {
+	db, err := gorm.Open(
+		sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"),
+		&gorm.Config{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.TrafficLog{}); err != nil {
+		t.Fatal(err)
+	}
+	recorder := traffic.NewRecorder(db, traffic.Options{FlushInterval: time.Hour})
+	t.Cleanup(func() { _ = recorder.Shutdown(context.Background()) })
+	service := NewService(&app.Deps{DB: db, Traffic: recorder})
+	for range 10 {
+		service.TrackStorageTraffic(1, 2, 3, 0, 100, 4, "origin", false)
+	}
+	var before int64
+	if err := db.Model(&models.TrafficLog{}).Count(&before).Error; err != nil {
+		t.Fatal(err)
+	}
+	if before != 0 {
+		t.Fatalf("synchronous traffic rows = %d, want 0", before)
+	}
+	if err := recorder.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var row models.TrafficLog
+	if err := db.First(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Bytes != 1000 || row.RequestCount != 10 || row.StorageMountUUID != "origin" {
+		t.Fatalf("buffered traffic row = %#v", row)
+	}
+}
 
 func TestGetTrafficStatsReturnsTotalAndSourceBreakdown(t *testing.T) {
 	db, err := gorm.Open(

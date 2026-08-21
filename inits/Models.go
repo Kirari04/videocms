@@ -98,10 +98,18 @@ func MigrateModels(gormDB *gorm.DB) error {
 		UpdateColumn("storage_cache_version", 0).Error; err != nil {
 		return fmt.Errorf("failed to backfill file storage cache versions: %w", err)
 	}
-	if !gormDB.Migrator().HasIndex(&models.TrafficLog{}, "idx_traffic_logs_storage_window") {
-		if err := gormDB.Exec(`CREATE INDEX idx_traffic_logs_storage_window
-			ON traffic_logs (delivery_source, created_at)`).Error; err != nil {
+	if err := backfillTrafficAccounting(gormDB); err != nil {
+		return err
+	}
+	if !gormDB.Migrator().HasIndex(&models.TrafficLog{}, "idx_traffic_logs_storage_bucket") {
+		if err := gormDB.Exec(`CREATE INDEX idx_traffic_logs_storage_bucket
+			ON traffic_logs (delivery_source, bucket_start)`).Error; err != nil {
 			return fmt.Errorf("failed to index storage traffic attribution: %w", err)
+		}
+	}
+	if gormDB.Migrator().HasIndex(&models.TrafficLog{}, "idx_traffic_logs_storage_window") {
+		if err := gormDB.Migrator().DropIndex(&models.TrafficLog{}, "idx_traffic_logs_storage_window"); err != nil {
+			return fmt.Errorf("failed to remove obsolete storage traffic index: %w", err)
 		}
 	}
 	if err := background.Migrate(gormDB); err != nil {
@@ -172,6 +180,43 @@ func MigrateModels(gormDB *gorm.DB) error {
 		}
 	}
 	return nil
+}
+
+// backfillTrafficAccounting limits each write transaction so upgrading an
+// installation with a large traffic history does not monopolize SQLite's
+// single writer for the entire migration.
+func backfillTrafficAccounting(gormDB *gorm.DB) error {
+	const batchSize = 5000
+	type trafficRow struct {
+		ID uint
+	}
+	for {
+		var rows []trafficRow
+		if err := gormDB.Unscoped().Model(&models.TrafficLog{}).
+			Select("id").
+			Where("request_count IS NULL OR request_count = 0 OR bucket_start IS NULL OR bucket_start = 0").
+			Order("id ASC").
+			Limit(batchSize).
+			Find(&rows).Error; err != nil {
+			return fmt.Errorf("failed to inspect legacy traffic accounting: %w", err)
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+
+		ids := make([]uint, 0, len(rows))
+		for _, row := range rows {
+			ids = append(ids, row.ID)
+		}
+		if err := gormDB.Unscoped().Model(&models.TrafficLog{}).
+			Where("id IN ?", ids).
+			Updates(map[string]any{
+				"request_count": gorm.Expr("CASE WHEN request_count IS NULL OR request_count = 0 THEN 1 ELSE request_count END"),
+				"bucket_start":  gorm.Expr("CASE WHEN bucket_start IS NULL OR bucket_start = 0 THEN CAST(strftime('%s', COALESCE(created_at, CURRENT_TIMESTAMP)) AS INTEGER) / 60 * 60 ELSE bucket_start END"),
+			}).Error; err != nil {
+			return fmt.Errorf("failed to backfill legacy traffic accounting: %w", err)
+		}
+	}
 }
 
 func ensureLocalStorageDefaults(gormDB *gorm.DB) error {

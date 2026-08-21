@@ -12,6 +12,7 @@ import (
 
 	"ch/kirari04/videocms/models"
 	"ch/kirari04/videocms/storage"
+	trafficrecorder "ch/kirari04/videocms/traffic"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -83,6 +84,7 @@ type StorageAdminOverview struct {
 	UnavailableFileCount int64
 	TrafficWindowDays    int
 	Traffic              StorageTrafficSummary
+	TrafficRecorder      trafficrecorder.Status
 	Mounts               []StorageMountResponse
 	Pools                []StoragePoolResponse
 }
@@ -256,6 +258,10 @@ func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
 			Traffic:           trafficByPool[pool.ID],
 		})
 	}
+	recorderStatus := trafficrecorder.Status{}
+	if s.Deps.Traffic != nil {
+		recorderStatus = s.Deps.Traffic.Status()
+	}
 	return StorageAdminOverview{
 		EncryptionConfigured: s.Deps.StorageCipher != nil,
 		UsedBytes:            totalUsedBytes,
@@ -263,6 +269,7 @@ func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
 		UnavailableFileCount: totalUnavailableFileCount,
 		TrafficWindowDays:    storageTrafficWindowDays,
 		Traffic:              traffic,
+		TrafficRecorder:      recorderStatus,
 		Mounts:               mountResponses,
 		Pools:                poolResponses,
 	}, nil
@@ -277,8 +284,8 @@ func (s *Service) storageTrafficSummaries(since time.Time) (
 	var rows []storageTrafficAggregate
 	if err := s.Deps.DB.Model(&models.TrafficLog{}).
 		Select(`storage_pool_id, storage_mount_uuid, delivery_source,
-			COALESCE(SUM(bytes), 0) AS bytes, COUNT(*) AS requests`).
-		Where("created_at >= ? AND delivery_source IN ?", since, []string{
+			COALESCE(SUM(bytes), 0) AS bytes, COALESCE(SUM(request_count), 0) AS requests`).
+		Where("bucket_start >= ? AND delivery_source IN ?", since.UTC().Truncate(time.Minute).Unix(), []string{
 			models.TrafficDeliverySourceOrigin,
 			models.TrafficDeliverySourceCache,
 		}).

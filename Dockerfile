@@ -61,6 +61,7 @@ COPY models ./models
 COPY routes ./routes
 COPY services ./services
 COPY storage ./storage
+COPY traffic ./traffic
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \

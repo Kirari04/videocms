@@ -67,7 +67,8 @@ func TestMigrateModelsPreservesLegacyWebPages(t *testing.T) {
 	}
 	if err := db.Exec(`
 		INSERT INTO traffic_logs (created_at, user_id, file_id, quality_id, audio_id, bytes)
-		VALUES (CURRENT_TIMESTAMP, 1, 2, 3, 4, 512)
+		VALUES (CURRENT_TIMESTAMP, 1, 2, 3, 4, 512),
+			(NULL, 1, 2, 3, 4, 256)
 	`).Error; err != nil {
 		t.Fatalf("create legacy traffic row: %v", err)
 	}
@@ -99,8 +100,39 @@ func TestMigrateModelsPreservesLegacyWebPages(t *testing.T) {
 	if traffic.StoragePoolID != 0 || traffic.StorageMountUUID != "" || traffic.DeliverySource != "" {
 		t.Fatalf("legacy traffic received guessed storage attribution: %#v", traffic)
 	}
-	if !db.Migrator().HasIndex(&models.TrafficLog{}, "idx_traffic_logs_storage_window") {
-		t.Fatal("storage traffic window index was not created")
+	if traffic.RequestCount != 1 || traffic.BucketStart == 0 {
+		t.Fatalf("legacy traffic accounting was not normalized: %#v", traffic)
+	}
+	var incompleteTraffic int64
+	if err := db.Unscoped().Model(&models.TrafficLog{}).
+		Where("request_count IS NULL OR request_count = 0 OR bucket_start IS NULL OR bucket_start = 0").
+		Count(&incompleteTraffic).Error; err != nil {
+		t.Fatalf("count incomplete traffic accounting: %v", err)
+	}
+	if incompleteTraffic != 0 {
+		t.Fatalf("incomplete traffic accounting rows = %d", incompleteTraffic)
+	}
+	if !db.Migrator().HasIndex(&models.TrafficLog{}, "idx_traffic_logs_storage_bucket") {
+		t.Fatal("storage traffic bucket index was not created")
+	}
+	if !db.Migrator().HasIndex(&models.TrafficLog{}, "idx_traffic_logs_rollup_key") {
+		t.Fatal("traffic rollup identity index was not created")
+	}
+	var plans []struct{ Detail string }
+	if err := db.Raw(`EXPLAIN QUERY PLAN SELECT SUM(bytes) FROM traffic_logs
+		WHERE delivery_source = ? AND bucket_start >= ?`, models.TrafficDeliverySourceOrigin, traffic.BucketStart-60).
+		Scan(&plans).Error; err != nil {
+		t.Fatalf("explain indexed traffic query: %v", err)
+	}
+	usedBucketIndex := false
+	for _, plan := range plans {
+		if strings.Contains(plan.Detail, "idx_traffic_logs_storage_bucket") {
+			usedBucketIndex = true
+			break
+		}
+	}
+	if !usedBucketIndex {
+		t.Fatalf("storage traffic query did not use bucket index: %#v", plans)
 	}
 }
 
