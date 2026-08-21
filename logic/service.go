@@ -4,6 +4,9 @@ import (
 	"ch/kirari04/videocms/app"
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/models"
+	"ch/kirari04/videocms/traffic"
+	"log"
+	"time"
 )
 
 type Service struct {
@@ -57,17 +60,31 @@ func (s *Service) trackTraffic(
 	if bytes == 0 {
 		return
 	}
-	s.Deps.DB.Create(&models.TrafficLog{
+	if s.Deps.Traffic != nil {
+		s.Deps.Traffic.Record(traffic.Event{
+			UserID: userID, FileID: fileID, QualityID: qualityID, AudioID: audioID,
+			Source: source, Bytes: bytes, StoragePoolID: storagePoolID,
+			StorageMountUUID: storageMountUUID, DeliverySource: deliverySource,
+		})
+		return
+	}
+	now := time.Now().UTC()
+	if err := s.Deps.DB.Create(&models.TrafficLog{
+		Model:            models.Model{CreatedAt: &now, UpdatedAt: &now},
 		UserID:           userID,
 		FileID:           fileID,
 		QualityID:        qualityID,
 		AudioID:          audioID,
 		Source:           source,
 		Bytes:            bytes,
+		RequestCount:     1,
+		BucketStart:      now.Truncate(time.Minute).Unix(),
 		StoragePoolID:    storagePoolID,
 		StorageMountUUID: storageMountUUID,
 		DeliverySource:   deliverySource,
-	})
+	}).Error; err != nil {
+		log.Printf("component=traffic_recorder event=direct_write_failed error=%q", err)
+	}
 }
 
 func (s *Service) TrackUpload(userID uint, fileID uint, uploadSessionID uint, bytes uint64) {

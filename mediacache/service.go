@@ -26,6 +26,11 @@ const (
 	cacheHighWatermark  = 0.90
 	cacheLowWatermark   = 0.80
 	promotionTimeout    = 30 * time.Minute
+	cacheTouchInterval  = 2 * time.Second
+	cacheTouchAge       = 5 * time.Minute
+	cacheTouchThreshold = 256
+	cacheTouchBatchSize = 500
+	cacheTouchLimit     = 100_000
 )
 
 var errCacheAdmissionSkipped = errors.New("cache admission skipped")
@@ -103,13 +108,29 @@ type Service struct {
 
 	membershipMu    sync.Mutex
 	membershipLocks map[string]*sync.Mutex
+
+	touchMu       sync.Mutex
+	touchFlushMu  sync.Mutex
+	touches       map[uint]time.Time
+	touchClosing  bool
+	touchWake     chan struct{}
+	touchStop     chan struct{}
+	touchDone     chan struct{}
+	touchStopOnce sync.Once
 }
 
 func New(db *gorm.DB, stores *storage.Service, runtime *background.Runtime) *Service {
-	return &Service{
+	service := &Service{
 		db: db, storage: stores, runtime: runtime, logger: log.Default(), active: make(map[string]struct{}),
-		membershipLocks: make(map[string]*sync.Mutex),
+		membershipLocks: make(map[string]*sync.Mutex), touches: make(map[uint]time.Time),
+		touchWake: make(chan struct{}, 1), touchStop: make(chan struct{}), touchDone: make(chan struct{}),
 	}
+	if db == nil {
+		close(service.touchDone)
+	} else {
+		go service.runTouchWriter()
+	}
+	return service
 }
 
 func (s *Service) Open(ctx context.Context, request OpenRequest) (*storage.Object, bool, error) {
@@ -413,10 +434,7 @@ func (s *Service) openCached(ctx context.Context, poolID uint, request OpenReque
 	if entry.SourceModTime != nil {
 		object.Info.ModTime = *entry.SourceModTime
 	}
-	now := time.Now().UTC()
-	_ = s.db.WithContext(context.WithoutCancel(ctx)).Model(&models.StorageCacheEntry{}).
-		Where("id = ? AND last_accessed_at < ?", entry.ID, now.Add(-5*time.Minute)).
-		Update("last_accessed_at", now).Error
+	s.queueTouch(entry, time.Now().UTC())
 	return object, mount.UUID, true
 }
 
@@ -715,6 +733,118 @@ func (s *Service) Close() {
 	s.closed = true
 	s.mu.Unlock()
 	s.workers.Wait()
+	s.touchStopOnce.Do(func() {
+		s.touchMu.Lock()
+		s.touchClosing = true
+		s.touchMu.Unlock()
+		close(s.touchStop)
+	})
+	<-s.touchDone
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.flushTouches(ctx); err != nil {
+		s.logger.Printf("component=storage_cache event=access_flush_failed error=%q", err)
+	}
+}
+
+func (s *Service) queueTouch(entry models.StorageCacheEntry, now time.Time) {
+	if entry.ID == 0 || (!entry.LastAccessedAt.IsZero() && !entry.LastAccessedAt.Before(now.Add(-cacheTouchAge))) {
+		return
+	}
+	s.touchMu.Lock()
+	if s.touchClosing {
+		s.touchMu.Unlock()
+		return
+	}
+	if previous, exists := s.touches[entry.ID]; !exists && len(s.touches) >= cacheTouchLimit {
+		s.touchMu.Unlock()
+		s.logger.Printf("component=storage_cache event=access_touch_dropped entry=%d", entry.ID)
+		return
+	} else if !exists || now.After(previous) {
+		s.touches[entry.ID] = now
+	}
+	shouldWake := len(s.touches) >= cacheTouchThreshold
+	s.touchMu.Unlock()
+	if shouldWake {
+		select {
+		case s.touchWake <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (s *Service) runTouchWriter() {
+	defer close(s.touchDone)
+	ticker := time.NewTicker(cacheTouchInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			s.flushTouchesWithTimeout()
+		case <-s.touchWake:
+			s.flushTouchesWithTimeout()
+		case <-s.touchStop:
+			return
+		}
+	}
+}
+
+func (s *Service) flushTouchesWithTimeout() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.flushTouches(ctx); err != nil {
+		s.logger.Printf("component=storage_cache event=access_flush_failed error=%q", err)
+	}
+}
+
+func (s *Service) flushTouches(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	s.touchFlushMu.Lock()
+	defer s.touchFlushMu.Unlock()
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		s.touchMu.Lock()
+		pending := make(map[uint]time.Time, cacheTouchBatchSize)
+		for id, at := range s.touches {
+			pending[id] = at
+			delete(s.touches, id)
+			if len(pending) == cacheTouchBatchSize {
+				break
+			}
+		}
+		s.touchMu.Unlock()
+		if len(pending) == 0 {
+			return nil
+		}
+
+		ids := make([]uint, 0, len(pending))
+		var latest time.Time
+		for id, at := range pending {
+			ids = append(ids, id)
+			if at.After(latest) {
+				latest = at
+			}
+		}
+		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+		err := s.db.WithContext(ctx).Model(&models.StorageCacheEntry{}).
+			Where("id IN ? AND (last_accessed_at IS NULL OR last_accessed_at < ?)", ids, latest.Add(-cacheTouchAge)).
+			Update("last_accessed_at", latest).Error
+		if err == nil {
+			continue
+		}
+		s.touchMu.Lock()
+		for id, at := range pending {
+			if previous, exists := s.touches[id]; !exists || at.After(previous) {
+				s.touches[id] = at
+			}
+		}
+		s.touchMu.Unlock()
+		return err
+	}
 }
 
 func (s *Service) targets(ctx context.Context, poolID uint, originMountID string, incoming int64) ([]target, error) {

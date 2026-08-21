@@ -38,6 +38,7 @@ const (
 	taskAuditCleanup      = "maintenance.audit_cleanup"
 	taskResourceCleanup   = "maintenance.resource_cleanup"
 	taskJobRetention      = "maintenance.job_retention"
+	taskTrafficRetention  = "maintenance.traffic_retention"
 	taskStorageMigration  = "storage.migration.run"
 	taskStorageCleanup    = "storage.migration.cleanup"
 	taskStorageAbort      = "storage.migration.abort_cleanup"
@@ -104,6 +105,7 @@ func (w *WorkerGroup) RegisterBackgroundHandlers(runtime *background.Runtime, tu
 		taskAuditCleanup:      w.auditCleanupHandler,
 		taskResourceCleanup:   w.resourceCleanupHandler,
 		taskJobRetention:      w.jobRetentionHandler(runtime),
+		taskTrafficRetention:  w.trafficRetentionHandler,
 		taskStorageMigration:  w.storageMigrationHandler(runtime),
 		taskStorageCleanup:    w.storageMigrationCleanupHandler,
 		taskStorageAbort:      w.storageMigrationAbortHandler(runtime),
@@ -125,6 +127,7 @@ func (w *WorkerGroup) RegisterBackgroundHandlers(runtime *background.Runtime, tu
 		maintenanceSchedule("api-audit-retention", taskAuditCleanup, time.Hour, true),
 		maintenanceSchedule("resource-retention", taskResourceCleanup, time.Hour, false),
 		maintenanceSchedule("background-history-retention", taskJobRetention, 24*time.Hour, false),
+		maintenanceSchedule("traffic-history-retention", taskTrafficRetention, 24*time.Hour, false),
 		maintenanceSchedule("storage-migration-reconciliation", taskStorageReconcile, time.Minute, true),
 		maintenanceSchedule("storage-cache-eviction", taskStorageCachePrune, time.Minute, true),
 	}
@@ -156,7 +159,7 @@ func sortedHandlerKinds(handlers map[string]background.Handler) []string {
 	order := []string{
 		taskMediaImport, taskMediaThumbnail, taskEncodeQuality, taskEncodeAudio, taskEncodeSubtitle,
 		taskRemoteFetch, taskDownloadPrepare, taskContentDelete, taskAuditRecord, taskSourceCleanup,
-		taskDeletionReconcile, taskDownloadCleanup, taskUploadCleanup, taskAuditCleanup, taskResourceCleanup, taskJobRetention,
+		taskDeletionReconcile, taskDownloadCleanup, taskUploadCleanup, taskAuditCleanup, taskResourceCleanup, taskJobRetention, taskTrafficRetention,
 		taskStorageMigration, taskStorageCleanup, taskStorageAbort,
 		taskStorageReconcile, taskStorageCacheFill, taskStorageCachePrune,
 	}
@@ -886,6 +889,31 @@ func (w *WorkerGroup) jobRetentionHandler(runtime *background.Runtime) backgroun
 			return background.Result{}, background.Transient("history_cleanup_failed", "Old background-job history could not be removed", err)
 		}
 		return background.Result{}, nil
+	}
+}
+
+func (w *WorkerGroup) trafficRetentionHandler(ctx context.Context, _ background.Task) (background.Result, error) {
+	const batchSize = 5_000
+	cutoff := time.Now().UTC().AddDate(0, 0, -90).Unix()
+	deleted := int64(0)
+	for {
+		if err := ctx.Err(); err != nil {
+			return background.Result{}, err
+		}
+		var ids []uint
+		if err := w.deps.DB.WithContext(ctx).Model(&models.TrafficLog{}).
+			Where("bucket_start > 0 AND bucket_start < ?", cutoff).
+			Order("id ASC").Limit(batchSize).Pluck("id", &ids).Error; err != nil {
+			return background.Result{}, background.Transient("traffic_retention_failed", "Expired traffic statistics could not be selected", err)
+		}
+		if len(ids) == 0 {
+			return background.Result{Phase: fmt.Sprintf("Traffic history retained; %d old rows removed", deleted)}, nil
+		}
+		result := w.deps.DB.WithContext(ctx).Unscoped().Where("id IN ?", ids).Delete(&models.TrafficLog{})
+		if result.Error != nil {
+			return background.Result{}, background.Transient("traffic_retention_failed", "Expired traffic statistics could not be removed", result.Error)
+		}
+		deleted += result.RowsAffected
 	}
 }
 

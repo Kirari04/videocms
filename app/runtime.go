@@ -9,6 +9,7 @@ import (
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/models"
 	"ch/kirari04/videocms/storage"
+	"ch/kirari04/videocms/traffic"
 
 	"github.com/patrickmn/go-cache"
 	"gorm.io/gorm"
@@ -66,6 +67,7 @@ type Deps struct {
 	StorageCipher    *storage.CredentialCipher
 	StorageLifecycle StorageLifecycle
 	Background       *background.Runtime
+	Traffic          *traffic.Recorder
 }
 
 func (d *Deps) Config() config.Config {
