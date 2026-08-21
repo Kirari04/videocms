@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -122,6 +123,100 @@ func TestReadThroughCachesCompletedPlaybackAndFallsBackToCache(t *testing.T) {
 	}
 	if err != nil || string(read) != string(body) {
 		t.Fatalf("cached read=%q err=%v", read, err)
+	}
+}
+
+func TestCacheHitsCoalesceAccessTimestampWrites(t *testing.T) {
+	fixture := newCacheFixture(t, 1024*1024)
+	key, _ := storage.ParseKey("video/1080p/access.ts")
+	body := []byte("cached-access-segment")
+	expected := int64(len(body))
+	if _, err := fixture.originStore.Put(context.Background(), key, bytesReader(body), storage.PutOptions{ExpectedSize: &expected}); err != nil {
+		t.Fatal(err)
+	}
+	object, _, err := fixture.cache.Open(context.Background(), OpenRequest{
+		PoolID: fixture.pool.ID, OriginMountID: fixture.origin.UUID, FileID: fixture.file.ID, Key: key,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.ReadAll(object.Body); err != nil {
+		t.Fatal(err)
+	}
+	if err := object.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	waitForCacheEntries(t, fixture.db, 1)
+	old := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	if err := fixture.db.Model(&models.StorageCacheEntry{}).Where("object_key = ?", key.String()).UpdateColumn("last_accessed_at", old).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	for range 20 {
+		object, hit, err := fixture.cache.Open(context.Background(), OpenRequest{
+			PoolID: fixture.pool.ID, OriginMountID: fixture.origin.UUID, FileID: fixture.file.ID, Key: key,
+		})
+		if err != nil || !hit {
+			t.Fatalf("cache hit=%v err=%v", hit, err)
+		}
+		if err := object.Body.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var before models.StorageCacheEntry
+	if err := fixture.db.Where("object_key = ?", key.String()).First(&before).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !before.LastAccessedAt.Equal(old) {
+		t.Fatalf("cache hit wrote access time synchronously: got %v want %v", before.LastAccessedAt, old)
+	}
+	fixture.cache.touchMu.Lock()
+	pending := len(fixture.cache.touches)
+	fixture.cache.touchMu.Unlock()
+	if pending != 1 {
+		t.Fatalf("coalesced touches = %d, want 1", pending)
+	}
+	if err := fixture.cache.flushTouches(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var after models.StorageCacheEntry
+	if err := fixture.db.Where("object_key = ?", key.String()).First(&after).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !after.LastAccessedAt.After(old) {
+		t.Fatalf("flushed access time = %v, want after %v", after.LastAccessedAt, old)
+	}
+}
+
+func TestCacheAccessFlushUsesBoundedSQLiteBatches(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.StorageCacheEntry{}); err != nil {
+		t.Fatal(err)
+	}
+	var updates atomic.Int64
+	if err := db.Callback().Update().Before("gorm:update").Register("test:count-cache-touch-batches", func(*gorm.DB) {
+		updates.Add(1)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	service := &Service{db: db, touches: make(map[uint]time.Time)}
+	for id := uint(1); id <= cacheTouchBatchSize*2+1; id++ {
+		service.touches[id] = now
+	}
+	if err := service.flushTouches(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := updates.Load(); got != 3 {
+		t.Fatalf("cache touch update batches = %d, want 3", got)
+	}
+	if len(service.touches) != 0 {
+		t.Fatalf("pending cache touches = %d, want 0", len(service.touches))
 	}
 }
 

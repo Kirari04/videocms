@@ -450,7 +450,7 @@ func TestStorageAdminOverviewAttributesRecentTrafficToPoolsAndServingMounts(t *t
 	}
 
 	rows := []models.TrafficLog{
-		{Source: models.TrafficSourcePlayer, Bytes: 100, StoragePoolID: pool.ID, StorageMountUUID: origin.UUID, DeliverySource: models.TrafficDeliverySourceOrigin},
+		{Source: models.TrafficSourcePlayer, Bytes: 100, RequestCount: 3, StoragePoolID: pool.ID, StorageMountUUID: origin.UUID, DeliverySource: models.TrafficDeliverySourceOrigin},
 		{Source: models.TrafficSourcePlayer, Bytes: 60, StoragePoolID: pool.ID, StorageMountUUID: cache.UUID, DeliverySource: models.TrafficDeliverySourceCache},
 		{Source: models.TrafficSourcePlayer, Bytes: 999},
 	}
@@ -467,7 +467,9 @@ func TestStorageAdminOverviewAttributesRecentTrafficToPoolsAndServingMounts(t *t
 	if err := db.Create(&oldRow).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Model(&oldRow).UpdateColumn("created_at", old).Error; err != nil {
+	if err := db.Model(&oldRow).Updates(map[string]any{
+		"created_at": old, "bucket_start": old.Truncate(time.Minute).Unix(),
+	}).Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -478,17 +480,17 @@ func TestStorageAdminOverviewAttributesRecentTrafficToPoolsAndServingMounts(t *t
 	if overview.TrafficWindowDays != 30 {
 		t.Fatalf("traffic window = %d, want 30", overview.TrafficWindowDays)
 	}
-	assertStorageTraffic(t, overview.Traffic, 160, 2, 100, 1, 60, 1)
+	assertStorageTraffic(t, overview.Traffic, 160, 4, 100, 3, 60, 1)
 	if len(overview.Pools) != 1 {
 		t.Fatalf("pools = %#v", overview.Pools)
 	}
-	assertStorageTraffic(t, overview.Pools[0].Traffic, 160, 2, 100, 1, 60, 1)
+	assertStorageTraffic(t, overview.Pools[0].Traffic, 160, 4, 100, 3, 60, 1)
 
 	mountTraffic := make(map[string]StorageTrafficSummary)
 	for _, mount := range overview.Mounts {
 		mountTraffic[mount.UUID] = mount.Traffic
 	}
-	assertStorageTraffic(t, mountTraffic[origin.UUID], 100, 1, 100, 1, 0, 0)
+	assertStorageTraffic(t, mountTraffic[origin.UUID], 100, 3, 100, 3, 0, 0)
 	assertStorageTraffic(t, mountTraffic[cache.UUID], 60, 1, 0, 0, 60, 1)
 }
 

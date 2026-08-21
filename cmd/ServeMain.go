@@ -11,6 +11,7 @@ import (
 	"ch/kirari04/videocms/routes"
 	"ch/kirari04/videocms/services"
 	"ch/kirari04/videocms/services/tusupload"
+	"ch/kirari04/videocms/traffic"
 	"context"
 	"log"
 	"os"
@@ -33,6 +34,15 @@ func ServeMain() {
 
 	// sync UserRequestAsync
 	deps.RequestGate.Sync(true)
+	trafficRecorder := traffic.NewRecorder(deps.DB, traffic.Options{})
+	deps.Traffic = trafficRecorder
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := trafficRecorder.Shutdown(ctx); err != nil {
+			log.Printf("failed to flush traffic accounting: %v", err)
+		}
+	}()
 
 	authSvc := auth.NewService(deps)
 	logicSvc := logic.NewService(deps)
