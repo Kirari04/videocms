@@ -131,6 +131,7 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	protectedApi.GET("/stats", handlers.GetSystemStats, middlewareFactory.IsAdmin())
 	protectedApi.GET("/stats/traffic", handlers.GetAdminTrafficStats, middlewareFactory.IsAdmin())
 	protectedApi.GET("/stats/traffic/top", handlers.GetAdminTopTrafficStats, middlewareFactory.IsAdmin())
+	protectedApi.GET("/stats/storage/delivery", handlers.GetAdminStorageDeliveryStats, middlewareFactory.IsAdmin())
 	protectedApi.GET("/stats/upload", handlers.GetAdminUploadStats, middlewareFactory.IsAdmin())
 	protectedApi.GET("/stats/upload/top", handlers.GetAdminTopUploadStats, middlewareFactory.IsAdmin())
 	protectedApi.GET("/stats/encoding", handlers.GetAdminEncodingStats, middlewareFactory.IsAdmin())

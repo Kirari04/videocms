@@ -473,7 +473,8 @@ func TestStorageAdminOverviewAttributesRecentTrafficToPoolsAndServingMounts(t *t
 		t.Fatal(err)
 	}
 
-	overview, err := NewService(&app.Deps{DB: db}).StorageAdminOverview()
+	service := NewService(&app.Deps{DB: db})
+	overview, err := service.StorageAdminOverview()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -492,6 +493,18 @@ func TestStorageAdminOverviewAttributesRecentTrafficToPoolsAndServingMounts(t *t
 	}
 	assertStorageTraffic(t, mountTraffic[origin.UUID], 100, 3, 100, 3, 0, 0)
 	assertStorageTraffic(t, mountTraffic[cache.UUID], 60, 1, 0, 0, 60, 1)
+
+	configurationOnly, err := service.StorageAdminOverviewWithTraffic(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertStorageTraffic(t, configurationOnly.Traffic, 0, 0, 0, 0, 0, 0)
+	for _, pool := range configurationOnly.Pools {
+		assertStorageTraffic(t, pool.Traffic, 0, 0, 0, 0, 0, 0)
+	}
+	for _, mount := range configurationOnly.Mounts {
+		assertStorageTraffic(t, mount.Traffic, 0, 0, 0, 0, 0, 0)
+	}
 }
 
 func assertStorageTraffic(

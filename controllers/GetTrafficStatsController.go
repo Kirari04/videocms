@@ -104,6 +104,20 @@ func (h *Handlers) GetAdminTrafficStats(c echo.Context) error {
 	return c.JSON(http.StatusOK, stats)
 }
 
+func (h *Handlers) GetAdminStorageDeliveryStats(c echo.Context) error {
+	from, to, points, _, err := parseTrafficStatsRequest(c)
+	if err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
+
+	stats, err := h.Logic.GetStorageDeliveryStats(from, to, points)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(http.StatusOK, stats)
+}
+
 func (h *Handlers) GetTopTrafficStats(c echo.Context) error {
 	from, to, _, _, err := parseTrafficStatsRequest(c)
 	if err != nil {
