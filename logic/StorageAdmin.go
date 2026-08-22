@@ -136,6 +136,13 @@ type storageMountUsage struct {
 }
 
 func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
+	return s.StorageAdminOverviewWithTraffic(true)
+}
+
+// StorageAdminOverviewWithTraffic lets configuration-only clients avoid the
+// historical traffic aggregation. The default StorageAdminOverview method
+// keeps the original API behavior for compatibility.
+func (s *Service) StorageAdminOverviewWithTraffic(includeTraffic bool) (StorageAdminOverview, error) {
 	if s == nil || s.Deps == nil || s.Deps.DB == nil {
 		return StorageAdminOverview{}, errors.New("storage administration is not configured")
 	}
@@ -164,9 +171,15 @@ func (s *Service) StorageAdminOverview() (StorageAdminOverview, error) {
 		totalFileCount += usage.FileCount
 		totalUnavailableFileCount += usage.UnavailableFileCount
 	}
-	traffic, trafficByPool, trafficByMount, err := s.storageTrafficSummaries(time.Now().UTC().AddDate(0, 0, -storageTrafficWindowDays))
-	if err != nil {
-		return StorageAdminOverview{}, err
+	traffic := StorageTrafficSummary{}
+	trafficByPool := make(map[uint]StorageTrafficSummary)
+	trafficByMount := make(map[string]StorageTrafficSummary)
+	if includeTraffic {
+		var err error
+		traffic, trafficByPool, trafficByMount, err = s.storageTrafficSummaries(time.Now().UTC().AddDate(0, 0, -storageTrafficWindowDays))
+		if err != nil {
+			return StorageAdminOverview{}, err
+		}
 	}
 	mountResponses := make([]StorageMountResponse, 0, len(mounts))
 	for _, mount := range mounts {
