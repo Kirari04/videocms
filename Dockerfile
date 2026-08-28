@@ -100,7 +100,6 @@ COPY ./public ./public/
 COPY --from=frontend_build /app/.output/public ./public/
 
 VOLUME /app/videos
-VOLUME /app/public
 VOLUME /app/database
 
 ENV Host=:3000
