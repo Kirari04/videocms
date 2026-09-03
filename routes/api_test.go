@@ -102,6 +102,7 @@ func TestAPIRoutesExposePauseResumeAndStorageMigrationAdminEndpoints(t *testing.
 		http.MethodPost + " /api/v2/admin/storage/migrations/:id/start-cleanup",
 		http.MethodPost + " /api/admin/storage/sftp/host-key",
 		http.MethodPost + " /api/admin/storage/mounts/test",
+		http.MethodGet + " /api/stats/storage/delivery",
 	} {
 		if !routes[expected] {
 			t.Errorf("missing background-job/storage-migration route %q", expected)

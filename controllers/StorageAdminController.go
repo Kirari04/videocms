@@ -51,7 +51,15 @@ type storageReconnectRequest struct {
 }
 
 func (h *Handlers) GetStorageAdminOverview(c echo.Context) error {
-	overview, err := h.Logic.StorageAdminOverview()
+	includeTraffic := true
+	if raw := c.QueryParam("include_traffic"); raw != "" {
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			return c.String(http.StatusBadRequest, "include_traffic must be true or false")
+		}
+		includeTraffic = parsed
+	}
+	overview, err := h.Logic.StorageAdminOverviewWithTraffic(includeTraffic)
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
