@@ -6,6 +6,7 @@ import (
 	"ch/kirari04/videocms/configdb"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/inits"
+	"context"
 	"log"
 	"os"
 	"time"
@@ -41,11 +42,17 @@ func InitRuntime() (*app.Deps, error) {
 	if err := inits.EnsureFolders(snapshot.Config); err != nil {
 		return nil, err
 	}
+	storageService, storageCipher, err := newStorageService(context.Background(), snapshot.Config, db)
+	if err != nil {
+		return nil, err
+	}
 
 	return &app.Deps{
-		DB:          db,
-		Snapshots:   app.NewSnapshotStore(snapshot),
-		Cache:       cache.New(5*time.Minute, 10*time.Minute),
-		RequestGate: app.NewRequestGate(),
+		DB:            db,
+		Snapshots:     app.NewSnapshotStore(snapshot),
+		Cache:         cache.New(5*time.Minute, 10*time.Minute),
+		RequestGate:   app.NewRequestGate(),
+		Storage:       storageService,
+		StorageCipher: storageCipher,
 	}, nil
 }

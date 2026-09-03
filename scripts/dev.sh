@@ -13,6 +13,7 @@ backend_origin="http://${backend_host}:${backend_port}"
 backend_url="${DEV_BACKEND_URL:-${backend_origin}}"
 public_origin="${DEV_PUBLIC_ORIGIN:-http://${frontend_host}:${frontend_port}}"
 media_path="${DEV_MEDIA_PATH:-${FolderVideoQualitysPub:-/videos/qualitys}}"
+storage_encryption_key="${StorageEncryptionKey:-${DEV_STORAGE_ENCRYPTION_KEY:-}}"
 
 backend_pid=""
 frontend_pid=""
@@ -67,6 +68,7 @@ echo "Starting Go backend at ${backend_origin}"
     cd "${repo_root}"
     export Host="${backend_host}:${backend_port}"
     export FolderVideoQualitysPub="${media_path}"
+    export StorageEncryptionKey="${storage_encryption_key}"
     exec go tool air serve:main
 ) &
 backend_pid=$!

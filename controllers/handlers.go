@@ -17,7 +17,8 @@ type Handlers struct {
 	Workers *services.WorkerGroup
 	TUS     *tusupload.Service
 
-	downloadJobCreateMu sync.Mutex
+	downloadJobCreateMu    sync.Mutex
+	remoteDownloadCreateMu sync.Mutex
 }
 
 func NewHandlers(deps *app.Deps, authSvc *auth.Service, logicSvc *logic.Service, workerGroup *services.WorkerGroup, tusSvc *tusupload.Service) *Handlers {

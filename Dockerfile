@@ -46,6 +46,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY *.go ./
 COPY app ./app
 COPY auth ./auth
+COPY background ./background
 COPY cmd ./cmd
 COPY config ./config
 COPY configdb ./configdb
@@ -54,10 +55,13 @@ COPY download ./download
 COPY helpers ./helpers
 COPY inits ./inits
 COPY logic ./logic
+COPY mediacache ./mediacache
 COPY middlewares ./middlewares
 COPY models ./models
 COPY routes ./routes
 COPY services ./services
+COPY storage ./storage
+COPY traffic ./traffic
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
@@ -96,13 +100,13 @@ COPY ./public ./public/
 COPY --from=frontend_build /app/.output/public ./public/
 
 VOLUME /app/videos
-VOLUME /app/public
 VOLUME /app/database
 
 ENV Host=:3000
 ENV FolderVideoQualitysPriv=./videos/qualitys
 ENV FolderVideoQualitysPub=/videos/qualitys
 ENV FolderVideoUploadsPriv=./videos/uploads
+ENV StorageScratchDir=./videos/scratch
 ENV StatsDriveName=nvme0n1
 
 EXPOSE 3000

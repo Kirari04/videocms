@@ -47,6 +47,12 @@ func (h *Handlers) DownloadPageController(c echo.Context) error {
 	if err != nil {
 		return c.Render(http.StatusNotFound, "404.html", echo.Map{})
 	}
+	if dbLink.File.StorageState == models.FileStorageUnavailable {
+		return c.Render(http.StatusServiceUnavailable, "error.html", echo.Map{
+			"Title": "Download unavailable",
+			"Error": "This video's storage is temporarily detached. Try again after an administrator reconnects it.",
+		})
+	}
 
 	if !h.playerCaptchaAllowed(c) {
 		return c.Redirect(

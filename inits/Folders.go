@@ -9,7 +9,7 @@ import (
 
 func EnsureFolders(env config.Config) error {
 	// create folders
-	createFolders := []string{"./database", env.FolderVideoQualitysPriv, env.FolderVideoUploadsPriv, "./logs"}
+	createFolders := []string{"./database", env.FolderVideoQualitysPriv, env.FolderVideoUploadsPriv, env.StorageScratchDir, "./logs"}
 	for _, createFolder := range createFolders {
 		if fileInfo, err := os.Stat(createFolder); err != nil || !fileInfo.IsDir() {
 			if err := os.MkdirAll(createFolder, 0766); err != nil {

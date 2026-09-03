@@ -2,6 +2,8 @@ package logic
 
 import (
 	"ch/kirari04/videocms/models"
+	"ch/kirari04/videocms/storage"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -9,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -46,6 +47,14 @@ func (s *Service) UpdateLinkThumbnail(linkID uint, userID uint, isAdmin bool, in
 	if err != nil {
 		return status, err
 	}
+	releaseFile := s.Deps.StorageLifecycle.FileReadLock(dbLink.FileID)
+	defer releaseFile()
+	dbLink, status, err = s.loadThumbnailLink(linkID, userID, isAdmin)
+	if err != nil {
+		return status, err
+	}
+	releaseMount := s.Deps.StorageLifecycle.ReadLock(dbLink.File.StorageID)
+	defer releaseMount()
 
 	if fileSize <= 0 {
 		return http.StatusBadRequest, errors.New("thumbnail is empty")
@@ -58,19 +67,25 @@ func (s *Service) UpdateLinkThumbnail(linkID uint, userID uint, isAdmin bool, in
 		return http.StatusBadRequest, errors.New("thumbnail must be a JPEG, PNG, or WebP image")
 	}
 
-	outputFolder := filepath.Join(s.Config().FolderVideoQualitysPriv, dbLink.File.UUID)
-	if err := os.MkdirAll(outputFolder, 0o777); err != nil {
-		log.Printf("Failed to create thumbnail folder: %v", err)
+	store, layout, err := s.mediaStorage(dbLink.File.StorageID)
+	if err != nil {
+		log.Printf("Failed to resolve thumbnail storage: %v", err)
+		return http.StatusInternalServerError, echo.ErrInternalServerError
+	}
+	ctx := context.Background()
+	workspace := s.Deps.Storage.Workspace()
+	if workspace == nil {
+		log.Printf("Failed to resolve thumbnail workspace")
 		return http.StatusInternalServerError, echo.ErrInternalServerError
 	}
 
-	tmpInput, err := os.CreateTemp(outputFolder, "thumbnail-input-*")
+	tmpInput, cleanupInput, err := workspace.TempFile(ctx, "thumbnail-input", "")
 	if err != nil {
 		log.Printf("Failed to create temporary thumbnail input: %v", err)
 		return http.StatusInternalServerError, echo.ErrInternalServerError
 	}
 	tmpInputPath := tmpInput.Name()
-	defer os.Remove(tmpInputPath)
+	defer cleanupInput()
 
 	written, err := io.Copy(tmpInput, io.LimitReader(input, maxBytes+1))
 	closeErr := tmpInput.Close()
@@ -86,53 +101,62 @@ func (s *Service) UpdateLinkThumbnail(linkID uint, userID uint, isAdmin bool, in
 		return http.StatusRequestEntityTooLarge, fmt.Errorf("exceeded max thumbnail filesize: %d", maxBytes)
 	}
 
-	tmpOutput, err := os.CreateTemp(outputFolder, "thumbnail-output-*.webp")
+	tmpOutput, cleanupOutput, err := workspace.TempFile(ctx, "thumbnail-output", ".webp")
 	if err != nil {
 		log.Printf("Failed to create temporary thumbnail output: %v", err)
 		return http.StatusInternalServerError, echo.ErrInternalServerError
 	}
 	tmpOutputPath := tmpOutput.Name()
 	tmpOutput.Close()
-	defer os.Remove(tmpOutputPath)
+	defer cleanupOutput()
 
 	if err := s.convertThumbnailToWebP(tmpInputPath, tmpOutputPath); err != nil {
 		log.Printf("Failed to convert custom thumbnail for link %s: %v", dbLink.UUID, err)
 		return http.StatusBadRequest, errors.New("failed to process thumbnail image")
 	}
 
-	thumbnailFileName := s.LinkThumbnailFilename(dbLink.UUID)
-	finalPath := filepath.Join(outputFolder, thumbnailFileName)
-	backupPath := ""
-	if _, err := os.Stat(finalPath); err == nil {
-		backupPath = filepath.Join(outputFolder, fmt.Sprintf(".%s.%s.bak", thumbnailFileName, uuid.NewString()))
-		if err := os.Rename(finalPath, backupPath); err != nil {
-			log.Printf("Failed to backup existing custom thumbnail: %v", err)
-			return http.StatusInternalServerError, echo.ErrInternalServerError
-		}
+	thumbnailFileName := fmt.Sprintf("link-%s-%s.webp", dbLink.UUID, uuid.NewString())
+	thumbnailKey, err := layout.Thumbnail(dbLink.File.UUID, thumbnailFileName)
+	if err != nil {
+		log.Printf("Failed to build custom thumbnail key: %v", err)
+		return http.StatusInternalServerError, echo.ErrInternalServerError
 	}
-
-	restoreBackup := func() {
-		os.Remove(finalPath)
-		if backupPath != "" {
-			if err := os.Rename(backupPath, finalPath); err != nil {
-				log.Printf("Failed to restore previous custom thumbnail: %v", err)
-			}
-		}
+	output, err := os.Open(tmpOutputPath)
+	if err != nil {
+		log.Printf("Failed to open converted custom thumbnail: %v", err)
+		return http.StatusInternalServerError, echo.ErrInternalServerError
 	}
-
-	if err := os.Rename(tmpOutputPath, finalPath); err != nil {
-		restoreBackup()
-		log.Printf("Failed to promote custom thumbnail: %v", err)
+	outputInfo, err := output.Stat()
+	if err != nil {
+		output.Close()
+		log.Printf("Failed to inspect converted custom thumbnail: %v", err)
+		return http.StatusInternalServerError, echo.ErrInternalServerError
+	}
+	expectedSize := outputInfo.Size()
+	_, putErr := store.Put(ctx, thumbnailKey, output, storage.PutOptions{
+		ContentType:  "image/webp",
+		CacheControl: "public, max-age=31536000, immutable",
+		ExpectedSize: &expectedSize,
+	})
+	closeErr = output.Close()
+	if putErr != nil || closeErr != nil {
+		log.Printf("Failed to publish custom thumbnail: put=%v close=%v", putErr, closeErr)
 		return http.StatusInternalServerError, echo.ErrInternalServerError
 	}
 
+	previousThumbnail := dbLink.Thumbnail
 	if res := s.Deps.DB.Model(&dbLink).Update("thumbnail", thumbnailFileName); res.Error != nil {
-		restoreBackup()
+		_ = store.Delete(ctx, thumbnailKey)
 		log.Printf("Failed to save custom thumbnail: %v", res.Error)
 		return http.StatusInternalServerError, echo.ErrInternalServerError
 	}
-	if backupPath != "" {
-		os.Remove(backupPath)
+	if previousThumbnail != "" {
+		previousKey, keyErr := layout.Thumbnail(dbLink.File.UUID, previousThumbnail)
+		if keyErr != nil {
+			log.Printf("Failed to build previous custom thumbnail key: %v", keyErr)
+		} else if deleteErr := store.Delete(ctx, previousKey); deleteErr != nil {
+			log.Printf("Failed to delete previous custom thumbnail: %v", deleteErr)
+		}
 	}
 
 	return http.StatusOK, nil
@@ -143,17 +167,39 @@ func (s *Service) ResetLinkThumbnail(linkID uint, userID uint, isAdmin bool) (st
 	if err != nil {
 		return status, err
 	}
+	releaseFile := s.Deps.StorageLifecycle.FileReadLock(dbLink.FileID)
+	defer releaseFile()
+	dbLink, status, err = s.loadThumbnailLink(linkID, userID, isAdmin)
+	if err != nil {
+		return status, err
+	}
+	releaseMount := s.Deps.StorageLifecycle.ReadLock(dbLink.File.StorageID)
+	defer releaseMount()
 	if dbLink.Thumbnail == "" {
 		return http.StatusOK, nil
 	}
 
-	thumbnailPath := s.linkThumbnailPath(dbLink)
+	store, layout, storageErr := s.mediaStorage(dbLink.File.StorageID)
+	if storageErr != nil {
+		log.Printf("Failed to resolve thumbnail storage: %v", storageErr)
+		return http.StatusInternalServerError, echo.ErrInternalServerError
+	}
+	ctx := context.Background()
+	thumbnailKey, keyErr := layout.Thumbnail(dbLink.File.UUID, dbLink.Thumbnail)
+	if keyErr != nil {
+		log.Printf("Failed to build custom thumbnail key: %v", keyErr)
+		return http.StatusInternalServerError, echo.ErrInternalServerError
+	}
+	previousThumbnail := dbLink.Thumbnail
 	if res := s.Deps.DB.Model(&dbLink).Update("thumbnail", ""); res.Error != nil {
 		log.Printf("Failed to clear custom thumbnail: %v", res.Error)
 		return http.StatusInternalServerError, echo.ErrInternalServerError
 	}
 
-	if err := os.Remove(thumbnailPath); err != nil && !os.IsNotExist(err) {
+	if err := store.Delete(ctx, thumbnailKey); err != nil {
+		if restoreErr := s.Deps.DB.Model(&dbLink).Update("thumbnail", previousThumbnail).Error; restoreErr != nil {
+			log.Printf("Failed to restore custom thumbnail reference after delete failure: %v", restoreErr)
+		}
 		log.Printf("Failed to delete custom thumbnail: %v", err)
 		return http.StatusInternalServerError, echo.ErrInternalServerError
 	}
@@ -172,7 +218,25 @@ func (s *Service) RemoveLinkThumbnailFile(link models.Link) {
 	if link.Thumbnail == "" {
 		return
 	}
-	if err := os.Remove(s.linkThumbnailPath(link)); err != nil && !os.IsNotExist(err) {
+	releaseFile := s.Deps.StorageLifecycle.FileReadLock(link.FileID)
+	defer releaseFile()
+	if err := s.Deps.DB.Preload("File").First(&link, link.ID).Error; err != nil || link.Thumbnail == "" {
+		return
+	}
+	releaseMount := s.Deps.StorageLifecycle.ReadLock(link.File.StorageID)
+	defer releaseMount()
+	store, layout, err := s.mediaStorage(link.File.StorageID)
+	if err != nil {
+		log.Printf("Failed to resolve custom thumbnail storage for link %s: %v", link.UUID, err)
+		return
+	}
+	ctx := context.Background()
+	key, err := layout.Thumbnail(link.File.UUID, link.Thumbnail)
+	if err != nil {
+		log.Printf("Failed to build custom thumbnail key for link %s: %v", link.UUID, err)
+		return
+	}
+	if err := store.Delete(ctx, key); err != nil {
 		log.Printf("Failed to delete custom thumbnail for link %s: %v", link.UUID, err)
 	}
 }
@@ -188,10 +252,6 @@ func (s *Service) loadThumbnailLink(linkID uint, userID uint, isAdmin bool) (mod
 		return models.Link{}, http.StatusForbidden, errors.New("unauthorized access to file")
 	}
 	return dbLink, http.StatusOK, nil
-}
-
-func (s *Service) linkThumbnailPath(link models.Link) string {
-	return filepath.Join(s.Config().FolderVideoQualitysPriv, link.File.UUID, link.Thumbnail)
 }
 
 func (s *Service) convertThumbnailToWebP(inputPath string, outputPath string) error {

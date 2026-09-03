@@ -17,6 +17,16 @@ type legacyWebPage struct {
 	ListInFooter bool
 }
 
+type legacyStoredFile struct {
+	models.Model
+	UUID string
+	Path string
+}
+
+func (legacyStoredFile) TableName() string {
+	return "files"
+}
+
 func (legacyWebPage) TableName() string {
 	return "web_pages"
 }
@@ -57,7 +67,8 @@ func TestMigrateModelsPreservesLegacyWebPages(t *testing.T) {
 	}
 	if err := db.Exec(`
 		INSERT INTO traffic_logs (created_at, user_id, file_id, quality_id, audio_id, bytes)
-		VALUES (CURRENT_TIMESTAMP, 1, 2, 3, 4, 512)
+		VALUES (CURRENT_TIMESTAMP, 1, 2, 3, 4, 512),
+			(NULL, 1, 2, 3, 4, 256)
 	`).Error; err != nil {
 		t.Fatalf("create legacy traffic row: %v", err)
 	}
@@ -85,5 +96,146 @@ func TestMigrateModelsPreservesLegacyWebPages(t *testing.T) {
 	}
 	if traffic.Source != models.TrafficSourcePlayer || traffic.Bytes != 512 {
 		t.Fatalf("migrated traffic = %#v, want player source with 512 bytes", traffic)
+	}
+	if traffic.StoragePoolID != 0 || traffic.StorageMountUUID != "" || traffic.DeliverySource != "" {
+		t.Fatalf("legacy traffic received guessed storage attribution: %#v", traffic)
+	}
+	if traffic.RequestCount != 1 || traffic.BucketStart == 0 {
+		t.Fatalf("legacy traffic accounting was not normalized: %#v", traffic)
+	}
+	var incompleteTraffic int64
+	if err := db.Unscoped().Model(&models.TrafficLog{}).
+		Where("request_count IS NULL OR request_count = 0 OR bucket_start IS NULL OR bucket_start = 0").
+		Count(&incompleteTraffic).Error; err != nil {
+		t.Fatalf("count incomplete traffic accounting: %v", err)
+	}
+	if incompleteTraffic != 0 {
+		t.Fatalf("incomplete traffic accounting rows = %d", incompleteTraffic)
+	}
+	if !db.Migrator().HasIndex(&models.TrafficLog{}, "idx_traffic_logs_storage_bucket") {
+		t.Fatal("storage traffic bucket index was not created")
+	}
+	if !db.Migrator().HasIndex(&models.TrafficLog{}, "idx_traffic_logs_rollup_key") {
+		t.Fatal("traffic rollup identity index was not created")
+	}
+	var plans []struct{ Detail string }
+	if err := db.Raw(`EXPLAIN QUERY PLAN SELECT SUM(bytes) FROM traffic_logs
+		WHERE delivery_source = ? AND bucket_start >= ?`, models.TrafficDeliverySourceOrigin, traffic.BucketStart-60).
+		Scan(&plans).Error; err != nil {
+		t.Fatalf("explain indexed traffic query: %v", err)
+	}
+	usedBucketIndex := false
+	for _, plan := range plans {
+		if strings.Contains(plan.Detail, "idx_traffic_logs_storage_bucket") {
+			usedBucketIndex = true
+			break
+		}
+	}
+	if !usedBucketIndex {
+		t.Fatalf("storage traffic query did not use bucket index: %#v", plans)
+	}
+}
+
+func TestMigrateModelsBackfillsLegacyFileStorageID(t *testing.T) {
+	db, err := gorm.Open(
+		sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"),
+		&gorm.Config{},
+	)
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
+	}
+	if err := db.AutoMigrate(&legacyStoredFile{}); err != nil {
+		t.Fatalf("migrate legacy file: %v", err)
+	}
+	if err := db.Create(&legacyStoredFile{UUID: "legacy-file", Path: "/legacy/source.mp4"}).Error; err != nil {
+		t.Fatalf("create legacy file: %v", err)
+	}
+	deletedFile := legacyStoredFile{UUID: "deleted-legacy-file", Path: "/legacy/deleted.mp4"}
+	if err := db.Create(&deletedFile).Error; err != nil {
+		t.Fatalf("create deleted legacy file: %v", err)
+	}
+	if err := db.Delete(&deletedFile).Error; err != nil {
+		t.Fatalf("soft-delete legacy file: %v", err)
+	}
+	if err := MigrateModels(db); err != nil {
+		t.Fatalf("MigrateModels() error = %v", err)
+	}
+
+	var file models.File
+	if err := db.Where("uuid = ?", "legacy-file").First(&file).Error; err != nil {
+		t.Fatalf("load migrated file: %v", err)
+	}
+	if file.StorageID != "local" {
+		t.Fatalf("storage ID = %q, want local", file.StorageID)
+	}
+	if file.SourceKey != "" || file.Path != "/legacy/source.mp4" {
+		t.Fatalf("legacy source fields changed unexpectedly: %#v", file)
+	}
+	var deleted models.File
+	if err := db.Unscoped().Where("uuid = ?", "deleted-legacy-file").First(&deleted).Error; err != nil {
+		t.Fatalf("load migrated deleted file: %v", err)
+	}
+	if deleted.StorageID != "local" || !deleted.DeletedAt.Valid {
+		t.Fatalf("deleted file migration = %#v, want soft-deleted local record", deleted)
+	}
+	if deleted.StorageState != models.FileStorageAvailable || file.StorageState != models.FileStorageAvailable {
+		t.Fatalf("migrated storage states = %q/%q, want available", file.StorageState, deleted.StorageState)
+	}
+	var localMount models.StorageMount
+	if err := db.Where("uuid = ?", models.StorageMountLocalUUID).First(&localMount).Error; err != nil {
+		t.Fatalf("load local storage mount: %v", err)
+	}
+	if !localMount.Mounted || !localMount.System {
+		t.Fatalf("local storage mount = %#v", localMount)
+	}
+	var localPool models.StoragePool
+	if err := db.Where("uuid = ?", models.StoragePoolLocalUUID).First(&localPool).Error; err != nil {
+		t.Fatalf("load local storage pool: %v", err)
+	}
+	if !localPool.IsDefault || !localPool.System {
+		t.Fatalf("local storage pool = %#v", localPool)
+	}
+	if file.StoragePoolID == nil || *file.StoragePoolID != localPool.ID {
+		t.Fatalf("file storage pool = %v, want local pool %d", file.StoragePoolID, localPool.ID)
+	}
+	if deleted.StoragePoolID == nil || *deleted.StoragePoolID != localPool.ID {
+		t.Fatalf("deleted file storage pool = %v, want local pool %d", deleted.StoragePoolID, localPool.ID)
+	}
+	var membership models.StoragePoolMount
+	if err := db.Where("storage_pool_id = ? AND storage_mount_id = ?", localPool.ID, localMount.ID).First(&membership).Error; err != nil {
+		t.Fatalf("load local storage pool membership: %v", err)
+	}
+}
+
+func TestMigrateModelsBackfillsNullStorageCacheVersions(t *testing.T) {
+	db, err := gorm.Open(
+		sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"),
+		&gorm.Config{},
+	)
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
+	}
+	if err := db.AutoMigrate(&models.File{}); err != nil {
+		t.Fatalf("migrate pre-cache file: %v", err)
+	}
+	file := models.File{UUID: "pre-cache-file", StorageID: models.StorageMountLocalUUID}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatalf("create pre-cache file: %v", err)
+	}
+	if err := db.Exec("UPDATE files SET storage_cache_version = NULL WHERE id = ?", file.ID).Error; err != nil {
+		t.Fatalf("simulate nullable legacy generation: %v", err)
+	}
+
+	if err := MigrateModels(db); err != nil {
+		t.Fatalf("MigrateModels() error = %v", err)
+	}
+
+	var nullVersions int64
+	if err := db.Unscoped().Model(&models.File{}).
+		Where("storage_cache_version IS NULL").Count(&nullVersions).Error; err != nil {
+		t.Fatalf("count null cache versions: %v", err)
+	}
+	if nullVersions != 0 {
+		t.Fatalf("null storage cache versions = %d, want 0", nullVersions)
 	}
 }

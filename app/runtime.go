@@ -1,11 +1,15 @@
 package app
 
 import (
+	"ch/kirari04/videocms/background"
+	"ch/kirari04/videocms/mediacache"
 	"sync"
 	"sync/atomic"
 
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/models"
+	"ch/kirari04/videocms/storage"
+	"ch/kirari04/videocms/traffic"
 
 	"github.com/patrickmn/go-cache"
 	"gorm.io/gorm"
@@ -54,10 +58,16 @@ func (s *SnapshotStore) Replace(snapshot Snapshot) {
 }
 
 type Deps struct {
-	DB          *gorm.DB
-	Snapshots   *SnapshotStore
-	Cache       *cache.Cache
-	RequestGate *RequestGate
+	DB               *gorm.DB
+	Snapshots        *SnapshotStore
+	Cache            *cache.Cache
+	RequestGate      *RequestGate
+	Storage          *storage.Service
+	MediaCache       *mediacache.Service
+	StorageCipher    *storage.CredentialCipher
+	StorageLifecycle StorageLifecycle
+	Background       *background.Runtime
+	Traffic          *traffic.Recorder
 }
 
 func (d *Deps) Config() config.Config {

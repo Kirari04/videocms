@@ -3,12 +3,13 @@ package models
 type Link struct {
 	Model
 	UUID           string
+	CreationKey    string  `gorm:"size:96;uniqueIndex:idx_link_creation_key,where:creation_key <> ''" json:"-"`
 	Name           string  `gorm:"size:128;"`
 	Thumbnail      string  `gorm:"size:128;" json:"-"`
 	File           File    `json:"-"`
-	FileID         uint    `json:"-"`
+	FileID         uint    `gorm:"index" json:"-"`
 	User           User    `json:"-"`
-	UserID         uint    `json:"-"`
+	UserID         uint    `gorm:"index" json:"-"`
 	ParentFolder   *Folder `json:"-"`
 	ParentFolderID uint
 	Tags           []*Tag `gorm:"many2many:tag_links;"`

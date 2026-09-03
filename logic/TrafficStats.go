@@ -43,14 +43,13 @@ func (s *Service) GetTrafficStats(from time.Time, to time.Time, points int, user
 
 	var aggregations []aggregatedTrafficResult
 
-	// Use strftime('%s') for comparison to handle timezone offsets correctly in SQLite
 	query := s.Deps.DB.Model(&models.TrafficLog{}).
 		Select(`
-			(CAST(strftime('%s', created_at) AS INTEGER) / ? ) * ? as ts,
+			(bucket_start / ? ) * ? as ts,
 			source,
 			CAST(SUM(bytes) AS INTEGER) as bytes
 		`, stepSeconds, stepSeconds).
-		Where("CAST(strftime('%s', created_at) AS INTEGER) >= ? AND CAST(strftime('%s', created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
+		Where("bucket_start >= ? AND bucket_start <= ?", from.UTC().Truncate(time.Minute).Unix(), to.Unix())
 
 	if userID != 0 {
 		query = query.Where("user_id = ?", userID)
@@ -233,7 +232,7 @@ func (s *Service) GetTopTraffic(from time.Time, to time.Time, userID uint, limit
 	var results []TopTrafficResult
 
 	query := s.Deps.DB.Model(&models.TrafficLog{}).
-		Where("CAST(strftime('%s', created_at) AS INTEGER) >= ? AND CAST(strftime('%s', created_at) AS INTEGER) <= ?", from.Unix(), to.Unix())
+		Where("bucket_start >= ? AND bucket_start <= ?", from.UTC().Truncate(time.Minute).Unix(), to.Unix())
 
 	switch mode {
 	case "files":

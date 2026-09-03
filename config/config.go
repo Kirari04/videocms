@@ -33,7 +33,7 @@ var EXTENSIONS []string = []string{
 	"dv",   // Digital Video format
 }
 
-var VERSION string = "v0.1.10"
+var VERSION string = "v0.1.12"
 
 type Config struct {
 	Host string `validate:"required,min=1,max=120"`
@@ -69,9 +69,10 @@ type Config struct {
 	TrustedProxies    string
 	TrustLocalTraffic *bool
 
-	MaxItemsMultiDelete int64
-	MaxRunningEncodes   int64
-	MaxFramerate        int64
+	MaxItemsMultiDelete    int64
+	MaxRunningEncodes      int64
+	MaxParallelFFmpegTasks int64
+	MaxFramerate           int64
 
 	MaxUploadFilesize  int64
 	MaxUploadChunkSize int64
@@ -81,6 +82,8 @@ type Config struct {
 	FolderVideoQualitysPub  string `validate:"required,min=1,max=255"`
 	FolderVideoQualitysPriv string `validate:"required,min=1,max=255"`
 	FolderVideoUploadsPriv  string `validate:"required,min=1,max=255"`
+	StorageScratchDir       string `validate:"required,min=1,max=255"`
+	StorageEncryptionKey    string `json:"-"`
 
 	CorsAllowOrigins     string
 	CorsAllowHeaders     string
@@ -241,6 +244,8 @@ func LoadEnv() Config {
 	env.FolderVideoQualitysPriv = getEnv("FolderVideoQualitysPriv", "./videos/qualitys")
 	env.FolderVideoQualitysPub = getEnv("FolderVideoQualitysPub", "/videos/qualitys")
 	env.FolderVideoUploadsPriv = getEnv("FolderVideoUploadsPriv", "./videos/uploads")
+	env.StorageScratchDir = getEnv("StorageScratchDir", "./videos/scratch")
+	env.StorageEncryptionKey = getEnv("StorageEncryptionKey", "")
 	env.StatsDriveName = getEnv("StatsDriveName", "nvme0n1")
 
 	return env

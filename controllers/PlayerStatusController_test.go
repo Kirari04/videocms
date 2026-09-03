@@ -125,6 +125,18 @@ func TestBuildPlayerStatusNonHLSReadyQualityIsNotPlayable(t *testing.T) {
 	}
 }
 
+func TestBuildPlayerStatusUnavailableStorage(t *testing.T) {
+	link := playerStatusLink([]models.Quality{{Name: "720p", Type: "hls", Ready: true}}, nil, nil)
+	link.File.StorageState = models.FileStorageUnavailable
+	status := BuildPlayerStatus(link)
+	if status.Ready {
+		t.Fatal("expected detached storage to be unready")
+	}
+	if status.State != PlayerStateUnavailable {
+		t.Fatalf("state = %q, want %q", status.State, PlayerStateUnavailable)
+	}
+}
+
 func playerStatusLink(qualitys []models.Quality, audios []models.Audio, subtitles []models.Subtitle) *models.Link {
 	return &models.Link{
 		UUID: "550e8400-e29b-41d4-a716-446655440000",

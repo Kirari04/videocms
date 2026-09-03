@@ -27,6 +27,18 @@ func (h *Handlers) FinalizeTusUpload(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	job, _, status, err := h.TUS.EnqueueFinalize(c.Request().Context(), c.Param("upload_id"), userID)
+	if err != nil {
+		return c.String(status, err.Error())
+	}
+	return acceptedBackgroundJob(c, job)
+}
+
+func (h *Handlers) FinalizeTusUploadLegacy(c echo.Context) error {
+	userID, ok := c.Get("UserID").(uint)
+	if !ok {
+		return c.NoContent(http.StatusInternalServerError)
+	}
 	status, response, err := h.TUS.Finalize(c.Param("upload_id"), userID)
 	if err != nil {
 		return c.String(status, err.Error())

@@ -15,6 +15,8 @@ const mediaAudience = "videocms-media"
 type MediaClaims struct {
 	LinkUUID      string          `json:"link_uuid"`
 	FileUUID      string          `json:"file_uuid"`
+	StorageID     string          `json:"storage_id"`
+	StoragePoolID uint            `json:"storage_pool_id,omitempty"`
 	UserID        uint            `json:"user_id"`
 	FileID        uint            `json:"file_id"`
 	QualityIDs    map[string]uint `json:"quality_ids"`

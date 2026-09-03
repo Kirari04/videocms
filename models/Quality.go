@@ -6,11 +6,12 @@ import (
 
 type Quality struct {
 	Model
-	Name   string `gorm:"size:20;"`
-	Height int64
-	Width  int64
-	Size   int64
-	Crf    int
+	BackgroundTaskID string `gorm:"size:36;index" json:"-"`
+	Name             string `gorm:"size:20;"`
+	Height           int64
+	Width            int64
+	Size             int64
+	Crf              int
 
 	VideoBitrate   string // example: 8000k
 	AudioBitrate   string // example: 128k

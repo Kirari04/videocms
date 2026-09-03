@@ -4,6 +4,7 @@ import (
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/models"
+	"ch/kirari04/videocms/storage"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -23,6 +25,21 @@ import (
 )
 
 func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint, excludeSessionUUID string) (status int, newFile *models.Link, cloned bool, err error) {
+	return s.CreateFileContext(context.Background(), fromFile, toFolder, fileName, fileId, fileSize, userId, excludeSessionUUID)
+}
+
+func (s *Service) CreateFileContext(ctx context.Context, fromFile *string, toFolder uint, fileName string, fileId string, fileSize int64, userId uint, excludeSessionUUID string) (status int, newFile *models.Link, cloned bool, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if creationKey := uploadCreationKey(userId, excludeSessionUUID); creationKey != "" {
+		var existing models.Link
+		if err := s.Deps.DB.Where("creation_key = ?", creationKey).First(&existing).Error; err == nil {
+			return http.StatusOK, &existing, true, nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
+		}
+	}
 	//check if requested folder exists (if set)
 	if toFolder > 0 {
 		res := s.Deps.DB.First(&models.Folder{}, toFolder)
@@ -32,7 +49,7 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 	}
 
 	// obtain hash from file
-	FileHash, err := helpers.HashFile(*fromFile)
+	FileHash, err := helpers.HashFileContext(ctx, *fromFile)
 	if err != nil {
 		log.Printf("Failed to create hash from file: %v", err)
 		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
@@ -52,25 +69,28 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 	// run file through ffmpeg so the metadata is more accurate
 	nameSplits := strings.Split(fileName, ".")
 	fileExt := nameSplits[len(nameSplits)-1]
-	oldOutPath := *fromFile
-	newOutPath := fmt.Sprintf("%s.%s", *fromFile, fileExt)
-	fromFile = &newOutPath
 
 	// check if file extension is supported
 	if !slices.Contains(config.EXTENSIONS, strings.ToLower(fileExt)) {
 		return http.StatusBadRequest, nil, false, errors.New("Video extension is not supported")
 	}
 
-	if err := os.Rename(oldOutPath, newOutPath); err != nil {
-		log.Printf("Failed to delete oldInputEncoding File %s: %v\n", oldOutPath, err.Error())
+	if !strings.EqualFold(filepath.Ext(*fromFile), "."+fileExt) {
+		oldOutPath := *fromFile
+		newOutPath := fmt.Sprintf("%s.%s", oldOutPath, fileExt)
+		if err := os.Rename(oldOutPath, newOutPath); err != nil {
+			log.Printf("Failed to name imported source file %s: %v\n", oldOutPath, err)
+			return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
+		}
+		*fromFile = newOutPath
 	}
 
 	// ffprobe context
-	ctx, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
+	probeCtx, cancelFn := context.WithTimeout(ctx, 30*time.Second)
 	defer cancelFn()
 
 	// probe file
-	data, err := ffprobe.ProbeURL(ctx, *fromFile)
+	data, err := ffprobe.ProbeURL(probeCtx, *fromFile)
 	if err != nil {
 		// log.Printf("Error getting data using ffprobe: %v", err)
 		// return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
@@ -155,45 +175,61 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
 	}
 
-	thumbnailFileName := "4x4.webp"
-	go func() {
-		if avgFramerate > 0 {
-			if _, err := s.CreateThumbnail(
-				4,
-				*fromFile,
-				1080,
-				thumbnailFileName,
-				fmt.Sprintf("%s/%s", s.Config().FolderVideoQualitysPriv, fileId),
-				videoDuration,
-				avgFramerate,
-			); err != nil {
-				log.Printf("Failed to generate thumbnail from file %v: %v", fromFile, err)
+	if s.Deps == nil || s.Deps.Storage == nil || s.Deps.Storage.Layout() == nil {
+		return http.StatusInternalServerError, nil, false, storage.ErrStoreNotConfigured
+	}
+	sourceFileName := "original." + strings.ToLower(fileExt)
+	sourceKey, err := s.Deps.Storage.Layout().Source(fileId, sourceFileName)
+	if err != nil {
+		return http.StatusInternalServerError, nil, false, err
+	}
+	storeID, storagePoolID, releaseStore, err := s.publishUploadSourceWithPool(ctx, userId, sourceKey, *fromFile)
+	if err != nil {
+		log.Printf("Failed to publish source file to storage pool: %v", err)
+		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
+	}
+	defer func() {
+		if releaseStore != nil {
+			releaseStore()
+		}
+	}()
+	sourceOwnedByRecord := false
+	defer func() {
+		if !sourceOwnedByRecord {
+			if store, storeErr := s.Deps.Storage.StoreOrDefault(storeID); storeErr == nil {
+				_ = store.Delete(context.Background(), sourceKey)
 			}
 		}
 	}()
+
+	thumbnailFileName := "4x4.webp"
 	var dbFile models.File
 	var dbLink models.Link
 	// create an transaction consisting of the file and its link
 	// a transaction is necessary so the service Deleter wont mark an file as unreferenced by accident
 	if err := s.Deps.DB.Transaction(func(tx *gorm.DB) error {
 		dbFile = models.File{
-			UUID:         fileId,
-			Hash:         FileHash,
-			Thumbnail:    thumbnailFileName,
-			Path:         *fromFile,
-			Folder:       fmt.Sprintf("%s/%s", s.Config().FolderVideoQualitysPriv, fileId),
-			UserID:       userId,
-			Height:       int64(videoHeight),
-			Width:        int64(videoWidth),
-			Duration:     videoDuration,
-			AvgFrameRate: avgFramerate,
-			Size:         fileSize,
+			UUID:          fileId,
+			Hash:          FileHash,
+			Thumbnail:     thumbnailFileName,
+			StorageID:     storeID,
+			StoragePoolID: &storagePoolID,
+			StorageState:  models.FileStorageAvailable,
+			SourceKey:     sourceKey.String(),
+			Folder:        fmt.Sprintf("%s/%s", s.Config().FolderVideoQualitysPriv, fileId),
+			UserID:        userId,
+			Height:        int64(videoHeight),
+			Width:         int64(videoWidth),
+			Duration:      videoDuration,
+			AvgFrameRate:  avgFramerate,
+			Size:          fileSize,
 		}
 		if err := tx.Create(&dbFile).Error; err != nil {
 			return err
 		}
 		dbLink = models.Link{
 			UUID:           uuid.NewString(),
+			CreationKey:    uploadCreationKey(userId, excludeSessionUUID),
 			Name:           fileName,
 			ParentFolderID: toFolder,
 			UserID:         userId,
@@ -207,6 +243,9 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 		log.Printf("Error saving file & link in database: %v", err)
 		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
 	}
+	sourceOwnedByRecord = true
+	releaseStore()
+	releaseStore = nil
 
 	// save subtitle data to database so they can be converted later
 	for index, subtitleStream := range subtitleStreams {
@@ -365,6 +404,13 @@ func (s *Service) CreateFile(fromFile *string, toFolder uint, fileName string, f
 					return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
 				}
 			}
+		}
+	}
+
+	if err := os.Remove(*fromFile); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Printf("Failed to remove imported source path %s: %v", *fromFile, err)
+		if updateErr := s.Deps.DB.Model(&dbFile).Update("path", *fromFile).Error; updateErr != nil {
+			log.Printf("Failed to retain source cleanup path for file %d: %v", dbFile.ID, updateErr)
 		}
 	}
 

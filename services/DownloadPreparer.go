@@ -1,6 +1,7 @@
 package services
 
 import (
+	"ch/kirari04/videocms/background"
 	downloadsvc "ch/kirari04/videocms/download"
 	"ch/kirari04/videocms/models"
 	"context"
@@ -29,7 +30,7 @@ func (w *WorkerGroup) DownloadPreparer(ctx context.Context) {
 		return
 	}
 	w.recoverDownloadPreparations()
-	w.runDownloadPreparationCleanup()
+	_ = w.runDownloadPreparationCleanup()
 	if !w.downloadPreparationsEnabled() {
 		w.CancelAllDownloadPreparations("Downloads disabled by administrator")
 	}
@@ -49,7 +50,7 @@ func (w *WorkerGroup) DownloadPreparationCleanup(ctx context.Context) {
 		ctx = context.Background()
 	}
 	for sleepContext(ctx, time.Minute) {
-		w.runDownloadPreparationCleanup()
+		_ = w.runDownloadPreparationCleanup()
 	}
 }
 
@@ -199,6 +200,12 @@ func (w *WorkerGroup) processDownloadPreparation(parentCtx context.Context, job 
 	timeout := w.preparationTimeout(job.MediaDuration)
 	jobCtx, cancelTimeout := context.WithTimeout(parentCtx, timeout)
 	defer cancelTimeout()
+	cleanupInputs, err := downloadsvc.MaterializeSelection(jobCtx, w.deps.Storage, &link.File, selection)
+	if err != nil {
+		w.failDownloadJob(&job, "source_unavailable", "The selected tracks could not be prepared.", err)
+		return
+	}
+	defer cleanupInputs()
 
 	var progressMu sync.Mutex
 	lastProgress := float64(0)
@@ -217,6 +224,7 @@ func (w *WorkerGroup) processDownloadPreparation(parentCtx context.Context, job 
 		}
 		lastProgress = value
 		lastUpdate = time.Now()
+		background.ReportProgress(jobCtx, value, "Preparing download")
 		_ = w.deps.DB.Model(&models.DownloadJob{}).
 			Where("id = ? AND status = ?", job.ID, models.DownloadJobStatusPreparing).
 			Update("progress", value).Error
@@ -405,12 +413,15 @@ func (w *WorkerGroup) downloadJobPathInside(path string) bool {
 	return pathAbs != dirAbs && filepath.Dir(pathAbs) == dirAbs
 }
 
-func (w *WorkerGroup) runDownloadPreparationCleanup() {
+func (w *WorkerGroup) runDownloadPreparationCleanup() error {
 	now := time.Now()
+	var cleanupErrors []error
 	var expired []models.DownloadJob
-	_ = w.deps.DB.
+	if err := w.deps.DB.
 		Where("status = ? AND expires_at IS NOT NULL AND expires_at <= ?", models.DownloadJobStatusReady, now).
-		Find(&expired).Error
+		Find(&expired).Error; err != nil {
+		return err
+	}
 	var removedBytes int64
 	var removedFiles int
 	for _, job := range expired {
@@ -419,26 +430,33 @@ func (w *WorkerGroup) runDownloadPreparationCleanup() {
 			removedFiles++
 			removedBytes += bytes
 		}
-		_ = w.deps.DB.Model(&job).Updates(map[string]interface{}{
+		if err := w.deps.DB.Model(&job).Updates(map[string]interface{}{
 			"status":      models.DownloadJobStatusExpired,
 			"output_path": "",
 			"output_size": 0,
 			"finished_at": &now,
-		}).Error
+		}).Error; err != nil {
+			cleanupErrors = append(cleanupErrors, err)
+		}
 		log.Printf("download_preparation event=expired job=%s bytes=%d", job.UUID, job.OutputSize)
 	}
 
 	var invalid []models.DownloadJob
-	_ = w.deps.DB.
+	if err := w.deps.DB.
 		Where("status IN ?", []string{
 			models.DownloadJobStatusQueued,
 			models.DownloadJobStatusPreparing,
 			models.DownloadJobStatusReady,
 		}).
-		Find(&invalid).Error
+		Find(&invalid).Error; err != nil {
+		cleanupErrors = append(cleanupErrors, err)
+	}
 	for _, job := range invalid {
 		var count int64
-		_ = w.deps.DB.Model(&models.Link{}).Where("id = ? AND uuid = ?", job.LinkID, job.LinkUUID).Count(&count).Error
+		if err := w.deps.DB.Model(&models.Link{}).Where("id = ? AND uuid = ?", job.LinkID, job.LinkUUID).Count(&count).Error; err != nil {
+			cleanupErrors = append(cleanupErrors, err)
+			continue
+		}
 		if count > 0 {
 			continue
 		}
@@ -454,6 +472,9 @@ func (w *WorkerGroup) runDownloadPreparationCleanup() {
 			models.DownloadJobStatusExpired,
 		}, cutoff).
 		Delete(&models.DownloadJob{})
+	if purged.Error != nil {
+		cleanupErrors = append(cleanupErrors, purged.Error)
+	}
 
 	partialFiles, partialBytes := w.removeTerminalDownloadPartials()
 	orphanFiles, orphanBytes := w.removeOrphanedDownloadJobFiles(now)
@@ -468,6 +489,7 @@ func (w *WorkerGroup) runDownloadPreparationCleanup() {
 			purged.RowsAffected,
 		)
 	}
+	return errors.Join(cleanupErrors...)
 }
 
 func (w *WorkerGroup) removeTerminalDownloadPartials() (int, int64) {

@@ -1,8 +1,11 @@
 # Video-CMS 🎬
 
-[![Go Version](https://img.shields.io/badge/go-1.25-blue.svg)](https://golang.org/)
+[![CI](https://github.com/Kirari04/videocms/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/Kirari04/videocms/actions/workflows/ci.yml?query=branch%3Adev)
+[![Staging Image](https://github.com/Kirari04/videocms/actions/workflows/staging-image.yml/badge.svg?branch=staging)](https://github.com/Kirari04/videocms/actions/workflows/staging-image.yml?query=branch%3Astaging)
+[![Release](https://github.com/Kirari04/videocms/actions/workflows/release.yml/badge.svg?branch=master)](https://github.com/Kirari04/videocms/actions/workflows/release.yml?query=branch%3Amaster)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/Kirari04/videocms?filename=go.mod&logo=go)](https://go.dev/)
+[![Docker Pulls](https://img.shields.io/docker/pulls/kirari04/videocms?logo=docker)](https://hub.docker.com/r/kirari04/videocms)
 [![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Docker Build](https://img.shields.io/badge/docker-build-brightgreen.svg)](https://hub.docker.com/r/kirari04/videocms)
 
 A self-hosted Content Management System for your videos. 🎞️
 
@@ -14,10 +17,18 @@ A self-hosted Content Management System for your videos. 🎞️
 - **🔊 Multi-Audio:** The player supports multiple audio tracks that are not stored inside the video, saving storage space.
 - **🚀 Fast Chunked Upload:** Allows the server to be behind a proxy without requiring high maximum post limits.
 - **📦 Configurable Downloads:** Viewers can choose a ready quality and download MP4 with one audio track, or MKV with selectable audio and subtitle tracks. The server assembles the result without re-encoding.
+- **🗄️ Storage Pools:** Keep local storage as the default or route new uploads across S3-compatible buckets and SFTP folders from the admin UI.
+- **🔄 Safe Storage Migrations:** Move all videos or one account between pools with resumable copies, verification, atomic cutover, and delayed source cleanup.
+- **💾 Read-Through Caches:** Cache frequently played remote media on inexpensive storage and track cache effectiveness in System Stats.
+- **🧭 Durable Background Jobs:** Monitor uploads, downloads, encoding, migrations, and maintenance with persistent progress, retries, pause, and cancellation controls.
 
 ## Documentation 📚
 
 Follow the documentation to setup VideoCMS: [https://videocms-docs.vercel.app/](https://videocms-docs.vercel.app/)
+
+Storage mounts, pool routing, upgrade behavior, and reconnecting migrated storage are described in [the storage guide](https://videocms-docs.vercel.app/operations/storage).
+
+Monitoring, canceling, retrying, and troubleshooting background work are described in [the background-jobs guide](https://videocms-docs.vercel.app/operations/background-jobs).
 
 ## Screenshots 📸
 

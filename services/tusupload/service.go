@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"ch/kirari04/videocms/app"
+	"ch/kirari04/videocms/background"
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
@@ -40,8 +42,6 @@ const (
 	apiKeyIDContextKey contextKey = "videocms_tus_api_key_id"
 )
 
-type createFileFunc func(fromFile *string, toFolder uint, fileName string, fileID string, fileSize int64, userID uint, excludeSessionUUID string) (int, *models.Link, bool, error)
-
 type Service struct {
 	Deps  *app.Deps
 	Auth  any
@@ -54,13 +54,21 @@ type Service struct {
 	serverMu  sync.Mutex
 	createMu  sync.Mutex
 	cleanupMu sync.Mutex
+	healthMu  sync.Mutex
 	closeOnce sync.Once
 
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+	health map[string]ConsumerHealth
+}
 
-	createFile createFileFunc
+type ConsumerHealth struct {
+	Name        string
+	Status      string
+	Restarts    int
+	LastStartAt *time.Time
+	LastError   string
 }
 
 type tusClaims struct {
@@ -83,12 +91,12 @@ func NewService(deps *app.Deps, authSvc any) *Service {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Service{
-		Deps:       deps,
-		Auth:       authSvc,
-		Logic:      logicSvc,
-		ctx:        ctx,
-		cancel:     cancel,
-		createFile: logicSvc.CreateFile,
+		Deps:   deps,
+		Auth:   authSvc,
+		Logic:  logicSvc,
+		ctx:    ctx,
+		cancel: cancel,
+		health: make(map[string]ConsumerHealth),
 	}
 }
 
@@ -622,36 +630,88 @@ func parseOptionalUint(value string) (uint, error) {
 }
 
 func (s *Service) consumeEvents(handler *tusd.Handler) {
-	s.consumeHookEvents(handler.CreatedUploads, func(event tusd.HookEvent) {
+	s.consumeHookEvents("tus-created-events", handler.CreatedUploads, func(event tusd.HookEvent) {
 		s.updateSessionFromEvent(event, false)
 	})
-	s.consumeHookEvents(handler.UploadProgress, func(event tusd.HookEvent) {
+	s.consumeHookEvents("tus-progress-events", handler.UploadProgress, func(event tusd.HookEvent) {
 		s.updateSessionFromEvent(event, true)
 	})
-	s.consumeHookEvents(handler.CompleteUploads, func(event tusd.HookEvent) {
+	s.consumeHookEvents("tus-complete-events", handler.CompleteUploads, func(event tusd.HookEvent) {
 		s.completeSessionFromEvent(event)
 	})
-	s.consumeHookEvents(handler.TerminatedUploads, func(event tusd.HookEvent) {
+	s.consumeHookEvents("tus-terminated-events", handler.TerminatedUploads, func(event tusd.HookEvent) {
 		s.terminateSession(event.Upload.ID)
 	})
 }
 
-func (s *Service) consumeHookEvents(events <-chan tusd.HookEvent, consume func(tusd.HookEvent)) {
+func (s *Service) consumeHookEvents(name string, events <-chan tusd.HookEvent, consume func(tusd.HookEvent)) {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
+		now := time.Now()
+		s.setConsumerHealth(ConsumerHealth{Name: name, Status: "running", LastStartAt: &now})
 		for {
 			select {
 			case <-s.ctx.Done():
+				s.setConsumerStatus(name, "stopped", "")
 				return
 			case event, ok := <-events:
 				if !ok || s.ctx.Err() != nil {
+					s.setConsumerStatus(name, "stopped", "event channel closed")
 					return
 				}
-				consume(event)
+				if panicMessage := consumeSafely(consume, event); panicMessage != "" {
+					s.healthMu.Lock()
+					health := s.health[name]
+					health.Status = "degraded"
+					health.Restarts++
+					health.LastError = panicMessage
+					s.health[name] = health
+					s.healthMu.Unlock()
+					continue
+				}
+				s.setConsumerStatus(name, "running", "")
 			}
 		}
 	}()
+}
+
+func consumeSafely(consume func(tusd.HookEvent), event tusd.HookEvent) (panicMessage string) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			panicMessage = fmt.Sprintf("panic: %v", recovered)
+		}
+	}()
+	consume(event)
+	return ""
+}
+
+func (s *Service) setConsumerHealth(health ConsumerHealth) {
+	s.healthMu.Lock()
+	s.health[health.Name] = health
+	s.healthMu.Unlock()
+}
+
+func (s *Service) setConsumerStatus(name, status, lastError string) {
+	s.healthMu.Lock()
+	health := s.health[name]
+	health.Name, health.Status, health.LastError = name, status, lastError
+	s.health[name] = health
+	s.healthMu.Unlock()
+}
+
+func (s *Service) ConsumerHealth() []ConsumerHealth {
+	if s == nil {
+		return nil
+	}
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	result := make([]ConsumerHealth, 0, len(s.health))
+	for _, health := range s.health {
+		result = append(result, health)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	return result
 }
 
 func (s *Service) updateSessionFromEvent(event tusd.HookEvent, trackBytes bool) {
@@ -750,40 +810,64 @@ func isExpired(session *models.UploadSession) bool {
 	return time.Now().After(*session.ExpiresAt)
 }
 
-func (s *Service) expireSession(session *models.UploadSession) {
+func (s *Service) expireSession(session *models.UploadSession) error {
+	var cleanupErr error
 	if session.StoragePath != "" {
-		_ = os.Remove(session.StoragePath)
+		if err := os.Remove(session.StoragePath); err != nil && !os.IsNotExist(err) {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("remove upload data: %w", err))
+		}
 	}
 	if session.InfoPath != "" {
-		_ = os.Remove(session.InfoPath)
+		if err := os.Remove(session.InfoPath); err != nil && !os.IsNotExist(err) {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("remove upload metadata: %w", err))
+		}
+	}
+	if cleanupErr != nil {
+		return cleanupErr
 	}
 	now := time.Now()
 	db := s.db()
-	db.Model(session).Updates(map[string]interface{}{
+	if err := db.Model(session).Updates(map[string]interface{}{
 		"status":     models.UploadStatusExpired,
 		"expires_at": &now,
-	})
-	db.Delete(session)
+	}).Error; err != nil {
+		return fmt.Errorf("mark upload expired: %w", err)
+	}
+	if err := db.Delete(session).Error; err != nil {
+		return fmt.Errorf("delete expired upload: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) CleanupExpiredOnce() {
+	if err := s.CleanupExpiredOnceE(); err != nil {
+		log.Printf("[WARNING] failed to clean expired tus uploads: %v\n", err)
+	}
+}
+
+// CleanupExpiredOnceE performs one cleanup pass and returns every material
+// failure so a durable maintenance task can classify, retry, and expose it.
+func (s *Service) CleanupExpiredOnceE() error {
 	s.cleanupMu.Lock()
 	defer s.cleanupMu.Unlock()
 
 	db := s.db()
 	if db == nil {
-		return
+		return errors.New("database unavailable")
 	}
 
 	var sessions []models.UploadSession
 	if err := db.Where("expires_at IS NOT NULL AND expires_at < ? AND status IN ?", time.Now(), activeStatuses()).Find(&sessions).Error; err != nil {
-		log.Printf("[WARNING] failed to find expired tus uploads: %v\n", err)
-		return
+		return fmt.Errorf("find expired uploads: %w", err)
 	}
+	var cleanupErr error
 	for i := range sessions {
-		s.expireSession(&sessions[i])
+		if err := s.expireSession(&sessions[i]); err != nil {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("upload %s: %w", sessions[i].TusID, err))
+		}
 	}
-	s.cleanupLegacyUploadSessions()
+	cleanupErr = errors.Join(cleanupErr, s.cleanupLegacyUploadSessions())
+	return cleanupErr
 }
 
 func (s *Service) ListSessions(userID uint) ([]models.UploadSessionsGetResponse, error) {
@@ -804,6 +888,24 @@ func (s *Service) ListSessions(userID uint) ([]models.UploadSessionsGetResponse,
 }
 
 func (s *Service) Finalize(uploadID string, userID uint) (int, *models.Link, error) {
+	return s.FinalizeContext(context.Background(), uploadID, userID)
+}
+
+func (s *Service) FinalizeContext(ctx context.Context, uploadID string, userID uint) (int, *models.Link, error) {
+	return s.finalizeContext(ctx, uploadID, userID, false)
+}
+
+// ResumeFinalizeContext is reserved for the durable task handler. Unlike a
+// direct finalize request, it may resume a session left in the importing state
+// after process interruption.
+func (s *Service) ResumeFinalizeContext(ctx context.Context, uploadID string, userID uint) (int, *models.Link, error) {
+	return s.finalizeContext(ctx, uploadID, userID, true)
+}
+
+func (s *Service) finalizeContext(ctx context.Context, uploadID string, userID uint, allowResume bool) (int, *models.Link, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	db := s.db()
 	if db == nil {
 		return http.StatusInternalServerError, nil, errors.New("database unavailable")
@@ -830,6 +932,19 @@ func (s *Service) Finalize(uploadID string, userID uint) (int, *models.Link, err
 		}
 		return http.StatusOK, &link, nil
 	}
+
+	// The file ID and staging path are deterministic so a worker restart can
+	// resume finalization after either the filesystem move or the database
+	// transaction has completed.
+	fileUUID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(fmt.Sprintf("videocms:upload:%d:%d:%s", userID, session.ID, session.ClientUploadUUID))).String()
+	if link, err := s.findFinalizedUpload(fileUUID, userID); err != nil {
+		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
+	} else if link != nil {
+		if err := s.completeFinalize(&session, link); err != nil {
+			return http.StatusInternalServerError, nil, echo.ErrInternalServerError
+		}
+		return http.StatusOK, link, nil
+	}
 	if isExpired(&session) {
 		s.expireSession(&session)
 		return http.StatusGone, nil, fmt.Errorf("upload expired")
@@ -839,6 +954,11 @@ func (s *Service) Finalize(uploadID string, userID uint) (int, *models.Link, err
 	storagePath := session.StoragePath
 	if storagePath == "" {
 		storagePath = filepath.Join(cfg.FolderVideoUploadsPriv, "tus", session.TusID)
+	}
+	extension := strings.ToLower(filepath.Ext(session.Name))
+	destinationPath := filepath.Join(cfg.FolderVideoUploadsPriv, "import-"+fileUUID+extension)
+	if _, err := os.Stat(destinationPath); err == nil {
+		storagePath = destinationPath
 	}
 
 	stat, err := os.Stat(storagePath)
@@ -851,10 +971,15 @@ func (s *Service) Finalize(uploadID string, userID uint) (int, *models.Link, err
 		return http.StatusConflict, nil, fmt.Errorf("uploaded file size mismatch: server %d, expected %d", stat.Size(), session.Size)
 	}
 
-	if session.Status == models.UploadStatusImporting {
-		return http.StatusConflict, nil, fmt.Errorf("upload is already importing")
-	}
 	if session.Status != models.UploadStatusUploaded && session.Status != models.UploadStatusFailed {
+		if session.Status == models.UploadStatusImporting {
+			if allowResume {
+				// A previous attempt already acquired the session. The durable task
+				// owns retries, so continuing here is safe and makes the move resumable.
+				goto importFile
+			}
+			return http.StatusConflict, nil, fmt.Errorf("upload is already importing")
+		}
 		if err := db.Model(&session).Updates(map[string]interface{}{
 			"status": models.UploadStatusUploaded,
 			"offset": session.Size,
@@ -869,16 +994,23 @@ func (s *Service) Finalize(uploadID string, userID uint) (int, *models.Link, err
 		return http.StatusConflict, nil, err
 	}
 
-	fileUUID := uuid.NewString()
-	destinationPath := filepath.Join(cfg.FolderVideoUploadsPriv, fileUUID+".tmp")
-	if err := os.Rename(storagePath, destinationPath); err != nil {
-		s.failFinalize(&session, fmt.Sprintf("failed to move uploaded file: %v", err))
+importFile:
+	if storagePath != destinationPath {
+		if err := os.Rename(storagePath, destinationPath); err != nil {
+			s.failFinalize(&session, fmt.Sprintf("failed to move uploaded file: %v", err))
+			return http.StatusInternalServerError, nil, echo.ErrInternalServerError
+		}
+		storagePath = destinationPath
+	}
+	if err := db.Unscoped().Model(&models.UploadSession{}).Where("id = ?", session.ID).Update("storage_path", destinationPath).Error; err != nil {
 		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
 	}
 
-	status, link, cloned, err := s.createFile(&destinationPath, session.ParentFolderID, session.Name, fileUUID, session.Size, userID, session.ClientUploadUUID)
+	if !background.BeginCommit(ctx, "Importing uploaded video") {
+		return http.StatusConflict, nil, context.Canceled
+	}
+	status, link, cloned, err := s.Logic.CreateFileContext(ctx, &destinationPath, session.ParentFolderID, session.Name, fileUUID, session.Size, userID, session.ClientUploadUUID)
 	if err != nil {
-		_ = os.Remove(destinationPath)
 		s.failFinalize(&session, err.Error())
 		return status, nil, err
 	}
@@ -886,33 +1018,97 @@ func (s *Service) Finalize(uploadID string, userID uint) (int, *models.Link, err
 		_ = os.Remove(destinationPath)
 	}
 
+	if err := s.completeFinalize(&session, link); err != nil {
+		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
+	}
+	return http.StatusOK, link, nil
+}
+
+func (s *Service) findFinalizedUpload(fileUUID string, userID uint) (*models.Link, error) {
+	var file models.File
+	if err := s.db().Where("uuid = ?", fileUUID).First(&file).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var link models.Link
+	if err := s.db().Where("file_id = ? AND user_id = ?", file.ID, userID).Order("id ASC").First(&link).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &link, nil
+}
+
+func (s *Service) completeFinalize(session *models.UploadSession, link *models.Link) error {
 	now := time.Now()
-	if err := db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&models.UploadLog{}).
-			Where("upload_session_id IN (?)",
-				tx.Model(&models.UploadSession{}).Unscoped().Select("id").Where("client_upload_uuid = ? AND user_id = ?", session.ClientUploadUUID, userID),
-			).
-			Update("file_id", link.FileID).Error; err != nil {
+	if err := s.db().Transaction(func(tx *gorm.DB) error {
+		group := tx.Model(&models.UploadSession{}).Unscoped().Select("id").Where("client_upload_uuid = ? AND user_id = ?", session.ClientUploadUUID, session.UserID)
+		if err := tx.Model(&models.UploadLog{}).Where("upload_session_id IN (?)", group).Update("file_id", link.FileID).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&models.UploadSession{}).Unscoped().
-			Where("client_upload_uuid = ? AND user_id = ?", session.ClientUploadUUID, userID).
-			Updates(map[string]interface{}{
-				"status":       models.UploadStatusDone,
-				"file_id":      link.FileID,
-				"link_id":      link.ID,
-				"finalized_at": &now,
-				"error":        "",
-			}).Error; err != nil {
+		if err := tx.Model(&models.UploadSession{}).Unscoped().Where("client_upload_uuid = ? AND user_id = ?", session.ClientUploadUUID, session.UserID).Updates(map[string]interface{}{
+			"status": models.UploadStatusDone, "file_id": link.FileID, "link_id": link.ID,
+			"finalized_at": &now, "error": "",
+		}).Error; err != nil {
 			return err
 		}
-		return tx.Where("client_upload_uuid = ? AND user_id = ?", session.ClientUploadUUID, userID).Delete(&models.UploadSession{}).Error
+		return tx.Where("client_upload_uuid = ? AND user_id = ?", session.ClientUploadUUID, session.UserID).Delete(&models.UploadSession{}).Error
 	}); err != nil {
 		log.Printf("[WARNING] failed to update finalized upload session: %v\n", err)
+		return err
 	}
+	s.removeTusFilesForGroup(session.ClientUploadUUID, session.UserID)
+	return nil
+}
 
-	s.removeTusFilesForGroup(session.ClientUploadUUID, userID)
-	return http.StatusOK, link, nil
+func (s *Service) EnqueueFinalize(ctx context.Context, uploadID string, userID uint) (*background.Job, bool, int, error) {
+	db := s.db()
+	if db == nil || s.Deps.Background == nil {
+		return nil, false, http.StatusServiceUnavailable, errors.New("background service unavailable")
+	}
+	var session models.UploadSession
+	if err := db.Unscoped().Where("tus_id = ?", uploadID).First(&session).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, false, http.StatusNotFound, errors.New("upload not found")
+		}
+		return nil, false, http.StatusInternalServerError, errors.New("failed to load upload")
+	}
+	if session.UserID != userID {
+		return nil, false, http.StatusForbidden, errors.New("upload not found")
+	}
+	if session.Kind == models.UploadKindPartial {
+		return nil, false, http.StatusBadRequest, errors.New("partial uploads cannot be finalized")
+	}
+	if isExpired(&session) {
+		s.expireSession(&session)
+		return nil, false, http.StatusGone, errors.New("upload expired")
+	}
+	if session.Status != models.UploadStatusUploaded && session.Status != models.UploadStatusFailed && session.Status != models.UploadStatusImporting && session.Status != models.UploadStatusDone {
+		return nil, false, http.StatusConflict, errors.New("upload is not complete")
+	}
+	ownerID := session.UserID
+	job, reused, err := s.Deps.Background.Enqueue(ctx, background.JobSpec{
+		Kind: "media.ingest", Visibility: background.VisibilityUser, OwnerID: &ownerID,
+		SubjectType: "upload_session", SubjectID: session.TusID,
+		IdempotencyKey: fmt.Sprintf("upload:%d:%s", userID, session.ClientUploadUUID), Label: "Import " + session.Name,
+		Tasks: []background.TaskSpec{{
+			Kind: "media.import", Queue: background.QueueStorage, Phase: "Importing upload",
+			Payload: map[string]any{"uploadSessionId": session.ID}, DedupeKey: fmt.Sprintf("upload:%d", session.ID),
+			Priority: 40, Required: true, Weight: 20,
+		}},
+	})
+	if err != nil {
+		return nil, false, http.StatusInternalServerError, err
+	}
+	if err := db.Unscoped().Model(&models.UploadSession{}).
+		Where("client_upload_uuid = ? AND user_id = ?", session.ClientUploadUUID, userID).
+		Update("background_job_id", job.ID).Error; err != nil {
+		return nil, false, http.StatusInternalServerError, err
+	}
+	return job, reused, http.StatusAccepted, nil
 }
 
 func (s *Service) transitionToImporting(session *models.UploadSession) error {
@@ -960,7 +1156,7 @@ func (s *Service) removeTusFilesForGroup(clientUploadUUID string, userID uint) {
 	}
 }
 
-func (s *Service) cleanupLegacyUploadSessions() {
+func (s *Service) cleanupLegacyUploadSessions() error {
 	type legacyUploadSession struct {
 		ID            uint
 		SessionFolder string
@@ -968,8 +1164,11 @@ func (s *Service) cleanupLegacyUploadSessions() {
 
 	db := s.db()
 	var hasSessionFolder int
-	if err := db.Raw("SELECT COUNT(*) FROM pragma_table_info('upload_sessions') WHERE name = 'session_folder'").Scan(&hasSessionFolder).Error; err != nil || hasSessionFolder == 0 {
-		return
+	if err := db.Raw("SELECT COUNT(*) FROM pragma_table_info('upload_sessions') WHERE name = 'session_folder'").Scan(&hasSessionFolder).Error; err != nil {
+		return fmt.Errorf("inspect legacy upload schema: %w", err)
+	}
+	if hasSessionFolder == 0 {
+		return nil
 	}
 
 	var sessions []legacyUploadSession
@@ -981,20 +1180,29 @@ func (s *Service) cleanupLegacyUploadSessions() {
 		  AND deleted_at IS NULL
 	`).Scan(&sessions).Error
 	if err != nil {
-		log.Printf("[WARNING] failed to find legacy upload sessions: %v\n", err)
-		return
+		return fmt.Errorf("find legacy upload sessions: %w", err)
 	}
+	var cleanupErr error
 	for _, session := range sessions {
 		if session.SessionFolder != "" {
-			_ = os.RemoveAll(session.SessionFolder)
+			if err := os.RemoveAll(session.SessionFolder); err != nil {
+				cleanupErr = errors.Join(cleanupErr, fmt.Errorf("remove legacy upload %d: %w", session.ID, err))
+				continue
+			}
 		}
 		now := time.Now()
-		db.Model(&models.UploadSession{}).Where("id = ?", session.ID).Updates(map[string]interface{}{
+		if err := db.Model(&models.UploadSession{}).Where("id = ?", session.ID).Updates(map[string]interface{}{
 			"status":     models.UploadStatusExpired,
 			"expires_at": &now,
-		})
-		db.Delete(&models.UploadSession{}, session.ID)
+		}).Error; err != nil {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("mark legacy upload %d expired: %w", session.ID, err))
+			continue
+		}
+		if err := db.Delete(&models.UploadSession{}, session.ID).Error; err != nil {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("delete legacy upload %d: %w", session.ID, err))
+		}
 	}
+	return cleanupErr
 }
 
 type expirationResponseWriter struct {

@@ -4,9 +4,7 @@ import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/middlewares"
 	"ch/kirari04/videocms/models"
-	"fmt"
 	"net/http"
-	"os"
 	"regexp"
 
 	"github.com/labstack/echo/v4"
@@ -32,14 +30,17 @@ func (h *Handlers) GetAudioData(c echo.Context) error {
 		return c.String(http.StatusNotFound, "Audio doesn't exist")
 	}
 
-	filePath := fmt.Sprintf("%s/%s/%s/%s", h.Config().FolderVideoQualitysPriv, claims.FileUUID, requestValidation.AUDIOUUID, requestValidation.FILE)
-	fileInfo, err := os.Stat(filePath)
-	if err == nil {
-		h.Logic.TrackTraffic(claims.UserID, claims.FileID, 0, audioID, uint64(fileInfo.Size()))
+	if h.Deps.Storage == nil || h.Deps.Storage.Layout() == nil {
+		return c.NoContent(http.StatusInternalServerError)
 	}
-
-	if err := c.File(filePath); err != nil {
-		return c.String(http.StatusNotFound, "Audio doesn't exist")
+	key, err := h.Deps.Storage.Layout().Audio(claims.FileUUID, requestValidation.AUDIOUUID, requestValidation.FILE)
+	if err != nil {
+		return c.String(http.StatusBadRequest, "bad media key")
 	}
-	return nil
+	return h.serveMediaObject(c, claims.StorageID, key, "Audio doesn't exist", mediaTraffic{
+		userID:  claims.UserID,
+		fileID:  claims.FileID,
+		poolID:  claims.StoragePoolID,
+		audioID: audioID,
+	})
 }
