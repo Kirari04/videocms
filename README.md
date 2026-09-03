@@ -18,6 +18,9 @@ A self-hosted Content Management System for your videos. 🎞️
 - **🚀 Fast Chunked Upload:** Allows the server to be behind a proxy without requiring high maximum post limits.
 - **📦 Configurable Downloads:** Viewers can choose a ready quality and download MP4 with one audio track, or MKV with selectable audio and subtitle tracks. The server assembles the result without re-encoding.
 - **🗄️ Storage Pools:** Keep local storage as the default or route new uploads across S3-compatible buckets and SFTP folders from the admin UI.
+- **🔄 Safe Storage Migrations:** Move all videos or one account between pools with resumable copies, verification, atomic cutover, and delayed source cleanup.
+- **💾 Read-Through Caches:** Cache frequently played remote media on inexpensive storage and track cache effectiveness in System Stats.
+- **🧭 Durable Background Jobs:** Monitor uploads, downloads, encoding, migrations, and maintenance with persistent progress, retries, pause, and cancellation controls.
 
 ## Documentation 📚
 
