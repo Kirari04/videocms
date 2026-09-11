@@ -99,7 +99,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.49 // indirect
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.41.0 // indirect
 )
