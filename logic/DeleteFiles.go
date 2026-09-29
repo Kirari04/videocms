@@ -9,6 +9,10 @@ import (
 	"gorm.io/gorm"
 )
 
+// Leave room for ownership and soft-delete parameters on databases with a
+// limited number of parameters per statement.
+const deletionBatchSize = 500
+
 func (s *Service) DeleteFiles(fileValidation *models.LinksDeleteValidation, userID uint, isAdmin bool) (status int, err error) {
 	if len(fileValidation.LinkIDs) == 0 {
 		return http.StatusBadRequest, errors.New("array LinkIDs is empty")
@@ -64,16 +68,19 @@ func deleteLinksInTransaction(tx *gorm.DB, links []models.Link, userID uint, isA
 		}
 		ids = append(ids, link.ID)
 	}
-	query := tx
-	if !isAdmin {
-		query = query.Where("user_id = ?", userID)
-	}
-	result := query.Delete(&models.Link{}, ids)
-	if result.Error != nil {
-		return http.StatusInternalServerError, result.Error
-	}
-	if result.RowsAffected != int64(len(ids)) {
-		return http.StatusForbidden, errors.New("file ownership changed during deletion")
+	for start := 0; start < len(ids); start += deletionBatchSize {
+		batch := ids[start:min(start+deletionBatchSize, len(ids))]
+		query := tx
+		if !isAdmin {
+			query = query.Where("user_id = ?", userID)
+		}
+		result := query.Delete(&models.Link{}, batch)
+		if result.Error != nil {
+			return http.StatusInternalServerError, result.Error
+		}
+		if result.RowsAffected != int64(len(batch)) {
+			return http.StatusForbidden, errors.New("file ownership changed during deletion")
+		}
 	}
 	return http.StatusOK, nil
 }

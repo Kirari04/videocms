@@ -31,27 +31,24 @@ func (s *Service) DeleteFolders(folderValidation *models.FoldersDeleteValidation
 			return err
 		}
 		links = collectedLinks
-		// Preserve the existing descendant-link limit independently of the
-		// selected-folder limit.
-		if int64(len(links)) > s.Config().MaxItemsMultiDelete {
-			status = http.StatusBadRequest
-			return errors.New("max requested items exceeded")
-		}
 		if deleteStatus, err := deleteLinksInTransaction(tx, links, userID, isAdmin); err != nil {
 			status = deleteStatus
 			return err
 		}
-		query := tx
-		if !isAdmin {
-			query = query.Where("user_id = ?", userID)
-		}
-		result := query.Delete(&models.Folder{}, folders)
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected != int64(len(folders)) {
-			status = http.StatusForbidden
-			return errors.New("folder ownership changed during deletion")
+		for start := 0; start < len(folders); start += deletionBatchSize {
+			batch := folders[start:min(start+deletionBatchSize, len(folders))]
+			query := tx
+			if !isAdmin {
+				query = query.Where("user_id = ?", userID)
+			}
+			result := query.Delete(&models.Folder{}, batch)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != int64(len(batch)) {
+				status = http.StatusForbidden
+				return errors.New("folder ownership changed during deletion")
+			}
 		}
 		return nil
 	})
@@ -95,30 +92,36 @@ func collectFolderDeletion(tx *gorm.DB, roots []models.FolderDeleteValidation, u
 	var links []models.Link
 	for len(frontier) > 0 {
 		folders = append(folders, frontier...)
-		var children []models.Folder
-		if err := tx.Where("parent_folder_id IN ?", frontier).Find(&children).Error; err != nil {
-			return nil, nil, http.StatusInternalServerError, err
-		}
-		var childLinks []models.Link
-		if err := tx.Preload("File").Where("parent_folder_id IN ?", frontier).Find(&childLinks).Error; err != nil {
-			return nil, nil, http.StatusInternalServerError, err
-		}
-		for _, link := range childLinks {
-			if !isAdmin && link.UserID != userID {
-				return nil, nil, http.StatusForbidden, errors.New("folder contains a file owned by another user")
+		var nextFrontier []uint
+		for start := 0; start < len(frontier); start += deletionBatchSize {
+			batch := frontier[start:min(start+deletionBatchSize, len(frontier))]
+			var children []models.Folder
+			if err := tx.Where("parent_folder_id IN ?", batch).Find(&children).Error; err != nil {
+				return nil, nil, http.StatusInternalServerError, err
+			}
+			// Thumbnail cleanup reloads each link's File after commit. Preloading
+			// here could generate an unbounded IN query for a populated folder.
+			var childLinks []models.Link
+			if err := tx.Where("parent_folder_id IN ?", batch).Find(&childLinks).Error; err != nil {
+				return nil, nil, http.StatusInternalServerError, err
+			}
+			for _, link := range childLinks {
+				if !isAdmin && link.UserID != userID {
+					return nil, nil, http.StatusForbidden, errors.New("folder contains a file owned by another user")
+				}
+			}
+			links = append(links, childLinks...)
+			for _, child := range children {
+				if !isAdmin && child.UserID != userID {
+					return nil, nil, http.StatusForbidden, errors.New("folder contains a folder owned by another user")
+				}
+				if !visited[child.ID] {
+					visited[child.ID] = true
+					nextFrontier = append(nextFrontier, child.ID)
+				}
 			}
 		}
-		links = append(links, childLinks...)
-		frontier = nil
-		for _, child := range children {
-			if !isAdmin && child.UserID != userID {
-				return nil, nil, http.StatusForbidden, errors.New("folder contains a folder owned by another user")
-			}
-			if !visited[child.ID] {
-				visited[child.ID] = true
-				frontier = append(frontier, child.ID)
-			}
-		}
+		frontier = nextFrontier
 	}
 	return folders, links, http.StatusOK, nil
 }
