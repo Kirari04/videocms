@@ -220,7 +220,7 @@ func (s *Service) RemoveLinkThumbnailFile(link models.Link) {
 	}
 	releaseFile := s.Deps.StorageLifecycle.FileReadLock(link.FileID)
 	defer releaseFile()
-	if err := s.Deps.DB.Preload("File").First(&link, link.ID).Error; err != nil || link.Thumbnail == "" {
+	if err := s.Deps.DB.Unscoped().Preload("File").First(&link, link.ID).Error; err != nil || link.Thumbnail == "" {
 		return
 	}
 	releaseMount := s.Deps.StorageLifecycle.ReadLock(link.File.StorageID)

@@ -8,15 +8,12 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 func (s *Service) CloneFileByHash(fromHash string, toFolder uint, fileName string, userId uint, excludeSessionUUID string) (status int, newFile *models.Link, err error) {
-	// check if requested folder exists (if set)
-	if toFolder > 0 {
-		res := s.Deps.DB.First(&models.Folder{}, toFolder)
-		if res.Error != nil {
-			return http.StatusBadRequest, nil, errors.New("parent folder doesn't exist")
-		}
+	if status, err := ValidateFolderDestination(s.Deps.DB, toFolder, userId); err != nil {
+		return status, nil, err
 	}
 
 	// Only reuse records whose storage is still available. An unavailable
@@ -25,7 +22,10 @@ func (s *Service) CloneFileByHash(fromHash string, toFolder uint, fileName strin
 	if res := s.Deps.DB.
 		Where("hash = ? AND (storage_state IS NULL OR storage_state = '' OR storage_state = ?)", fromHash, models.FileStorageAvailable).
 		Order("id ASC").
-		Find(&candidates); res.Error != nil || len(candidates) == 0 {
+		Find(&candidates); res.Error != nil {
+		return http.StatusInternalServerError, nil, res.Error
+	}
+	if len(candidates) == 0 {
 		return http.StatusNotFound, nil, errors.New("requested hash doesnt match any file")
 	}
 	var existingFile models.File
@@ -37,6 +37,9 @@ func (s *Service) CloneFileByHash(fromHash string, toFolder uint, fileName strin
 			Where("id = ? AND (storage_state IS NULL OR storage_state = '' OR storage_state = ?)", candidate.ID, models.FileStorageAvailable).
 			First(&current).Error; err != nil {
 			release()
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return http.StatusInternalServerError, nil, err
+			}
 			continue
 		}
 		if s.Deps.Storage == nil {
@@ -71,9 +74,17 @@ func (s *Service) CloneFileByHash(fromHash string, toFolder uint, fileName strin
 		FileID:         existingFile.ID,
 		Name:           fileName,
 	}
-	if res := s.Deps.DB.Create(&dbLink); res.Error != nil {
-		log.Printf("Error saving link in database: %v", res.Error)
-		return http.StatusInternalServerError, nil, res.Error
+	status = http.StatusInternalServerError
+	if err := s.Deps.DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		if status, err = ValidateFolderDestination(tx, toFolder, userId); err != nil {
+			return err
+		}
+		status = http.StatusInternalServerError
+		return tx.Create(&dbLink).Error
+	}); err != nil {
+		log.Printf("Error saving link in database: %v", err)
+		return status, nil, err
 	}
 	return http.StatusOK, &dbLink, nil
 }

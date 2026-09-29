@@ -34,18 +34,29 @@ func (s *Service) CreateFileContext(ctx context.Context, fromFile *string, toFol
 	}
 	if creationKey := uploadCreationKey(userId, excludeSessionUUID); creationKey != "" {
 		var existing models.Link
-		if err := s.Deps.DB.Where("creation_key = ?", creationKey).First(&existing).Error; err == nil {
+		status = http.StatusInternalServerError
+		err := s.Deps.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Where("creation_key = ?", creationKey).First(&existing).Error; err != nil {
+				return err
+			}
+			if existing.UserID != userId {
+				status = http.StatusForbidden
+				return errors.New("upload result belongs to another user")
+			}
+			if destinationStatus, err := ValidateFolderDestination(tx, existing.ParentFolderID, existing.UserID); err != nil {
+				status = destinationStatus
+				return err
+			}
+			return nil
+		})
+		if err == nil {
 			return http.StatusOK, &existing, true, nil
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
+			return status, nil, false, err
 		}
 	}
-	//check if requested folder exists (if set)
-	if toFolder > 0 {
-		res := s.Deps.DB.First(&models.Folder{}, toFolder)
-		if res.Error != nil {
-			return http.StatusBadRequest, nil, false, errors.New("parent folder doesn't exist")
-		}
+	if status, err := ValidateFolderDestination(s.Deps.DB, toFolder, userId); err != nil {
+		return status, nil, false, err
 	}
 
 	// obtain hash from file
@@ -59,6 +70,9 @@ func (s *Service) CreateFileContext(ctx context.Context, fromFile *string, toFol
 	status, newLink, err := s.CloneFileByHash(FileHash, toFolder, fileName, userId, excludeSessionUUID)
 	if err == nil {
 		return status, newLink, true, err
+	}
+	if status != http.StatusNotFound {
+		return status, nil, false, err
 	}
 
 	// check storage quota for new file
@@ -207,7 +221,13 @@ func (s *Service) CreateFileContext(ctx context.Context, fromFile *string, toFol
 	var dbLink models.Link
 	// create an transaction consisting of the file and its link
 	// a transaction is necessary so the service Deleter wont mark an file as unreferenced by accident
+	status = http.StatusInternalServerError
 	if err := s.Deps.DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		if status, err = ValidateFolderDestination(tx, toFolder, userId); err != nil {
+			return err
+		}
+		status = http.StatusInternalServerError
 		dbFile = models.File{
 			UUID:          fileId,
 			Hash:          FileHash,
@@ -241,6 +261,9 @@ func (s *Service) CreateFileContext(ctx context.Context, fromFile *string, toFol
 		return nil
 	}); err != nil {
 		log.Printf("Error saving file & link in database: %v", err)
+		if status != http.StatusInternalServerError {
+			return status, nil, false, err
+		}
 		return http.StatusInternalServerError, nil, false, echo.ErrInternalServerError
 	}
 	sourceOwnedByRecord = true

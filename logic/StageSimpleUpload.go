@@ -10,6 +10,7 @@ import (
 	"ch/kirari04/videocms/models"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 )
 
 // StageSimpleUpload durably stores the request body and creates the same upload
@@ -25,14 +26,8 @@ func (s *Service) StageSimpleUploadWithID(parentFolderID uint, name string, file
 	}
 	defer s.Deps.RequestGate.End(userID)
 
-	if parentFolderID > 0 {
-		var count int64
-		if err := s.Deps.DB.Model(&models.Folder{}).Where("id = ? AND user_id = ?", parentFolderID, userID).Count(&count).Error; err != nil {
-			return http.StatusInternalServerError, nil, echo.ErrInternalServerError
-		}
-		if count == 0 {
-			return http.StatusBadRequest, nil, errors.New("parent folder doesn't exist")
-		}
+	if status, err := ValidateFolderDestination(s.Deps.DB, parentFolderID, userID); err != nil {
+		return status, nil, err
 	}
 	if status, err := s.CheckStorageQuota(userID, fileSize, ""); err != nil {
 		return status, nil, err
@@ -74,9 +69,17 @@ func (s *Service) StageSimpleUploadWithID(parentFolderID uint, name string, file
 		Kind: models.UploadKindSingle, Status: models.UploadStatusUploaded, Size: fileSize, Offset: fileSize,
 		QuotaBytes: fileSize, PartCount: 1, StoragePath: tempPath, ParentFolderID: parentFolderID, UserID: userID,
 	}
-	if err := s.Deps.DB.Create(session).Error; err != nil {
+	status := http.StatusInternalServerError
+	if err := s.Deps.DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		if status, err = ValidateFolderDestination(tx, parentFolderID, userID); err != nil {
+			return err
+		}
+		status = http.StatusInternalServerError
+		return tx.Create(session).Error
+	}); err != nil {
 		_ = os.Remove(tempPath)
-		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
+		return status, nil, err
 	}
 	s.TrackUpload(userID, 0, session.ID, uint64(fileSize))
 	return http.StatusAccepted, session, nil

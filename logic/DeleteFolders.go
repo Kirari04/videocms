@@ -5,17 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+
+	"gorm.io/gorm"
 )
 
-/*
-This function shouldnt be runned in concurrency.
-The reason for that is, if the user woulf start the process of delete for the root folder
-and shortly after calls the delete method for the root folder too, it would try to list the
-whole folder tree and delete all folders & files again. To prevent that there is an map variable
-that should prevent the user from calling this method multiple times concurrently.
-*/
 func (s *Service) DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint, isAdmin bool) (status int, err error) {
-
 	if !s.Deps.RequestGate.TryStart(userID) {
 		return http.StatusTooManyRequests, errors.New("wait until the previous delete request finished")
 	}
@@ -24,100 +18,107 @@ func (s *Service) DeleteFolders(folderValidation *models.FoldersDeleteValidation
 	if len(folderValidation.FolderIDs) == 0 {
 		return http.StatusBadRequest, errors.New("array FolderIDs is empty")
 	}
-
 	if int64(len(folderValidation.FolderIDs)) > s.Config().MaxItemsMultiDelete {
 		return http.StatusBadRequest, errors.New("max requested items exceeded")
 	}
 
-	//check if requested folders exists
-	reqFolderIdDeleteMap := make(map[uint]bool, len(folderValidation.FolderIDs))
-	reqFolderIdDeleteList := []uint{}
-	var parentFolderID uint = 0
-	for i, FolderValidation := range folderValidation.FolderIDs {
-		query := s.Deps.DB.Model(&models.Folder{})
+	var links []models.Link
+	status = http.StatusInternalServerError
+	err = s.Deps.DB.Transaction(func(tx *gorm.DB) error {
+		folders, collectedLinks, collectionStatus, err := collectFolderDeletion(tx, folderValidation.FolderIDs, userID, isAdmin)
+		if err != nil {
+			status = collectionStatus
+			return err
+		}
+		links = collectedLinks
+		// Preserve the existing descendant-link limit independently of the
+		// selected-folder limit.
+		if int64(len(links)) > s.Config().MaxItemsMultiDelete {
+			status = http.StatusBadRequest
+			return errors.New("max requested items exceeded")
+		}
+		if deleteStatus, err := deleteLinksInTransaction(tx, links, userID, isAdmin); err != nil {
+			status = deleteStatus
+			return err
+		}
+		query := tx
 		if !isAdmin {
 			query = query.Where("user_id = ?", userID)
 		}
-
-		var dbFolder models.Folder
-		if res := query.First(&dbFolder, FolderValidation.FolderID); res.Error != nil {
-			return http.StatusBadRequest, fmt.Errorf("FolderID (%d) doesn't exist", FolderValidation.FolderID)
+		result := query.Delete(&models.Folder{}, folders)
+		if result.Error != nil {
+			return result.Error
 		}
-		// check if has same parent folder
-		if i == 0 {
-			parentFolderID = dbFolder.ParentFolderID
+		if result.RowsAffected != int64(len(folders)) {
+			status = http.StatusForbidden
+			return errors.New("folder ownership changed during deletion")
 		}
-		if i > 0 {
-			if parentFolderID != dbFolder.ParentFolderID {
-				return http.StatusBadRequest, fmt.Errorf(
-					"all folders have to share the same parent folder. Folder %d doesnt: %d (required) vs %d (actual)",
-					FolderValidation.FolderID,
-					parentFolderID,
-					dbFolder.ParentFolderID,
-				)
-			}
-		}
-
-		if reqFolderIdDeleteMap[FolderValidation.FolderID] {
-			return http.StatusBadRequest, fmt.Errorf(
-				"the folders have to be distinct. Folder %d is dublicate",
-				FolderValidation.FolderID,
-			)
-		}
-		// add folder to todo list
-		reqFolderIdDeleteList = append(reqFolderIdDeleteList, FolderValidation.FolderID)
-		reqFolderIdDeleteMap[FolderValidation.FolderID] = true
+		return nil
+	})
+	if err != nil {
+		return status, err
 	}
-
-	// query all containing
-	folders := []uint{}
-	files := []models.LinkDeleteValidation{}
-
-	for _, reqFolderId := range reqFolderIdDeleteList {
-		s.listFolders(reqFolderId, &folders, &files)
-		folders = append(folders, reqFolderId)
-		s.listFiles(reqFolderId, &files)
+	for _, link := range links {
+		s.RemoveLinkThumbnailFile(link)
 	}
-
-	if len(files) > 0 {
-		if status, err := s.DeleteFiles(&models.LinksDeleteValidation{
-			LinkIDs: files,
-		}, userID, isAdmin); err != nil {
-			return status, fmt.Errorf("failed to delete all files from folders: %v", err)
-		}
-	}
-
-	if res := s.Deps.DB.Delete(&models.Folder{}, folders); res.Error != nil {
-		return status, fmt.Errorf("failed to delete all folders: %v", err)
-	}
-
 	return http.StatusOK, nil
 }
 
-func (s *Service) listFolders(folderId uint, folders *[]uint, files *[]models.LinkDeleteValidation) {
-	var folderList []models.Folder
-	s.Deps.DB.Select("id").
-		Where(&models.Folder{
-			ParentFolderID: folderId,
-		}).
-		Find(&folderList)
-	for _, id := range folderList {
-		s.listFolders(id.ID, folders, files)
-		*folders = append(*folders, id.ID)
-		s.listFiles(id.ID, files)
+// collectFolderDeletion visits every live descendant, including legacy mixed
+// ownership trees. Filtering descendants by owner would strand their data.
+func collectFolderDeletion(tx *gorm.DB, roots []models.FolderDeleteValidation, userID uint, isAdmin bool) ([]uint, []models.Link, int, error) {
+	visited := make(map[uint]bool, len(roots))
+	frontier := make([]uint, 0, len(roots))
+	var parentFolderID uint
+	for i, root := range roots {
+		if visited[root.FolderID] {
+			return nil, nil, http.StatusBadRequest, fmt.Errorf("the folders have to be distinct. Folder %d is dublicate", root.FolderID)
+		}
+		var folder models.Folder
+		err := tx.First(&folder, root.FolderID).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) || (err == nil && !isAdmin && folder.UserID != userID) {
+			return nil, nil, http.StatusBadRequest, fmt.Errorf("FolderID (%d) doesn't exist", root.FolderID)
+		}
+		if err != nil {
+			return nil, nil, http.StatusInternalServerError, err
+		}
+		if i == 0 {
+			parentFolderID = folder.ParentFolderID
+		} else if folder.ParentFolderID != parentFolderID {
+			return nil, nil, http.StatusBadRequest, fmt.Errorf("all folders have to share the same parent folder. Folder %d doesnt: %d (required) vs %d (actual)", root.FolderID, parentFolderID, folder.ParentFolderID)
+		}
+		visited[folder.ID] = true
+		frontier = append(frontier, folder.ID)
 	}
-}
 
-func (s *Service) listFiles(folderId uint, files *[]models.LinkDeleteValidation) {
-	var fileList []models.Link
-	s.Deps.DB.Select("id").
-		Where(&models.Link{
-			ParentFolderID: folderId,
-		}).
-		Find(&fileList)
-	for _, id := range fileList {
-		*files = append(*files, models.LinkDeleteValidation{
-			LinkID: id.ID,
-		})
+	var folders []uint
+	var links []models.Link
+	for len(frontier) > 0 {
+		folders = append(folders, frontier...)
+		var children []models.Folder
+		if err := tx.Where("parent_folder_id IN ?", frontier).Find(&children).Error; err != nil {
+			return nil, nil, http.StatusInternalServerError, err
+		}
+		var childLinks []models.Link
+		if err := tx.Preload("File").Where("parent_folder_id IN ?", frontier).Find(&childLinks).Error; err != nil {
+			return nil, nil, http.StatusInternalServerError, err
+		}
+		for _, link := range childLinks {
+			if !isAdmin && link.UserID != userID {
+				return nil, nil, http.StatusForbidden, errors.New("folder contains a file owned by another user")
+			}
+		}
+		links = append(links, childLinks...)
+		frontier = nil
+		for _, child := range children {
+			if !isAdmin && child.UserID != userID {
+				return nil, nil, http.StatusForbidden, errors.New("folder contains a folder owned by another user")
+			}
+			if !visited[child.ID] {
+				visited[child.ID] = true
+				frontier = append(frontier, child.ID)
+			}
+		}
 	}
+	return folders, links, http.StatusOK, nil
 }

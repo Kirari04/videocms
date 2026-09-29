@@ -376,14 +376,8 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 	if err != nil {
 		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_INVALID_METADATA", "parent_folder_id must be a positive integer", http.StatusBadRequest)
 	}
-	if parentFolderID > 0 {
-		var count int64
-		if err := db.Model(&models.Folder{}).Where("id = ?", parentFolderID).Count(&count).Error; err != nil {
-			return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_DATABASE", "failed to validate parent folder", http.StatusInternalServerError)
-		}
-		if count == 0 {
-			return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_INVALID_PARENT", "parent folder doesn't exist", http.StatusBadRequest)
-		}
+	if status, err := logic.ValidateFolderDestination(db, parentFolderID, userID); err != nil {
+		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_INVALID_PARENT", err.Error(), status)
 	}
 
 	clientUploadUUID := strings.TrimSpace(info.MetaData["client_upload_uuid"])
@@ -438,7 +432,12 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 		ExpiresAt:        &expiresAt,
 	}
 
+	createStatus := http.StatusBadRequest
 	if err := db.Transaction(func(tx *gorm.DB) error {
+		if status, err := logic.ValidateFolderDestination(tx, parentFolderID, userID); err != nil {
+			createStatus = status
+			return err
+		}
 		if err := tx.Create(&session).Error; err != nil {
 			return err
 		}
@@ -478,7 +477,7 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 		}
 		return nil
 	}); err != nil {
-		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_UPLOAD_REJECTED", err.Error(), http.StatusBadRequest)
+		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_UPLOAD_REJECTED", err.Error(), createStatus)
 	}
 
 	metadata := tusd.MetaData{}
