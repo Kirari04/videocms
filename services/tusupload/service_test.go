@@ -146,13 +146,9 @@ func (env tusTestEnv) config() config.Config {
 
 func testJWT(t *testing.T, user models.User, secret string) string {
 	t.Helper()
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &tusClaims{
-		UserID:   user.ID,
-		Username: user.Username,
-		Admin:    user.Admin,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
-		},
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"userid": user.ID, "username": user.Username, "admin": user.Admin,
+		"exp": time.Now().Add(time.Hour).Unix(),
 	})
 	tokenString, err := token.SignedString([]byte(secret))
 	if err != nil {

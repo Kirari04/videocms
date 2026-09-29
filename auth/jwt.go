@@ -10,9 +10,10 @@ import (
 )
 
 type Claims struct {
-	UserID   uint   `json:"userid"`
-	Username string `json:"username"`
-	Admin    bool   `json:"admin"`
+	UserID         uint   `json:"userid"`
+	Username       string `json:"username"`
+	Admin          bool   `json:"admin"`
+	SessionVersion uint64 `json:"session_version"`
 	jwt.RegisteredClaims
 }
 
@@ -27,9 +28,10 @@ func (s *Service) GenerateTimeJWT(user models.User, expirationTime time.Time) (s
 	key := []byte(s.Config().JwtSecretKey)
 	// Create the JWT claims, which includes the username and expiry time
 	claims := &Claims{
-		UserID:   user.ID,
-		Username: user.Username,
-		Admin:    user.Admin,
+		UserID:         user.ID,
+		Username:       user.Username,
+		Admin:          user.Admin,
+		SessionVersion: user.SessionVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			// In JWT, the expiry time is expressed as unix milliseconds
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
@@ -56,41 +58,45 @@ func (s *Service) VerifyJWT(tknStr string) (*jwt.Token, *Claims, error) {
 	// or if the signature does not match
 	tkn, err := jwt.ParseWithClaims(tknStr, claims, func(token *jwt.Token) (interface{}, error) {
 		return key, nil
-	})
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
 	if err != nil {
 		return nil, nil, err
 	}
+	if !tkn.Valid || claims.UserID == 0 {
+		return nil, nil, errors.New("invalid jwt key")
+	}
+	if s == nil || s.Deps == nil || s.Deps.DB == nil {
+		return nil, nil, errors.New("database dependency is nil")
+	}
+	var user models.User
+	if err := s.Deps.DB.First(&user, claims.UserID).Error; err != nil {
+		return nil, nil, err
+	}
+	// Missing versions in legacy tokens decode as zero, which remains valid
+	// only until the account's first password or privilege change.
+	if claims.SessionVersion != user.SessionVersion {
+		return nil, nil, errors.New("jwt session revoked")
+	}
+	claims.Username = user.Username
+	claims.Admin = user.Admin
 	return tkn, claims, nil
 }
 
 func (s *Service) RefreshJWT(tknStr string) (string, time.Time, error) {
-	key := []byte(s.Config().JwtSecretKey)
-	claims := &Claims{}
-	tkn, err := jwt.ParseWithClaims(tknStr, claims, func(token *jwt.Token) (interface{}, error) {
-		return key, nil
-	})
+	_, claims, err := s.VerifyJWT(tknStr)
 	if err != nil {
 		return "", time.Now(), errors.New("Malformated jwt key")
-	}
-	if !tkn.Valid {
-		return "", time.Now(), errors.New("Invalid jwt key")
 	}
 
 	// We ensure that a new token is not issued until enough time has elapsed
 	// In this case, a new token will only be issued if the old token is within
-	// 30 seconds of expiry. Otherwise, return a bad request status
+	// five minutes of expiry. Otherwise, return a bad request status
 	if time.Until(claims.ExpiresAt.Time) > 5*time.Minute {
-		return "", time.Now(), errors.New(fmt.Sprintf("Wait until time to expire: %v", claims.ExpiresAt.Time.String()))
+		return "", time.Now(), fmt.Errorf("Wait until time to expire: %v", claims.ExpiresAt.Time.String())
 	}
 
-	// Now, create a n ew token for the current use, with a renewed expiration time
-	expirationTime := time.Now().Add(sessionDuration)
-	claims.ExpiresAt = jwt.NewNumericDate(expirationTime)
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(key)
-	if err != nil {
-		return "", time.Now(), err
-	}
-
-	return tokenString, expirationTime, nil
+	return s.GenerateJWT(models.User{
+		Model: models.Model{ID: claims.UserID}, Username: claims.Username,
+		Admin: claims.Admin, SessionVersion: claims.SessionVersion,
+	})
 }

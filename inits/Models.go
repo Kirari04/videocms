@@ -54,6 +54,15 @@ func MigrateModels(gormDB *gorm.DB) error {
 		}
 	}
 
+	// Normalize a pre-existing nullable version before AutoMigrate applies the
+	// non-null constraint. New columns use zero for untouched legacy accounts.
+	if gormDB.Migrator().HasColumn(&models.User{}, "session_version") {
+		if err := gormDB.Unscoped().Model(&models.User{}).
+			Where("session_version IS NULL").
+			UpdateColumn("session_version", 0).Error; err != nil {
+			return fmt.Errorf("failed to backfill user session versions: %w", err)
+		}
+	}
 	if err := gormDB.AutoMigrate(
 		&models.StorageMount{},
 		&models.StoragePool{},
