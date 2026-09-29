@@ -16,10 +16,9 @@ that should prevent the user from calling this method multiple times concurrentl
 */
 func (s *Service) DeleteFolders(folderValidation *models.FoldersDeleteValidation, userID uint, isAdmin bool) (status int, err error) {
 
-	if s.Deps.RequestGate.Blocked(userID) {
+	if !s.Deps.RequestGate.TryStart(userID) {
 		return http.StatusTooManyRequests, errors.New("wait until the previous delete request finished")
 	}
-	s.Deps.RequestGate.Start(userID)
 	defer s.Deps.RequestGate.End(userID)
 
 	if len(folderValidation.FolderIDs) == 0 {

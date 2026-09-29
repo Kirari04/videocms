@@ -15,10 +15,9 @@ import (
 
 func (s *Service) SimpleUpload(parentFolderID uint, name string, file io.Reader, fileSize int64, userID uint) (status int, response *models.Link, err error) {
 	// check if user is blocked by another asynchronous user operation
-	if s.Deps.RequestGate.Blocked(userID) {
+	if !s.Deps.RequestGate.TryStart(userID) {
 		return http.StatusTooManyRequests, nil, errors.New("wait until the previous delete request finished")
 	}
-	s.Deps.RequestGate.Start(userID)
 	defer s.Deps.RequestGate.End(userID)
 
 	// check parent folder

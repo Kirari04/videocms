@@ -20,10 +20,9 @@ func (s *Service) StageSimpleUpload(parentFolderID uint, name string, file io.Re
 }
 
 func (s *Service) StageSimpleUploadWithID(parentFolderID uint, name string, file io.Reader, fileSize int64, userID uint, uploadID string) (int, *models.UploadSession, error) {
-	if s.Deps.RequestGate.Blocked(userID) {
+	if !s.Deps.RequestGate.TryStart(userID) {
 		return http.StatusTooManyRequests, nil, errors.New("wait until the previous delete request finished")
 	}
-	s.Deps.RequestGate.Start(userID)
 	defer s.Deps.RequestGate.End(userID)
 
 	if parentFolderID > 0 {
