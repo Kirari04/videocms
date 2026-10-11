@@ -81,9 +81,9 @@ func TestMoveItemsValidatesEntireSelectionBeforeUpdates(t *testing.T) {
 		want int
 	}{
 		{"missing folder", http.StatusBadRequest},
-		{"forbidden folder", http.StatusForbidden},
+		{"forbidden folder", http.StatusBadRequest},
 		{"missing link", http.StatusBadRequest},
-		{"forbidden link", http.StatusForbidden},
+		{"forbidden link", http.StatusBadRequest},
 		{"self folder", http.StatusBadRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -183,8 +183,8 @@ func TestMoveItemsPreservesRootAndAdminOwnershipPolicy(t *testing.T) {
 		{"admin folder owner mismatch", false, true, 2, 1, 1, http.StatusBadRequest},
 		{"admin link owner mismatch", false, true, 1, 2, 1, http.StatusBadRequest},
 		{"admin root mixed owners", true, true, 2, 3, 1, http.StatusOK},
-		{"foreign target", false, false, 1, 1, 2, http.StatusForbidden},
-		{"foreign root item", true, false, 2, 2, 1, http.StatusForbidden},
+		{"foreign target", false, false, 1, 1, 2, http.StatusBadRequest},
+		{"foreign root item", true, false, 2, 2, 1, http.StatusBadRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			service, db := newMoveItemsTestService(t)

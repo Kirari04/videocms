@@ -2,11 +2,16 @@ package auth
 
 import (
 	"ch/kirari04/videocms/models"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+	"gorm.io/gorm/clause"
 )
 
 type Claims struct {
@@ -25,7 +30,15 @@ func (s *Service) GenerateJWT(user models.User) (string, time.Time, error) {
 }
 
 func (s *Service) GenerateTimeJWT(user models.User, expirationTime time.Time) (string, time.Time, error) {
-	key := []byte(s.Config().JwtSecretKey)
+	id, err := uuid.NewRandom()
+	if err != nil {
+		return "", time.Now(), err
+	}
+	return s.generateSessionJWT(user, expirationTime, id.String(), s.Config().JwtSecretKey)
+}
+
+func (s *Service) generateSessionJWT(user models.User, expirationTime time.Time, sessionID, signingKey string) (string, time.Time, error) {
+	key := []byte(signingKey)
 	// Create the JWT claims, which includes the username and expiry time
 	claims := &Claims{
 		UserID:         user.ID,
@@ -33,6 +46,8 @@ func (s *Service) GenerateTimeJWT(user models.User, expirationTime time.Time) (s
 		Admin:          user.Admin,
 		SessionVersion: user.SessionVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:       sessionID,
+			IssuedAt: jwt.NewNumericDate(time.Now()),
 			// In JWT, the expiry time is expressed as unix milliseconds
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 		},
@@ -49,7 +64,30 @@ func (s *Service) GenerateTimeJWT(user models.User, expirationTime time.Time) (s
 }
 
 func (s *Service) VerifyJWT(tknStr string) (*jwt.Token, *Claims, error) {
-	key := []byte(s.Config().JwtSecretKey)
+	return s.verifyJWTWithKey(tknStr, s.Config().JwtSecretKey)
+}
+
+func (s *Service) verifyJWTWithKey(tknStr, signingKey string) (*jwt.Token, *Claims, error) {
+	tkn, claims, err := s.verifyJWTIdentity(tknStr, signingKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	var revoked int64
+	if err := s.Deps.DB.Model(&models.RevokedAuthSession{}).
+		Where("session_id = ? AND user_id = ?", sessionIdentifier(claims, tknStr), claims.UserID).Count(&revoked).Error; err != nil {
+		return nil, nil, err
+	}
+	if revoked != 0 {
+		return nil, nil, errors.New("jwt session revoked")
+	}
+	return tkn, claims, nil
+}
+
+// verifyJWTIdentity validates the signature, expiry and live account state.
+// API access and refresh also require the revocation check above. Logout may
+// accept an already-revoked session so a lost response can be retried safely.
+func (s *Service) verifyJWTIdentity(tknStr, signingKey string) (*jwt.Token, *Claims, error) {
+	key := []byte(signingKey)
 	claims := &Claims{}
 
 	// Parse the JWT string and store the result in `claims`.
@@ -83,7 +121,10 @@ func (s *Service) VerifyJWT(tknStr string) (*jwt.Token, *Claims, error) {
 }
 
 func (s *Service) RefreshJWT(tknStr string) (string, time.Time, error) {
-	_, claims, err := s.VerifyJWT(tknStr)
+	// Verification and reissuance must use the same key. A concurrent rotation
+	// then invalidates this result instead of upgrading an old session's key.
+	signingKey := s.Config().JwtSecretKey
+	_, claims, err := s.verifyJWTWithKey(tknStr, signingKey)
 	if err != nil {
 		return "", time.Now(), errors.New("Malformated jwt key")
 	}
@@ -95,8 +136,29 @@ func (s *Service) RefreshJWT(tknStr string) (string, time.Time, error) {
 		return "", time.Now(), fmt.Errorf("Wait until time to expire: %v", claims.ExpiresAt.Time.String())
 	}
 
-	return s.GenerateJWT(models.User{
+	return s.generateSessionJWT(models.User{
 		Model: models.Model{ID: claims.UserID}, Username: claims.Username,
 		Admin: claims.Admin, SessionVersion: claims.SessionVersion,
-	})
+	}, time.Now().Add(sessionDuration), sessionIdentifier(claims, tknStr), signingKey)
+}
+
+func sessionIdentifier(claims *Claims, token string) string {
+	if claims.ID != "" {
+		return claims.ID
+	}
+	// The signature's base64url text can have equivalent encodings. Identify
+	// legacy sessions by the immutable signed header and claims instead.
+	signedInput := token[:strings.LastIndexByte(token, '.')]
+	digest := sha256.Sum256([]byte(signedInput))
+	return "legacy:" + hex.EncodeToString(digest[:])
+}
+
+func (s *Service) RevokeJWT(token string) error {
+	_, claims, err := s.verifyJWTIdentity(token, s.Config().JwtSecretKey)
+	if err != nil {
+		return err
+	}
+	return s.Deps.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&models.RevokedAuthSession{
+		SessionID: sessionIdentifier(claims, token), UserID: claims.UserID, RevokedAt: time.Now(),
+	}).Error
 }

@@ -11,6 +11,7 @@ A self-hosted Content Management System for your videos. 🎞️
 
 ## Features ✨
 
+- **🔗 Public Video Links:** Videos are public by default through unlisted UUID links; anyone with a link can watch without an account.
 - **🏠 Self-host:** Host VideoCMS using Docker on your own hardware.
 - **✍️ Pretty Subtitles:** Subtitles are stored as softsubs in the ASS format to preserve styling and save storage.
 - **⚡ HLS Multi-Quality:** Videos are converted into multiple qualities to ensure smooth playback for different connection speeds.

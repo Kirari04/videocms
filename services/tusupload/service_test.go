@@ -89,6 +89,7 @@ func setupTusTest(t *testing.T) tusTestEnv {
 
 	if err := db.AutoMigrate(
 		&models.User{},
+		&models.RevokedAuthSession{},
 		&models.Folder{},
 		&models.File{},
 		&models.Link{},

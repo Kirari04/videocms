@@ -19,7 +19,6 @@ require (
 	github.com/pkg/sftp v1.13.11
 	github.com/thatisuday/commando v1.0.4
 	github.com/tus/tusd/v2 v2.10.0
-	github.com/xyproto/randomstring v1.2.0
 	github.com/yuin/goldmark v1.8.5
 	golang.org/x/net v0.58.0
 	golang.org/x/term v0.45.0

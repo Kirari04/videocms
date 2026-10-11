@@ -96,6 +96,25 @@ func TestDeletedAPIKeyOwnerRejectedAtEveryBoundary(t *testing.T) {
 	assertSessionBoundariesWithoutRefresh(t, h, key.Key, true)
 }
 
+func TestServerLogoutRevokesEveryJWTConsumerAndKeepsAPIKeys(t *testing.T) {
+	h, user := newSessionHandlers(t)
+	token := legacySessionToken(t, h, user)
+	key := models.ApiKey{UserID: user.ID, Key: "ak_session-logout-control", Name: "test"}
+	if err := h.Deps.DB.Create(&key).Error; err != nil {
+		t.Fatal(err)
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		if err := h.AuthLogout(echo.New().NewContext(req, rec)); err != nil || rec.Code != http.StatusNoContent {
+			t.Fatalf("logout attempt %d: %d %v", attempt, rec.Code, err)
+		}
+	}
+	assertSessionBoundaries(t, h, token, true)
+	assertSessionBoundariesWithoutRefresh(t, h, key.Key, false)
+}
+
 func TestConcurrentSessionRevocationsDoNotLoseVersion(t *testing.T) {
 	h, user := newSessionHandlers(t)
 	token := legacySessionToken(t, h, user)
@@ -245,7 +264,7 @@ func newSessionHandlers(t *testing.T) (*Handlers, models.User) {
 	}
 	sqlDB.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	if err := db.AutoMigrate(&models.User{}, &models.ApiKey{}, &models.ApiKeyAuditLog{}, &models.UploadSession{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.RevokedAuthSession{}, &models.ApiKey{}, &models.ApiKeyAuditLog{}, &models.UploadSession{}); err != nil {
 		t.Fatal(err)
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte("original-password"), bcrypt.MinCost)

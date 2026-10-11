@@ -17,16 +17,13 @@ func (h *Handlers) UpdateFile(c echo.Context) error {
 	}
 
 	var dbLink models.Link
-	//check if requested file /link id exists
-	if res := h.Deps.DB.First(&dbLink, linkValidation.LinkID); res.Error != nil {
-		return c.String(http.StatusBadRequest, "File doesn't exist")
+	query := h.Deps.DB
+	if isAdmin, _ := c.Get("Admin").(bool); !isAdmin {
+		query = query.Where("user_id = ?", c.Get("UserID").(uint))
 	}
-
-	// Verify ownership
-	userID := c.Get("UserID").(uint)
-	isAdmin, _ := c.Get("Admin").(bool)
-	if !isAdmin && dbLink.UserID != userID {
-		return c.String(http.StatusForbidden, "Unauthorized access to file")
+	//check if requested file /link id exists
+	if res := query.First(&dbLink, linkValidation.LinkID); res.Error != nil {
+		return c.String(http.StatusBadRequest, "File doesn't exist")
 	}
 
 	//update link data

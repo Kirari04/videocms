@@ -283,6 +283,8 @@ func (s *Service) CreateFileContext(ctx context.Context, fromFile *string, toFol
 		if autoLang := subtitleStream.Tags.Language; autoLang != "" && len(autoLang) < 10 {
 			subtitleLang = autoLang
 		}
+		subtitleName = helpers.SafeMediaLabel(subtitleName, fmt.Sprintf("Subtitle %v", index+1), 120)
+		subtitleLang = helpers.SafeMediaLabel(subtitleLang, "und", 10)
 
 		// log.Printf("subtitleName: %s / subtitleLang: %s", subtitleStream.Tags.Title, subtitleStream.Tags.Language)
 		for _, subOpt := range models.AvailableSubtitles {
@@ -326,6 +328,8 @@ func (s *Service) CreateFileContext(ctx context.Context, fromFile *string, toFol
 		if autoLang, err := audioStream.TagList.GetString("language"); err == nil && autoLang != "" && len(autoLang) < 10 {
 			audioLang = autoLang
 		}
+		audioName = helpers.SafeMediaLabel(audioName, fmt.Sprintf("Audio %v", index+1), 120)
+		audioLang = helpers.SafeMediaLabel(audioLang, "und", 10)
 
 		// log.Printf(" audioName: %s /  audioLang: %s", audioName, audioLang)
 

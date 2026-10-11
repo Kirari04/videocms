@@ -120,7 +120,7 @@ func newJWTTestService(t *testing.T) (*Service, models.User) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	if err := db.AutoMigrate(&models.User{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.RevokedAuthSession{}); err != nil {
 		t.Fatal(err)
 	}
 	user := models.User{Username: "current-name"}

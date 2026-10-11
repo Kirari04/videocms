@@ -20,14 +20,18 @@ func (s *Service) MoveItems(userId uint, targetFolderId uint, folderIds []uint, 
 			return errors.New(message)
 		}
 
+		query := func() *gorm.DB {
+			if !isAdmin {
+				return tx.Where("user_id = ?", userId)
+			}
+			return tx
+		}
+
 		var targetFolderOwnerID uint
 		if targetFolderId > 0 {
 			var targetFolder models.Folder
-			if res := tx.First(&targetFolder, targetFolderId); res.Error != nil {
+			if res := query().First(&targetFolder, targetFolderId); res.Error != nil {
 				return fail(http.StatusBadRequest, "target folder doesn't exist")
-			}
-			if !isAdmin && targetFolder.UserID != userId {
-				return fail(http.StatusForbidden, "unauthorized access to target folder")
 			}
 			targetFolderOwnerID = targetFolder.UserID
 		}
@@ -40,11 +44,8 @@ func (s *Service) MoveItems(userId uint, targetFolderId uint, folderIds []uint, 
 			}
 
 			var folder models.Folder
-			if res := tx.First(&folder, folderId); res.Error != nil {
+			if res := query().First(&folder, folderId); res.Error != nil {
 				return fail(http.StatusBadRequest, "folder to move not found")
-			}
-			if !isAdmin && folder.UserID != userId {
-				return fail(http.StatusForbidden, "unauthorized access to folder")
 			}
 			if targetFolderId > 0 && folder.UserID != targetFolderOwnerID {
 				return fail(http.StatusBadRequest, "cannot move folder to a destination owned by another user")
@@ -63,11 +64,8 @@ func (s *Service) MoveItems(userId uint, targetFolderId uint, folderIds []uint, 
 
 		for _, linkId := range linkIds {
 			var link models.Link
-			if res := tx.First(&link, linkId); res.Error != nil {
+			if res := query().First(&link, linkId); res.Error != nil {
 				return fail(http.StatusBadRequest, "file to move not found")
-			}
-			if !isAdmin && link.UserID != userId {
-				return fail(http.StatusForbidden, "unauthorized access to file")
 			}
 			if targetFolderId > 0 && link.UserID != targetFolderOwnerID {
 				return fail(http.StatusBadRequest, "cannot move file to a destination owned by another user")
