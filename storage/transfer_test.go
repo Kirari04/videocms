@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,6 +88,144 @@ func TestPublishAndMaterializePrefix(t *testing.T) {
 	}
 	if string(data) != "segment" {
 		t.Fatalf("materialized segment = %q", data)
+	}
+}
+
+func TestMaterializePrefixesReportsPartialObjectAndCombinedByteProgress(t *testing.T) {
+	ctx := context.Background()
+	backing, err := NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := NewLocalWorkspace(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewServiceWithWorkspace("remote", LegacyMediaLayout{}, workspace, map[string]Store{
+		"remote": opaqueStore{Store: backing},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	objects := []struct {
+		key  string
+		data string
+	}{
+		{"file/video/nested/out0.ts", strings.Repeat("v", 1024*1024)},
+		{"file/audio/audio0.ts", strings.Repeat("a", 512*1024)},
+		{"file/subtitle/out.vtt", "text"},
+	}
+	var totalBytes int64
+	for _, object := range objects {
+		totalBytes += int64(len(object.data))
+		if _, err := backing.Put(ctx, mustParseKey(t, object.key), strings.NewReader(object.data), PutOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var updates []float64
+	paths, cleanup, err := service.MaterializePrefixes(ctx, "remote", []PrefixMaterialization{
+		{Prefix: mustParseKey(t, "file/video"), Purpose: "download-quality"},
+		{Prefix: mustParseKey(t, "file/audio"), Purpose: "download-audio"},
+		{Prefix: mustParseKey(t, "file/subtitle"), Purpose: "download-subtitle"},
+	}, func(value float64) { updates = append(updates, value) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if len(updates) < 3 || updates[0] != 0 || updates[len(updates)-1] != 1 {
+		t.Fatalf("progress updates = %v, want partial progress between 0 and 1", updates)
+	}
+	// The first update must measure a partial video object against every track,
+	// rather than wait for an entire object or treat each track as equally sized.
+	wantFirst := float64(128*1024) / float64(totalBytes)
+	if math.Abs(updates[1]-wantFirst) > 1e-9 {
+		t.Fatalf("first byte progress = %v, want %v", updates[1], wantFirst)
+	}
+	for index := 1; index < len(updates); index++ {
+		if updates[index] < updates[index-1] || updates[index] > 1 {
+			t.Fatalf("progress is not monotonic: %v", updates)
+		}
+	}
+	for index, relative := range []string{"nested/out0.ts", "audio0.ts", "out.vtt"} {
+		data, err := os.ReadFile(filepath.Join(paths[index], relative))
+		if err != nil || string(data) != objects[index].data {
+			t.Fatalf("materialized %s differs: %v", relative, err)
+		}
+	}
+}
+
+func TestMaterializePrefixesCleansScratchOnFailureOrCancellation(t *testing.T) {
+	for _, canceled := range []bool{false, true} {
+		t.Run(map[bool]string{false: "size_mismatch", true: "canceled"}[canceled], func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			backing, err := NewLocalStore(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			workspaceRoot := t.TempDir()
+			workspace, err := NewLocalWorkspace(workspaceRoot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			store := Store(opaqueStore{Store: backing})
+			if !canceled {
+				store = wrongSizeStore{Store: backing}
+			}
+			service, err := NewServiceWithWorkspace("remote", LegacyMediaLayout{}, workspace, map[string]Store{"remote": store})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := backing.Put(ctx, mustParseKey(t, "file/video/out0.ts"), strings.NewReader(strings.Repeat("v", 256*1024)), PutOptions{}); err != nil {
+				t.Fatal(err)
+			}
+			completed := false
+			_, _, err = service.MaterializePrefixes(ctx, "remote", []PrefixMaterialization{
+				{Prefix: mustParseKey(t, "file/video"), Purpose: "download-quality"},
+			}, func(value float64) {
+				completed = completed || value == 1
+				if canceled && value > 0 {
+					cancel()
+				}
+			})
+			if err == nil || completed {
+				t.Fatalf("failed materialization = %v, completed = %v", err, completed)
+			}
+			if canceled && !errors.Is(err, context.Canceled) {
+				t.Fatalf("materialization error = %v, want context.Canceled", err)
+			}
+			entries, err := os.ReadDir(workspaceRoot)
+			if err != nil || len(entries) != 0 {
+				t.Fatalf("scratch after failure = %v, %v", entries, err)
+			}
+		})
+	}
+}
+
+func TestMaterializePrefixesUsesLocalPathsWithoutTransferProgress(t *testing.T) {
+	ctx := context.Background()
+	backing, err := NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewService("local", LegacyMediaLayout{}, map[string]Store{"local": backing})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := backing.Put(ctx, mustParseKey(t, "file/video/out0.ts"), strings.NewReader("video"), PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	paths, cleanup, err := service.MaterializePrefixes(ctx, "local", []PrefixMaterialization{
+		{Prefix: mustParseKey(t, "file/video"), Purpose: "download-quality"},
+	}, func(float64) { t.Error("local paths must not report transfer progress") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanup(); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(filepath.Join(paths[0], "out0.ts")); err != nil || string(data) != "video" {
+		t.Fatalf("local source after cleanup = %q, %v", data, err)
 	}
 }
 

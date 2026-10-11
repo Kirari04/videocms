@@ -109,6 +109,7 @@ func (w *WorkerGroup) loadDownloadPreparationTasks(ctx context.Context) {
 				"started_at":    &now,
 				"finished_at":   nil,
 				"progress":      0,
+				"phase":         "",
 				"error_code":    "",
 				"error_message": "",
 			})
@@ -200,39 +201,7 @@ func (w *WorkerGroup) processDownloadPreparation(parentCtx context.Context, job 
 	timeout := w.preparationTimeout(job.MediaDuration)
 	jobCtx, cancelTimeout := context.WithTimeout(parentCtx, timeout)
 	defer cancelTimeout()
-	cleanupInputs, err := downloadsvc.MaterializeSelection(jobCtx, w.deps.Storage, &link.File, selection)
-	if err != nil {
-		w.failDownloadJob(&job, "source_unavailable", "The selected tracks could not be prepared.", err)
-		return
-	}
-	defer cleanupInputs()
-
-	var progressMu sync.Mutex
-	lastProgress := float64(0)
-	lastUpdate := time.Time{}
-	progressFn := func(value float64) {
-		if value >= 1 {
-			value = 0.99
-		}
-		if value < 0 {
-			value = 0
-		}
-		progressMu.Lock()
-		defer progressMu.Unlock()
-		if time.Since(lastUpdate) < time.Second || value-lastProgress < 0.005 {
-			return
-		}
-		lastProgress = value
-		lastUpdate = time.Now()
-		background.ReportProgress(jobCtx, value, "Preparing download")
-		_ = w.deps.DB.Model(&models.DownloadJob{}).
-			Where("id = ? AND status = ?", job.ID, models.DownloadJobStatusPreparing).
-			Update("progress", value).Error
-	}
-
-	started := time.Now()
-	err = w.downloadAssembler.Assemble(jobCtx, selection, partPath, progressFn)
-	if err != nil {
+	failPreparation := func(code, message string, cause error) {
 		if parentCtx.Err() != nil {
 			return
 		}
@@ -242,10 +211,64 @@ func (w *WorkerGroup) processDownloadPreparation(parentCtx context.Context, job 
 			return
 		}
 		if errors.Is(jobCtx.Err(), context.DeadlineExceeded) {
-			w.failDownloadJob(&job, "preparation_timeout", "Preparing this download took too long.", err)
+			w.failDownloadJob(&job, "preparation_timeout", "Preparing this download took too long.", cause)
 			return
 		}
-		w.failDownloadJob(&job, "preparation_failed", "The server could not prepare this download.", err)
+		w.failDownloadJob(&job, code, message, cause)
+	}
+
+	var progressMu sync.Mutex
+	lastProgress := float64(0)
+	lastUpdate := time.Time{}
+	lastPhase := ""
+	reportProgress := func(value float64, phase string) {
+		if value >= 1 {
+			value = 0.99
+		}
+		if value < 0 {
+			value = 0
+		}
+		progressMu.Lock()
+		defer progressMu.Unlock()
+		value = max(lastProgress, value)
+		phaseChanged := phase != lastPhase
+		firstBytes := lastProgress == 0 && value > 0
+		if jobCtx.Err() != nil || (!phaseChanged && (value == lastProgress || (!firstBytes && time.Since(lastUpdate) < time.Second))) {
+			return
+		}
+		lastProgress = value
+		lastPhase = phase
+		lastUpdate = time.Now()
+		message := "Assembling download tracks"
+		if phase == models.DownloadJobPhaseFetching {
+			message = "Fetching download tracks"
+		}
+		background.ReportProgress(jobCtx, value, message)
+		_ = w.deps.DB.Model(&models.DownloadJob{}).
+			Where("id = ? AND status = ?", job.ID, models.DownloadJobStatusPreparing).
+			Updates(map[string]interface{}{"progress": value, "phase": phase}).Error
+	}
+
+	started := time.Now()
+	reportProgress(0, models.DownloadJobPhaseFetching)
+	// Remote inputs occupy the first half; local paths need no transfer stage.
+	const transferWeight = 0.5
+	assemblyStart := float64(0)
+	cleanupInputs, err := downloadsvc.MaterializeSelectionWithProgress(jobCtx, w.deps.Storage, &link.File, selection, func(value float64) {
+		assemblyStart = transferWeight
+		reportProgress(value*transferWeight, models.DownloadJobPhaseFetching)
+	})
+	if err != nil {
+		failPreparation("source_unavailable", "The selected tracks could not be prepared.", err)
+		return
+	}
+	defer cleanupInputs()
+	reportProgress(assemblyStart, models.DownloadJobPhaseAssembling)
+	err = w.downloadAssembler.Assemble(jobCtx, selection, partPath, func(value float64) {
+		reportProgress(assemblyStart+(1-assemblyStart)*value, models.DownloadJobPhaseAssembling)
+	})
+	if err != nil {
+		failPreparation("preparation_failed", "The server could not prepare this download.", err)
 		return
 	}
 
@@ -270,6 +293,7 @@ func (w *WorkerGroup) processDownloadPreparation(parentCtx context.Context, job 
 		Where("id = ? AND status = ?", job.ID, models.DownloadJobStatusPreparing).
 		Updates(map[string]interface{}{
 			"status":        models.DownloadJobStatusReady,
+			"phase":         "",
 			"progress":      1,
 			"output_path":   finalPath,
 			"output_size":   info.Size(),
@@ -367,6 +391,7 @@ func (w *WorkerGroup) recoverDownloadPreparations() {
 		Where("status = ?", models.DownloadJobStatusPreparing).
 		Updates(map[string]interface{}{
 			"status":     models.DownloadJobStatusQueued,
+			"phase":      "",
 			"progress":   0,
 			"started_at": nil,
 		})

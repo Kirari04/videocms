@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -114,6 +116,53 @@ func TestS3StoreConformance(t *testing.T) {
 	}
 	if _, err := store.Open(ctx, key); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Open() after delete error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestS3MaterializationReportsProgressDuringResumedReads(t *testing.T) {
+	ctx := context.Background()
+	backend := newMemoryS3(1)
+	backend.interruptReads = 1
+	backend.interruptAfter = 64 * 1024
+	store := newS3Store(S3Options{Bucket: "media"}, backend, backend)
+	data := strings.Repeat("video", 64*1024)
+	videoKey := mustParseKey(t, "file/video/out0.ts")
+	if _, err := store.Put(ctx, videoKey, strings.NewReader(data), PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Put(ctx, mustParseKey(t, "file/audio/audio0.ts"), strings.NewReader("audio"), PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := NewLocalWorkspace(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewServiceWithWorkspace("s3", LegacyMediaLayout{}, workspace, map[string]Store{"s3": store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var updates []float64
+	paths, cleanup, err := service.MaterializePrefixes(ctx, "s3", []PrefixMaterialization{
+		{Prefix: mustParseKey(t, "file/video"), Purpose: "download-quality"},
+		{Prefix: mustParseKey(t, "file/audio"), Purpose: "download-audio"},
+	}, func(value float64) { updates = append(updates, value) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if len(updates) < 3 || updates[1] <= 0 || updates[1] >= float64(len(data))/float64(len(data)+5) || updates[len(updates)-1] != 1 {
+		t.Fatalf("S3 byte progress = %v, want partial video progress and completion", updates)
+	}
+	for index := 1; index < len(updates); index++ {
+		if updates[index] < updates[index-1] {
+			t.Fatalf("S3 retry moved progress backward: %v", updates)
+		}
+	}
+	if got, err := os.ReadFile(filepath.Join(paths[0], "out0.ts")); err != nil || string(got) != data {
+		t.Fatalf("materialized S3 video differs: %v", err)
+	}
+	if got := backend.getRanges(); len(got) != 3 || got[1] != "bytes=65536-" {
+		t.Fatalf("S3 ranges = %v, want interrupted read resumed from byte 65536", got)
 	}
 }
 

@@ -59,6 +59,7 @@ type downloadJobError struct {
 type downloadJobResponse struct {
 	ID                        string              `json:"id"`
 	Status                    string              `json:"status"`
+	Phase                     string              `json:"phase,omitempty"`
 	Progress                  float64             `json:"progress"`
 	QueuePosition             *int                `json:"queuePosition"`
 	EstimatedSecondsRemaining *int                `json:"estimatedSecondsRemaining"`
@@ -402,6 +403,7 @@ func (h *Handlers) buildDownloadJobResponse(
 		response.RetryAfterSeconds = 0
 	}
 	if job.Status == models.DownloadJobStatusPreparing {
+		response.Phase = job.Phase
 		response.RetryAfterSeconds = 2
 	}
 	if job.Status == models.DownloadJobStatusQueued {
