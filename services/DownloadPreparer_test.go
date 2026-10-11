@@ -6,6 +6,7 @@ import (
 	downloadsvc "ch/kirari04/videocms/download"
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
+	"ch/kirari04/videocms/storage"
 	"context"
 	"errors"
 	"os"
@@ -20,8 +21,9 @@ import (
 )
 
 type fakeDownloadAssembler struct {
-	data []byte
-	err  error
+	data    []byte
+	err     error
+	inspect func(*downloadsvc.Selection, func(float64))
 }
 
 type timeoutDownloadAssembler struct{}
@@ -61,7 +63,7 @@ func (f *countingDownloadAssembler) Assemble(
 
 func (f fakeDownloadAssembler) Assemble(
 	ctx context.Context,
-	_ *downloadsvc.Selection,
+	selection *downloadsvc.Selection,
 	outputPath string,
 	progress func(float64),
 ) error {
@@ -70,6 +72,9 @@ func (f fakeDownloadAssembler) Assemble(
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if f.inspect != nil {
+		f.inspect(selection, progress)
 	}
 	if progress != nil {
 		progress(0.5)
@@ -98,6 +103,203 @@ func TestProcessDownloadPreparationCreatesReadyArtifact(t *testing.T) {
 	}
 	if data, err := os.ReadFile(updated.OutputPath); err != nil || string(data) != "prepared" {
 		t.Fatalf("prepared file = %q, %v", string(data), err)
+	}
+}
+
+type observedDownloadPreparationStore struct {
+	storage.Store
+	beforeRead func(context.Context, int64) error
+}
+
+func (s observedDownloadPreparationStore) Open(ctx context.Context, key storage.Key) (*storage.Object, error) {
+	object, err := s.Store.Open(ctx, key)
+	if err == nil {
+		object.Body = &observedDownloadPreparationReader{ReadSeekCloser: object.Body, ctx: ctx, beforeRead: s.beforeRead}
+	}
+	return object, err
+}
+
+type observedDownloadPreparationReader struct {
+	storage.ReadSeekCloser
+	ctx        context.Context
+	beforeRead func(context.Context, int64) error
+	readBytes  int64
+}
+
+func (r *observedDownloadPreparationReader) Read(buffer []byte) (int, error) {
+	if r.beforeRead != nil {
+		if err := r.beforeRead(r.ctx, r.readBytes); err != nil {
+			return 0, err
+		}
+	}
+	count, err := r.ReadSeekCloser.Read(buffer)
+	r.readBytes += int64(count)
+	return count, err
+}
+
+func downloadPreparationTestStorage(t *testing.T, worker *WorkerGroup, job *models.DownloadJob, wrap func(storage.Store) storage.Store) (string, string) {
+	t.Helper()
+	backing, err := storage.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file models.File
+	if err := worker.deps.DB.First(&file, job.FileID).Error; err != nil {
+		t.Fatal(err)
+	}
+	key, err := storage.ParseKey(file.UUID + "/720p/out0.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := backing.Put(context.Background(), key, strings.NewReader(strings.Repeat("v", 256*1024)), storage.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	workspaceRoot := t.TempDir()
+	workspace, err := storage.NewLocalWorkspace(workspaceRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := storage.NewServiceWithWorkspace("test", storage.LegacyMediaLayout{}, workspace, map[string]storage.Store{"test": wrap(backing)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	worker.deps.Storage = service
+	t.Cleanup(func() { _ = service.Close() })
+	localPath, err := backing.LocalPath(context.Background(), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return workspaceRoot, localPath
+}
+
+func TestProcessDownloadPreparationReportsProgressBeforeRemoteInputsFinish(t *testing.T) {
+	worker, job, _ := downloadPreparerTestWorker(t)
+	observedPartial := false
+	workspaceRoot, _ := downloadPreparationTestStorage(t, worker, job, func(backing storage.Store) storage.Store {
+		return observedDownloadPreparationStore{Store: backing, beforeRead: func(_ context.Context, readBytes int64) error {
+			if readBytes == 128*1024 {
+				var current models.DownloadJob
+				if err := worker.deps.DB.First(&current, job.ID).Error; err != nil {
+					return err
+				}
+				if current.Status != models.DownloadJobStatusPreparing || current.Phase != models.DownloadJobPhaseFetching || current.Progress <= 0 || current.Progress >= 0.5 {
+					t.Fatalf("job while first object is partially fetched = %#v", current)
+				}
+				observedPartial = true
+			}
+			return nil
+		}}
+	})
+	assembled := false
+	worker.downloadAssembler = fakeDownloadAssembler{data: []byte("prepared"), inspect: func(selection *downloadsvc.Selection, progress func(float64)) {
+		assembled = true
+		var current models.DownloadJob
+		if err := worker.deps.DB.First(&current, job.ID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if current.Progress != 0.5 || current.Phase != models.DownloadJobPhaseAssembling {
+			t.Fatalf("job at assembly start = %#v", current)
+		}
+		if data, err := os.ReadFile(filepath.Join(selection.Quality.Path, "out0.ts")); err != nil || len(data) != 256*1024 {
+			t.Fatalf("assembly input = %d bytes, %v", len(data), err)
+		}
+		previous := current.Progress
+		for _, value := range []float64{0, 0.5, 1} {
+			progress(value)
+			if err := worker.deps.DB.First(&current, job.ID).Error; err != nil {
+				t.Fatal(err)
+			}
+			if current.Progress < previous || current.Progress >= 1 || current.Status != models.DownloadJobStatusPreparing {
+				t.Fatalf("job before output finalization = %#v", current)
+			}
+			previous = current.Progress
+		}
+	}}
+	worker.processDownloadPreparation(context.Background(), *job)
+	if !observedPartial || !assembled {
+		t.Fatalf("partial input observed = %v, assembled = %v", observedPartial, assembled)
+	}
+	var current models.DownloadJob
+	if err := worker.deps.DB.First(&current, job.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if current.Status != models.DownloadJobStatusReady || current.Progress != 1 || current.Phase != "" {
+		t.Fatalf("completed job = %#v", current)
+	}
+	if entries, err := os.ReadDir(workspaceRoot); err != nil || len(entries) != 0 {
+		t.Fatalf("scratch after completion = %v, %v", entries, err)
+	}
+}
+
+func TestProcessDownloadPreparationLocalInputsDoNotReserveTransferProgress(t *testing.T) {
+	worker, job, _ := downloadPreparerTestWorker(t)
+	_, sourcePath := downloadPreparationTestStorage(t, worker, job, func(backing storage.Store) storage.Store { return backing })
+	assembled := false
+	worker.downloadAssembler = fakeDownloadAssembler{data: []byte("prepared"), inspect: func(_ *downloadsvc.Selection, _ func(float64)) {
+		assembled = true
+		var current models.DownloadJob
+		if err := worker.deps.DB.First(&current, job.ID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if current.Progress != 0 || current.Phase != models.DownloadJobPhaseAssembling {
+			t.Fatalf("local job at assembly start = %#v", current)
+		}
+	}}
+	worker.processDownloadPreparation(context.Background(), *job)
+	if !assembled {
+		t.Fatal("local inputs did not reach assembly")
+	}
+	if _, err := os.Stat(sourcePath); err != nil {
+		t.Fatalf("local input after preparation = %v", err)
+	}
+}
+
+func TestProcessDownloadPreparationInterruptedFetchCleansInputs(t *testing.T) {
+	for _, interruption := range []string{"failed", "timeout", "canceled"} {
+		t.Run(interruption, func(t *testing.T) {
+			worker, job, _ := downloadPreparerTestWorker(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if interruption == "timeout" {
+				worker.preparationTimeout = func(float64) time.Duration { return 20 * time.Millisecond }
+			}
+			workspaceRoot, _ := downloadPreparationTestStorage(t, worker, job, func(backing storage.Store) storage.Store {
+				return observedDownloadPreparationStore{Store: backing, beforeRead: func(readCtx context.Context, readBytes int64) error {
+					if readBytes == 0 {
+						return nil
+					}
+					switch interruption {
+					case "timeout":
+						<-readCtx.Done()
+						return readCtx.Err()
+					case "canceled":
+						worker.cancelDownloadJob(job, "canceled", "Download preparation canceled")
+						cancel()
+						return readCtx.Err()
+					default:
+						return errors.New("private storage failure details")
+					}
+				}}
+			})
+			worker.downloadAssembler = fakeDownloadAssembler{inspect: func(*downloadsvc.Selection, func(float64)) { t.Fatal("assembly started with incomplete inputs") }}
+			worker.processDownloadPreparation(ctx, *job)
+			var current models.DownloadJob
+			if err := worker.deps.DB.First(&current, job.ID).Error; err != nil {
+				t.Fatal(err)
+			}
+			wantStatus, wantCode := models.DownloadJobStatusFailed, "source_unavailable"
+			if interruption == "timeout" {
+				wantCode = "preparation_timeout"
+			} else if interruption == "canceled" {
+				wantStatus, wantCode = models.DownloadJobStatusCanceled, "canceled"
+			}
+			if current.Status != wantStatus || current.ErrorCode != wantCode || strings.Contains(current.ErrorMessage, "private") {
+				t.Fatalf("interrupted fetch job = %#v", current)
+			}
+			if entries, err := os.ReadDir(workspaceRoot); err != nil || len(entries) != 0 {
+				t.Fatalf("scratch after interruption = %v, %v", entries, err)
+			}
+		})
 	}
 }
 
