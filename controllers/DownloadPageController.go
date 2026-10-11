@@ -61,7 +61,7 @@ func (h *Handlers) DownloadPageController(c echo.Context) error {
 		)
 	}
 
-	mediaToken, mediaExpiration, err := h.Auth.GenerateMediaToken(buildMediaClaims(dbLink))
+	mediaToken, mediaExpiration, err := h.Auth.GenerateMediaToken(h.requestMediaClaims(c, dbLink))
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Failed to generate media token")
 	}
@@ -77,6 +77,7 @@ func (h *Handlers) DownloadPageController(c echo.Context) error {
 		"Thumbnail":    h.Logic.ResolvedThumbnailURL(*dbLink),
 		"Duration":     formatDownloadDuration(dbLink.File.Duration),
 		"UUID":         dbLink.UUID,
+		"PlayerBase":   playerBaseURL(c, dbLink.UUID),
 		"AppName":      h.Config().AppName,
 		"DownloadBase": strings.TrimRight(h.Config().FolderVideoQualitysPub, "/") + "/" + dbLink.UUID,
 		"Qualities":    qualities,

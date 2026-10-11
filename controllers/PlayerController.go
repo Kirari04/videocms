@@ -83,7 +83,7 @@ func (h *Handlers) PlayerController(c echo.Context) error {
 	var jsonWebhooks []map[string]any
 	var streamUrl, streamUrlWidth, streamUrlHeight, firstAudio string
 
-	mediaToken, mediaExpiration, err := h.Auth.GenerateMediaToken(buildMediaClaims(dbLink))
+	mediaToken, mediaExpiration, err := h.Auth.GenerateMediaToken(h.requestMediaClaims(c, dbLink))
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Failed to generate media token")
 	}
@@ -203,6 +203,7 @@ func (h *Handlers) PlayerController(c echo.Context) error {
 		"StreamIsReady":                playerStatus.Ready,
 		"PlayerStatus":                 string(rawPlayerStatus),
 		"UUID":                         requestValidation.UUID,
+		"PlayerBase":                   playerBaseURL(c, dbLink.UUID),
 		"Folder":                       h.Config().FolderVideoQualitysPub,
 		"AppName":                      h.Config().AppName,
 		"BaseUrl":                      h.Config().BaseUrl,
@@ -268,6 +269,9 @@ func (h *Handlers) loadPlayerLink(uuid string) (*models.Link, error) {
 }
 
 func (h *Handlers) playerCaptchaAllowed(c echo.Context) bool {
+	if requestFolderShare(c) != nil {
+		return true
+	}
 	if h.Config().CaptchaPlayerEnabled == nil || !*h.Config().CaptchaPlayerEnabled {
 		return true
 	}

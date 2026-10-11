@@ -23,6 +23,7 @@ const (
 type UploadSession struct {
 	Model
 	BackgroundJobID  string `gorm:"size:36;index" json:"BackgroundJobID,omitempty"`
+	FolderShareID    uint   `gorm:"index" json:"-"`
 	UUID             string
 	ClientUploadUUID string
 	TusID            string `gorm:"index"`

@@ -75,6 +75,7 @@ func MigrateModels(gormDB *gorm.DB) error {
 		&models.User{},
 		&models.RevokedAuthSession{},
 		&models.Folder{},
+		&models.FolderShare{},
 		&models.File{},
 		&models.Link{},
 		&models.Quality{},
