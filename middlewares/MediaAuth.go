@@ -2,6 +2,7 @@ package middlewares
 
 import (
 	"ch/kirari04/videocms/auth"
+	"ch/kirari04/videocms/sharing"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -27,6 +28,21 @@ func (f *Factory) MediaAuth() echo.MiddlewareFunc {
 				return c.String(http.StatusForbidden, "Media token does not match requested video")
 			}
 
+			if claims.ShareToken != "" {
+				share, err := sharing.Resolve(f.Deps.DB, claims.ShareToken)
+				if err != nil || !share.AllowRead || share.AccessVersion != claims.ShareVersion {
+					return c.String(http.StatusForbidden, "Shared access has expired or was revoked")
+				}
+				if err := sharing.ContainsLink(f.Deps.DB, share, uuid); err != nil {
+					return c.String(http.StatusForbidden, "Video is outside this share")
+				}
+				if share.PasswordHash != "" || share.RequireCaptcha {
+					cookie, err := c.Cookie(auth.FolderShareCookieName(share.Token))
+					if err != nil || !f.authService().VerifyFolderShareToken(cookie.Value, share) {
+						return c.String(http.StatusUnauthorized, "Unlock this share first")
+					}
+				}
+			}
 			c.Set(MediaClaimsContextKey, claims)
 			return next(c)
 		}

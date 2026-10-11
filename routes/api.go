@@ -32,6 +32,15 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	apiGroup.GET("/p/pages", handlers.ListPublicWebPage)
 	apiGroup.GET("/p/page", handlers.GetPublicWebPage)
 
+	shared := apiGroup.Group("/shares/:token",
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateWeb), cfg.RatelimitBurstWeb, time.Minute*5)))
+	shared.GET("", handlers.GetSharedFolder)
+	shared.POST("/unlock", handlers.UnlockFolderShare,
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateAuth), cfg.RatelimitBurstAuth, time.Minute*5)))
+	shared.POST("/uploads", handlers.UploadToSharedFolder,
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateUpload), cfg.RatelimitBurstUpload, time.Minute*5)),
+		middleware.BodyLimit(fmt.Sprintf("%dk", cfg.MaxUploadFilesize/1024+1024)))
+
 	// Routes that require to be authenticated
 	protectedApi := apiGroup.Group("",
 		middlewareFactory.AuthMiddleware(),
@@ -87,6 +96,10 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	adminV2.POST("/storage/migrations/:id/keep-originals", handlers.KeepStorageMigrationOriginals)
 	adminV2.POST("/storage/migrations/:id/start-cleanup", handlers.StartStorageMigrationCleanupNow)
 	protectedApi.POST("/folder", handlers.CreateFolder)
+	protectedApi.GET("/folder-shares", handlers.ListFolderShares)
+	protectedApi.POST("/folder-shares", handlers.CreateFolderShare)
+	protectedApi.PUT("/folder-shares/:id", handlers.UpdateFolderShare)
+	protectedApi.DELETE("/folder-shares/:id", handlers.DeleteFolderShare)
 	protectedApi.PUT("/folder", handlers.UpdateFolder)
 	protectedApi.DELETE("/folder", handlers.DeleteFolderLegacy)
 	protectedApi.PUT("/move", handlers.MoveItems)
