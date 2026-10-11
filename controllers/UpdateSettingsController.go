@@ -1,28 +1,47 @@
 package controllers
 
 import (
+	"ch/kirari04/videocms/app"
 	"ch/kirari04/videocms/configdb"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/models"
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 )
 
 func (h *Handlers) UpdateSettings(c echo.Context) error {
+	h.settingsMu.Lock()
+	defer h.settingsMu.Unlock()
 
-	// parse & validate request
+	// Merge write-only secrets before validating the complete configuration.
 	var validation models.SettingValidation
-	if status, err := helpers.Validate(c, &validation); err != nil {
-		return c.String(status, err.Error())
+	if err := c.Bind(&validation); err != nil || validation.ID == 0 {
+		return c.String(http.StatusBadRequest, "malformated request")
 	}
 
 	var previousSetting models.Setting
 	if res := h.Deps.DB.First(&previousSetting, validation.ID); res.Error != nil {
 		return c.String(http.StatusBadRequest, "Setting not found by id")
+	}
+	validation.JwtSecretKey = previousSetting.JwtSecretKey
+	validation.JwtMediaSecretKey = previousSetting.JwtMediaSecretKey
+	if validation.Captcha_Recaptcha_PrivateKey == "" {
+		validation.Captcha_Recaptcha_PrivateKey = previousSetting.Captcha_Recaptcha_PrivateKey
+	}
+	if validation.Captcha_Hcaptcha_PrivateKey == "" {
+		validation.Captcha_Hcaptcha_PrivateKey = previousSetting.Captcha_Hcaptcha_PrivateKey
+	}
+	if validation.Captcha_Turnstile_PrivateKey == "" {
+		validation.Captcha_Turnstile_PrivateKey = previousSetting.Captcha_Turnstile_PrivateKey
+	}
+	if errors := helpers.ValidateStruct(&validation); len(errors) > 0 {
+		return c.String(http.StatusBadRequest, fmt.Sprintf("%s [%s] : %s", errors[0].FailedField, errors[0].Tag, errors[0].Value))
 	}
 	remoteDownloadsWereEnabled := settingFlagEnabled(previousSetting.RemoteDownloadEnabled, true)
 	remoteDownloadsNowDisabled := !settingFlagEnabled(validation.RemoteDownloadEnabled, true)
@@ -114,11 +133,15 @@ func (h *Handlers) UpdateSettings(c echo.Context) error {
 	setting.MaxQueuedDownloadPreparations = validation.MaxQueuedDownloadPreparations
 	setting.DownloadPreparationRetentionHours = validation.DownloadPreparationRetentionHours
 
-	if res := h.Deps.DB.Save(&setting); res.Error != nil {
-		log.Println("Failed to save settings", res.Error)
-		return c.NoContent(http.StatusInternalServerError)
-	}
-	snapshot, err := configdb.LoadSnapshot(h.Deps.DB, h.Config())
+	var snapshot app.Snapshot
+	err := h.Deps.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&setting).Error; err != nil {
+			return err
+		}
+		var err error
+		snapshot, err = configdb.LoadSnapshot(tx, h.Config())
+		return err
+	})
 	if err != nil {
 		log.Println("Failed to reload settings", err)
 		return c.NoContent(http.StatusInternalServerError)

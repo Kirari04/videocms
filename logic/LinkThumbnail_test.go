@@ -138,16 +138,16 @@ func TestLinkThumbnailUpdateAndResetRejectUnauthorizedUser(t *testing.T) {
 	if err == nil {
 		t.Fatal("s.UpdateLinkThumbnail() error = nil, want error")
 	}
-	if status != http.StatusForbidden {
-		t.Fatalf("update status = %d, want %d", status, http.StatusForbidden)
+	if status != http.StatusBadRequest {
+		t.Fatalf("update status = %d, want %d", status, http.StatusBadRequest)
 	}
 
 	status, err = s.ResetLinkThumbnail(link.ID, 1, false)
 	if err == nil {
 		t.Fatal("s.ResetLinkThumbnail() error = nil, want error")
 	}
-	if status != http.StatusForbidden {
-		t.Fatalf("reset status = %d, want %d", status, http.StatusForbidden)
+	if status != http.StatusBadRequest {
+		t.Fatalf("reset status = %d, want %d", status, http.StatusBadRequest)
 	}
 }
 

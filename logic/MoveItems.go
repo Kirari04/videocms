@@ -4,107 +4,114 @@ import (
 	"ch/kirari04/videocms/models"
 	"errors"
 	"net/http"
+
+	"gorm.io/gorm"
 )
 
 func (s *Service) MoveItems(userId uint, targetFolderId uint, folderIds []uint, linkIds []uint, isAdmin bool) (int, error) {
-	// check if at least one item is being moved
 	if len(folderIds) == 0 && len(linkIds) == 0 {
 		return http.StatusBadRequest, errors.New("no items selected to move")
 	}
 
-	// 1. Validate Target Folder
-	var targetFolderOwnerID uint
-	if targetFolderId > 0 {
-		var targetFolder models.Folder
-		if res := s.Deps.DB.First(&targetFolder, targetFolderId); res.Error != nil {
-			return http.StatusBadRequest, errors.New("target folder doesn't exist")
-		}
-		if !isAdmin && targetFolder.UserID != userId {
-			return http.StatusForbidden, errors.New("unauthorized access to target folder")
-		}
-		targetFolderOwnerID = targetFolder.UserID
-	}
-
-	// 2. Move Folders
-	for _, folderId := range folderIds {
-		// Cannot move a folder into itself
-		if folderId == targetFolderId {
-			return http.StatusBadRequest, errors.New("cannot move folder into itself")
+	status := http.StatusInternalServerError
+	err := s.Deps.DB.Transaction(func(tx *gorm.DB) error {
+		fail := func(code int, message string) error {
+			status = code
+			return errors.New(message)
 		}
 
-		var folder models.Folder
-		if res := s.Deps.DB.First(&folder, folderId); res.Error != nil {
-			return http.StatusBadRequest, errors.New("folder to move not found")
+		query := func() *gorm.DB {
+			if !isAdmin {
+				return tx.Where("user_id = ?", userId)
+			}
+			return tx
 		}
 
-		if !isAdmin && folder.UserID != userId {
-			return http.StatusForbidden, errors.New("unauthorized access to folder")
-		}
-
-		// Ensure target folder belongs to the same user as the item (even for admins)
-		if targetFolderId > 0 && folder.UserID != targetFolderOwnerID {
-			return http.StatusBadRequest, errors.New("cannot move folder to a destination owned by another user")
-		}
-
-		// Loop detection: Check if the folder we are moving contains the target folder
+		var targetFolderOwnerID uint
 		if targetFolderId > 0 {
-			contains, err := s.FolderContainsFolder(folderId, targetFolderId)
-			if err != nil {
-				return http.StatusInternalServerError, err
+			var targetFolder models.Folder
+			if res := query().First(&targetFolder, targetFolderId); res.Error != nil {
+				return fail(http.StatusBadRequest, "target folder doesn't exist")
 			}
-			if contains {
-				return http.StatusBadRequest, errors.New("cannot move parent folder into its child")
+			targetFolderOwnerID = targetFolder.UserID
+		}
+
+		// Validate the entire selection before changing any parent. Using the same
+		// transaction for traversal and updates also serializes opposing SQLite moves.
+		for _, folderId := range folderIds {
+			if folderId == targetFolderId {
+				return fail(http.StatusBadRequest, "cannot move folder into itself")
+			}
+
+			var folder models.Folder
+			if res := query().First(&folder, folderId); res.Error != nil {
+				return fail(http.StatusBadRequest, "folder to move not found")
+			}
+			if targetFolderId > 0 && folder.UserID != targetFolderOwnerID {
+				return fail(http.StatusBadRequest, "cannot move folder to a destination owned by another user")
+			}
+
+			if targetFolderId > 0 {
+				contains, err := folderContainsFolder(tx, folderId, targetFolderId)
+				if err != nil {
+					return err
+				}
+				if contains {
+					return fail(http.StatusBadRequest, "cannot move parent folder into its child")
+				}
 			}
 		}
 
-		folder.ParentFolderID = targetFolderId
-		if res := s.Deps.DB.Save(&folder); res.Error != nil {
-			return http.StatusInternalServerError, res.Error
+		for _, linkId := range linkIds {
+			var link models.Link
+			if res := query().First(&link, linkId); res.Error != nil {
+				return fail(http.StatusBadRequest, "file to move not found")
+			}
+			if targetFolderId > 0 && link.UserID != targetFolderOwnerID {
+				return fail(http.StatusBadRequest, "cannot move file to a destination owned by another user")
+			}
 		}
+
+		for _, folderId := range folderIds {
+			if err := tx.Model(&models.Folder{}).Where("id = ?", folderId).Update("parent_folder_id", targetFolderId).Error; err != nil {
+				return err
+			}
+		}
+		for _, linkId := range linkIds {
+			if err := tx.Model(&models.Link{}).Where("id = ?", linkId).Update("parent_folder_id", targetFolderId).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return status, err
 	}
-
-	// 3. Move Links (Files)
-	for _, linkId := range linkIds {
-		var link models.Link
-		if res := s.Deps.DB.First(&link, linkId); res.Error != nil {
-			return http.StatusBadRequest, errors.New("file to move not found")
-		}
-
-		if !isAdmin && link.UserID != userId {
-			return http.StatusForbidden, errors.New("unauthorized access to file")
-		}
-
-		// Ensure target folder belongs to the same user as the item (even for admins)
-		if targetFolderId > 0 && link.UserID != targetFolderOwnerID {
-			return http.StatusBadRequest, errors.New("cannot move file to a destination owned by another user")
-		}
-
-		link.ParentFolderID = targetFolderId
-		if res := s.Deps.DB.Save(&link); res.Error != nil {
-			return http.StatusInternalServerError, res.Error
-		}
-	}
-
 	return http.StatusOK, nil
 }
 
 func (s *Service) FolderContainsFolder(folderID uint, searchingFolderID uint) (bool, error) {
-	var children []models.Folder
-	if res := s.Deps.DB.Where(&models.Folder{
-		ParentFolderID: folderID,
-	}).Find(&children); res.Error != nil {
-		return false, res.Error
-	}
+	return folderContainsFolder(s.Deps.DB, folderID, searchingFolderID)
+}
 
-	for _, child := range children {
-		if child.ID == searchingFolderID {
+func folderContainsFolder(db *gorm.DB, folderID uint, searchingFolderID uint) (bool, error) {
+	// A folder contains the target only if it is one of the target's ancestors.
+	// Track visited parents so malformed existing cycles cannot loop forever.
+	visited := make(map[uint]bool)
+	for current := searchingFolderID; current > 0; {
+		if visited[current] {
+			return false, errors.New("folder hierarchy contains a cycle")
+		}
+		visited[current] = true
+
+		var folder models.Folder
+		if err := db.Select("id", "parent_folder_id").First(&folder, current).Error; err != nil {
+			return false, err
+		}
+		if folder.ParentFolderID == folderID {
 			return true, nil
 		}
-		contains, err := s.FolderContainsFolder(child.ID, searchingFolderID)
-		if err != nil || contains {
-			return contains, err
-		}
+		current = folder.ParentFolderID
 	}
-
 	return false, nil
 }

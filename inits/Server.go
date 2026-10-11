@@ -139,6 +139,7 @@ func BuildServer(env config.Config, middlewareFactory *middlewares.Factory) *ech
 	}
 	app := echo.New()
 	app.Renderer = htmlTemplate
+	app.Use(middlewares.SecurityHeaders())
 
 	// global rate limiter
 	app.Use(middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(env.RatelimitRateGlobal), env.RatelimitBurstGlobal, time.Minute*5)))
@@ -149,6 +150,7 @@ func BuildServer(env config.Config, middlewareFactory *middlewares.Factory) *ech
 		echo.TrustLinkLocal(trustLocal),  // e.g. ipv4 start with 169.254
 		echo.TrustPrivateNet(trustLocal), // e.g. ipv4 start with 10. or 192.168
 	}
+	trustedNetworks := []*net.IPNet{}
 	for _, trustedIpRanges := range trustedProxies {
 		_, ipNet, err := net.ParseCIDR(trustedIpRanges)
 		if err != nil {
@@ -156,9 +158,11 @@ func BuildServer(env config.Config, middlewareFactory *middlewares.Factory) *ech
 			continue
 		}
 		trustOptions = append(trustOptions, echo.TrustIPRange(ipNet))
+		trustedNetworks = append(trustedNetworks, ipNet)
 	}
 
 	app.IPExtractor = echo.ExtractIPFromXFFHeader(trustOptions...)
+	app.Use(middlewares.TrustedProxyHTTPS(trustedNetworks, trustLocal))
 	app.HTTPErrorHandler = func(errors error, c echo.Context) {
 		code := http.StatusInternalServerError
 		if he, ok := errors.(*echo.HTTPError); ok {

@@ -15,12 +15,12 @@ import (
 	"time"
 
 	"ch/kirari04/videocms/app"
+	"ch/kirari04/videocms/auth"
 	"ch/kirari04/videocms/background"
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/tus/tusd/v2/pkg/filelocker"
@@ -44,7 +44,7 @@ const (
 
 type Service struct {
 	Deps  *app.Deps
-	Auth  any
+	Auth  *auth.Service
 	Logic *logic.Service
 
 	handler    http.Handler
@@ -71,14 +71,7 @@ type ConsumerHealth struct {
 	LastError   string
 }
 
-type tusClaims struct {
-	UserID   uint   `json:"userid"`
-	Username string `json:"username"`
-	Admin    bool   `json:"admin"`
-	jwt.RegisteredClaims
-}
-
-func NewService(deps *app.Deps, authSvc any) *Service {
+func NewService(deps *app.Deps, authSvc *auth.Service) *Service {
 	if deps == nil {
 		deps = &app.Deps{
 			Snapshots: app.NewSnapshotStore(app.Snapshot{}),
@@ -86,6 +79,9 @@ func NewService(deps *app.Deps, authSvc any) *Service {
 	}
 	if deps.Snapshots == nil {
 		deps.Snapshots = app.NewSnapshotStore(app.Snapshot{})
+	}
+	if authSvc == nil {
+		authSvc = auth.NewService(deps)
 	}
 	logicSvc := logic.NewService(deps)
 
@@ -257,7 +253,7 @@ func (s *Service) authenticatedContext(r *http.Request) (context.Context, int, s
 			return r.Context(), http.StatusInternalServerError, "database unavailable"
 		}
 
-		apiKey, err := s.verifyAPIKey(tokenString)
+		apiKey, err := s.Auth.VerifyApiKey(tokenString)
 		if err != nil {
 			return r.Context(), http.StatusForbidden, "Invalid or Expired API Key"
 		}
@@ -278,7 +274,7 @@ func (s *Service) authenticatedContext(r *http.Request) (context.Context, int, s
 		return ctx, 0, ""
 	}
 
-	token, claims, err := s.verifyJWT(tokenString)
+	token, claims, err := s.Auth.VerifyJWT(tokenString)
 	if err != nil {
 		return r.Context(), http.StatusForbidden, "Invalid JWT Token"
 	}
@@ -288,34 +284,6 @@ func (s *Service) authenticatedContext(r *http.Request) (context.Context, int, s
 	ctx := context.WithValue(r.Context(), userIDContextKey, claims.UserID)
 	ctx = context.WithValue(ctx, adminContextKey, claims.Admin)
 	return ctx, 0, ""
-}
-
-func (s *Service) verifyAPIKey(key string) (*models.ApiKey, error) {
-	db := s.db()
-	if db == nil {
-		return nil, errors.New("database unavailable")
-	}
-
-	var apiKey models.ApiKey
-	if err := db.Preload("User").Where("`key` = ?", key).First(&apiKey).Error; err != nil {
-		return nil, err
-	}
-	if apiKey.ExpiresAt != nil && time.Now().After(*apiKey.ExpiresAt) {
-		return nil, errors.New("api key expired")
-	}
-	return &apiKey, nil
-}
-
-func (s *Service) verifyJWT(tokenString string) (*jwt.Token, *tusClaims, error) {
-	claims := &tusClaims{}
-	key := []byte(s.Config().JwtSecretKey)
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return key, nil
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	return token, claims, nil
 }
 
 func userIDFromContext(ctx context.Context) (uint, bool) {
@@ -408,14 +376,8 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 	if err != nil {
 		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_INVALID_METADATA", "parent_folder_id must be a positive integer", http.StatusBadRequest)
 	}
-	if parentFolderID > 0 {
-		var count int64
-		if err := db.Model(&models.Folder{}).Where("id = ?", parentFolderID).Count(&count).Error; err != nil {
-			return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_DATABASE", "failed to validate parent folder", http.StatusInternalServerError)
-		}
-		if count == 0 {
-			return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_INVALID_PARENT", "parent folder doesn't exist", http.StatusBadRequest)
-		}
+	if status, err := logic.ValidateFolderDestination(db, parentFolderID, userID); err != nil {
+		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_INVALID_PARENT", err.Error(), status)
 	}
 
 	clientUploadUUID := strings.TrimSpace(info.MetaData["client_upload_uuid"])
@@ -470,7 +432,12 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 		ExpiresAt:        &expiresAt,
 	}
 
+	createStatus := http.StatusBadRequest
 	if err := db.Transaction(func(tx *gorm.DB) error {
+		if status, err := logic.ValidateFolderDestination(tx, parentFolderID, userID); err != nil {
+			createStatus = status
+			return err
+		}
 		if err := tx.Create(&session).Error; err != nil {
 			return err
 		}
@@ -510,7 +477,7 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 		}
 		return nil
 	}); err != nil {
-		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_UPLOAD_REJECTED", err.Error(), http.StatusBadRequest)
+		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_UPLOAD_REJECTED", err.Error(), createStatus)
 	}
 
 	metadata := tusd.MetaData{}

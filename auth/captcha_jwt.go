@@ -35,7 +35,7 @@ func (s *Service) VerifyCaptchaJWT(tokenString, ip string) bool {
 
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 		return key, nil
-	})
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
 
 	if err != nil || !token.Valid {
 		return false

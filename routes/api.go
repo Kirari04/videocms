@@ -23,6 +23,8 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	auth.GET("/refresh",
 		handlers.AuthRefresh,
 		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateAuth), cfg.RatelimitBurstAuth, time.Minute*5)))
+	auth.POST("/logout", handlers.AuthLogout,
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateAuth), cfg.RatelimitBurstAuth, time.Minute*5)))
 
 	// Routes that dont require authentication
 	apiGroup.GET("/config", handlers.GetConfig)
@@ -139,6 +141,7 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	protectedApi.GET("/stats/storage/top", handlers.GetAdminTopStorageStats, middlewareFactory.IsAdmin())
 	protectedApi.GET("/settings", handlers.GetSettings, middlewareFactory.IsAdmin())
 	protectedApi.PUT("/settings", handlers.UpdateSettings, middlewareFactory.IsAdmin())
+	protectedApi.POST("/settings/rotate-signing-keys", handlers.RotateSigningKeys, middlewareFactory.IsAdmin())
 	protectedApi.POST("/settings/test-pgs-server", handlers.TestPgsServerConnection, middlewareFactory.IsAdmin())
 	protectedApi.GET("/admin/storage", handlers.GetStorageAdminOverview, middlewareFactory.IsAdmin())
 	protectedApi.POST("/admin/storage/sftp/host-key", handlers.ScanSFTPHostKey, middlewareFactory.IsAdmin())

@@ -23,6 +23,77 @@ type legacyStoredFile struct {
 	Path string
 }
 
+type legacySessionUser struct {
+	models.Model
+	Username string
+	Hash     string
+	Admin    bool
+	Settings models.UserSettings
+}
+
+func (legacySessionUser) TableName() string { return "users" }
+
+func TestMigrateModelsInitializesUserSessionVersions(t *testing.T) {
+	for _, nullableVersion := range []bool{false, true} {
+		name := "missing column"
+		if nullableVersion {
+			name = "nullable column"
+		}
+		t.Run(name, func(t *testing.T) {
+			db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			sqlDB, err := db.DB()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = sqlDB.Close() })
+			if err := db.AutoMigrate(&legacySessionUser{}); err != nil {
+				t.Fatal(err)
+			}
+			if nullableVersion {
+				if err := db.Exec("ALTER TABLE users ADD COLUMN session_version integer").Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			active := legacySessionUser{Username: "legacy-active", Hash: "legacy-hash", Admin: true}
+			deleted := legacySessionUser{Username: "legacy-deleted"}
+			for _, user := range []*legacySessionUser{&active, &deleted} {
+				if err := db.Create(user).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := db.Delete(&deleted).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := MigrateModels(db); err != nil {
+				t.Fatal(err)
+			}
+			var current models.User
+			if err := db.First(&current, active.ID).Error; err != nil {
+				t.Fatal(err)
+			}
+			if current.SessionVersion != 0 || current.Hash != active.Hash || !current.Admin {
+				t.Fatalf("legacy user changed: %+v", current)
+			}
+			var incomplete int64
+			if err := db.Unscoped().Model(&models.User{}).Where("session_version IS NULL").Count(&incomplete).Error; err != nil || incomplete != 0 {
+				t.Fatalf("nullable user versions remain: %d %v", incomplete, err)
+			}
+			if err := db.Model(&current).Update("session_version", gorm.Expr("session_version + 1")).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := MigrateModels(db); err != nil {
+				t.Fatal(err)
+			}
+			if err := db.First(&current, active.ID).Error; err != nil || current.SessionVersion != 1 {
+				t.Fatalf("migration restored a revoked version: %d %v", current.SessionVersion, err)
+			}
+		})
+	}
+}
+
 func (legacyStoredFile) TableName() string {
 	return "files"
 }

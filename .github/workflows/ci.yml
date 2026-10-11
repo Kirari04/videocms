@@ -77,6 +77,11 @@ jobs:
       - name: Download modules
         run: go mod download
 
+      - name: Install media test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+
       - name: Start Garage integration service
         run: |
           docker run --detach --name videocms-garage \

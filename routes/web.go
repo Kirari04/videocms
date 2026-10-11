@@ -35,6 +35,7 @@ func Web(app *echo.Echo, handlers *controllers.Handlers, middlewareFactory *midd
 	videoData.GET("/:UUID/stream/muted/master.m3u8", handlers.GetM3u8Data, middlewareFactory.MediaAuth())
 	videoData.GET("/:UUID/stream/multi/master.m3u8", handlers.GetM3u8DataMulti, middlewareFactory.MediaAuth())
 	videoData.GET("/:UUID/image/thumb/:FILE", handlers.GetThumbnailData)
+	videoData.POST("/:UUID/webhooks/:HOOKID", handlers.DispatchPlayerWebhook, middlewareFactory.MediaAuth())
 	videoData.GET("/:UUID/:SUBUUID/subtitle/:FILE", handlers.GetSubtitleData, middlewareFactory.MediaAuth())
 	videoData.GET("/:UUID/:AUDIOUUID/stream/master.m3u8", handlers.GetM3u8Data, middlewareFactory.MediaAuth())
 	videoData.POST("/:UUID/download-jobs", handlers.CreateDownloadJob, middlewareFactory.MediaAuth())
