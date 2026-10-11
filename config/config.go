@@ -142,59 +142,47 @@ type Config struct {
 }
 
 type PublicConfig struct {
-	AppName         string
-	BaseUrl         string
-	EncodingEnabled bool
-	UploadEnabled   bool
+	AppName       string
+	UploadEnabled bool
 
 	MaxUploadFilesize  int64
 	MaxUploadChunkSize int64
-	MaxUploadSessions  int64
-
-	FolderVideoQualitys string
 
 	CaptchaEnabled              bool
 	CaptchaLoginEnabled         bool
-	CaptchaPlayerEnabled        bool
 	CaptchaType                 string
-	Captcha_Recaptcha_PublicKey string
-	Captcha_Hcaptcha_PublicKey  string
-	Captcha_Turnstile_PublicKey string
+	Captcha_Recaptcha_PublicKey string `json:",omitempty"`
+	Captcha_Hcaptcha_PublicKey  string `json:",omitempty"`
+	Captcha_Turnstile_PublicKey string `json:",omitempty"`
 
-	ContinueWatchingPopupEnabled bool
-
-	DownloadEnabled       bool
 	RemoteDownloadEnabled bool
-	PlayerV2Enabled       bool
 }
 
 func (c Config) PublicConfig() PublicConfig {
-	return PublicConfig{
-		AppName:         c.AppName,
-		BaseUrl:         c.BaseUrl,
-		EncodingEnabled: *c.EncodingEnabled,
-		UploadEnabled:   *c.UploadEnabled,
+	public := PublicConfig{
+		AppName:       c.AppName,
+		UploadEnabled: *c.UploadEnabled,
 
 		MaxUploadFilesize:  c.MaxUploadFilesize,
 		MaxUploadChunkSize: c.MaxUploadChunkSize,
-		MaxUploadSessions:  c.MaxUploadSessions,
 
-		FolderVideoQualitys: c.FolderVideoQualitysPub,
+		CaptchaEnabled:      *c.CaptchaEnabled,
+		CaptchaLoginEnabled: *c.CaptchaLoginEnabled,
+		CaptchaType:         c.CaptchaType,
 
-		CaptchaEnabled:              *c.CaptchaEnabled,
-		CaptchaLoginEnabled:         *c.CaptchaLoginEnabled,
-		CaptchaPlayerEnabled:        *c.CaptchaPlayerEnabled,
-		CaptchaType:                 c.CaptchaType,
-		Captcha_Recaptcha_PublicKey: c.Captcha_Recaptcha_PublicKey,
-		Captcha_Hcaptcha_PublicKey:  c.Captcha_Hcaptcha_PublicKey,
-		Captcha_Turnstile_PublicKey: c.Captcha_Turnstile_PublicKey,
-
-		ContinueWatchingPopupEnabled: *c.ContinueWatchingPopupEnabled,
-
-		DownloadEnabled:       *c.DownloadEnabled,
 		RemoteDownloadEnabled: *c.RemoteDownloadEnabled,
-		PlayerV2Enabled:       *c.PlayerV2Enabled,
 	}
+	if public.CaptchaEnabled {
+		switch c.CaptchaType {
+		case "recaptcha":
+			public.Captcha_Recaptcha_PublicKey = c.Captcha_Recaptcha_PublicKey
+		case "hcaptcha":
+			public.Captcha_Hcaptcha_PublicKey = c.Captcha_Hcaptcha_PublicKey
+		case "turnstile":
+			public.Captcha_Turnstile_PublicKey = c.Captcha_Turnstile_PublicKey
+		}
+	}
+	return public
 }
 
 func (c Config) Clone() Config {
