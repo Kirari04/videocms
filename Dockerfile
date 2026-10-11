@@ -60,6 +60,7 @@ COPY middlewares ./middlewares
 COPY models ./models
 COPY routes ./routes
 COPY services ./services
+COPY sharing ./sharing
 COPY storage ./storage
 COPY traffic ./traffic
 

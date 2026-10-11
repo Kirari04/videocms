@@ -171,7 +171,14 @@ func BuildServer(env config.Config, middlewareFactory *middlewares.Factory) *ech
 
 		// in case the route starts with api we respond with json
 		if strings.HasPrefix(c.Path(), "/api") {
-			c.JSON(code, map[string]string{"error": "Not found"})
+			message := "Not found"
+			if strings.HasPrefix(c.Path(), "/api/folder-shares") || strings.HasPrefix(c.Path(), "/api/shares/") {
+				message = "Unable to process share request"
+				if he, ok := errors.(*echo.HTTPError); ok && code < http.StatusInternalServerError {
+					message = fmt.Sprint(he.Message)
+				}
+			}
+			c.JSON(code, map[string]string{"error": message})
 			return
 		}
 
@@ -180,7 +187,7 @@ func BuildServer(env config.Config, middlewareFactory *middlewares.Factory) *ech
 			// one is /v/<UUID> containing the player
 			// one is env.FolderVideoQualitysPub containing the video data
 			// in case its one of thiose and still 404 we render the backend 404 page
-			if strings.HasPrefix(c.Path(), env.FolderVideoQualitysPub) || strings.HasPrefix(c.Path(), "/v/") {
+			if strings.HasPrefix(c.Path(), env.FolderVideoQualitysPub) || strings.HasPrefix(c.Path(), "/v/") || strings.HasPrefix(c.Path(), "/share-videos/") {
 				if err := c.Render(code, "404.html", echo.Map{}); err != nil {
 					c.Logger().Error(err)
 				}
@@ -207,7 +214,7 @@ func BuildServer(env config.Config, middlewareFactory *middlewares.Factory) *ech
 		Limit: fmt.Sprintf("%dk", postMaxSize),
 		Skipper: func(c echo.Context) bool {
 			// Skip body limit for upload routes, they handle their own limits
-			return strings.HasPrefix(c.Path(), "/api/file/upload") || strings.HasPrefix(c.Path(), "/api/uploads")
+			return strings.HasPrefix(c.Path(), "/api/file/upload") || strings.HasPrefix(c.Path(), "/api/uploads") || c.Path() == "/api/shares/:token/uploads"
 		},
 	}))
 

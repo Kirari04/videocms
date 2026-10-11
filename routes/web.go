@@ -21,6 +21,11 @@ func Web(app *echo.Echo, handlers *controllers.Handlers, middlewareFactory *midd
 	)
 
 	app.GET("/captcha/challenge", handlers.GetCaptchaChallenge)
+	sharedVideos := app.Group("/share-videos/:token",
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateWeb), cfg.RatelimitBurstWeb, time.Minute*5)))
+	sharedVideos.GET("/:UUID", handlers.SharedVideo(handlers.PlayerController))
+	sharedVideos.GET("/:UUID/download", handlers.SharedVideo(handlers.DownloadPageController))
+	sharedVideos.GET("/:UUID/status", handlers.SharedVideo(handlers.PlayerStatusController))
 	app.POST("/captcha/verify", handlers.VerifyCaptchaChallenge)
 
 	app.GET("/v/:UUID", handlers.PlayerController,
