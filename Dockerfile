@@ -9,7 +9,6 @@ FROM --platform=$BUILDPLATFORM oven/bun:${BUN_VERSION} AS frontend_build
 WORKDIR /app
 
 ARG CHANNEL=beta
-ARG DOCKER_IMAGE_TAG=kirari04/videocms:beta
 
 COPY videocms-frontend/package.json videocms-frontend/bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
@@ -20,8 +19,6 @@ COPY videocms-frontend/ .
 RUN printf '%s\n' \
     'NUXT_PUBLIC_API_URL=/api' \
     'NUXT_PUBLIC_BASE_URL=' \
-    "NUXT_PUBLIC_DOCKER_HUB_TAG=${DOCKER_IMAGE_TAG}" \
-    'NUXT_PUBLIC_NAME=VideoCMS' \
     'NUXT_PUBLIC_DEMO=false' \
     "NUXT_PUBLIC_RELEASE_CHANNEL=${CHANNEL}" \
     > .env

@@ -115,8 +115,6 @@ jobs:
           cat > .env <<'EOF'
           NUXT_PUBLIC_API_URL=/api
           NUXT_PUBLIC_BASE_URL=
-          NUXT_PUBLIC_DOCKER_HUB_TAG=kirari04/videocms:beta
-          NUXT_PUBLIC_NAME=VideoCMS
           NUXT_PUBLIC_DEMO=false
           NUXT_PUBLIC_RELEASE_CHANNEL=beta
           EOF
