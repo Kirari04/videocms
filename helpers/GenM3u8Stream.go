@@ -10,7 +10,7 @@ func GenM3u8Stream(folderVideoQualitysPub string, dbLink *models.Link, qualitys 
 	if audio != nil {
 		m3u8 += fmt.Sprintf(
 			"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"AAC\",NAME=\"Subtitle\",LANGUAGE=\"%s\",URI=\"%s\"",
-			audio.Lang,
+			SafeMediaLabel(audio.Lang, "und", 10),
 			fmt.Sprintf("%s/%s/%s/audio/%s", folderVideoQualitysPub, dbLink.UUID, audio.UUID, audio.OutputFile),
 		)
 	}
@@ -48,8 +48,8 @@ func GenM3u8StreamMulti(folderVideoQualitysPub string, dbLink *models.Link, qual
 				m3u8 += fmt.Sprintf(
 					"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"%s\",NAME=\"%s\",LANGUAGE=\"%s\",DEFAULT=%s,AUTOSELECT=YES,URI=\"%s\"",
 					audioGroupID,
-					audio.Name, // Using Name instead of "Subtitle" as in the original single-audio function which seemed weird
-					audio.Lang,
+					SafeMediaLabel(audio.Name, fmt.Sprintf("Audio %d", i+1), 120),
+					SafeMediaLabel(audio.Lang, "und", 10),
 					isDefault,
 					fmt.Sprintf("%s/%s/%s/audio/%s", folderVideoQualitysPub, dbLink.UUID, audio.UUID, audio.OutputFile),
 				)

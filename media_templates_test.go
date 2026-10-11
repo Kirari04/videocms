@@ -29,7 +29,7 @@ func TestPlayerTemplatesRenderEncodingState(t *testing.T) {
 			"Video is still being encoded",
 			"data-encoding-state",
 			"startEncodingStatusPolling",
-			"/v/${UUID}/status",
+			"${PLAYER_BASE_URL}/status",
 		} {
 			if !strings.Contains(content, expected) {
 				t.Fatalf("%s missing encoding state marker %q", path, expected)
@@ -61,7 +61,7 @@ func TestPlayerTemplatesOpenDownloadOptionsPage(t *testing.T) {
 		content := string(readTemplateFile(t, path))
 		for _, expected := range []string{
 			"DOWNLOAD_PAGE_URL",
-			"`/v/${UUID}/download`",
+			"`${PLAYER_BASE_URL}/download`",
 		} {
 			if !strings.Contains(content, expected) {
 				t.Fatalf("%s missing download page marker %q", path, expected)
@@ -72,7 +72,7 @@ func TestPlayerTemplatesOpenDownloadOptionsPage(t *testing.T) {
 
 func TestPlayerV2UsesAbsoluteDownloadURLForVidstack(t *testing.T) {
 	content := string(readTemplateFile(t, "views/player_v2.html"))
-	expected := "new URL(`/v/${UUID}/download`, window.location.origin).href"
+	expected := "new URL(`${PLAYER_BASE_URL}/download`, window.location.origin).href"
 	if !strings.Contains(content, expected) {
 		t.Fatalf("player_v2.html must pass Vidstack an absolute download URL")
 	}

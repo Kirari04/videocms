@@ -741,7 +741,7 @@
 <body>
     <main class="shell">
         <nav class="topbar" aria-label="Download navigation">
-            <a class="back-link" href="/v/{{.UUID}}">
+            <a class="back-link" href="{{.PlayerBase}}">
                 <span aria-hidden="true">←</span>
                 Back to player
             </a>
@@ -1153,13 +1153,14 @@
 
             const setProgress = (progress, indeterminate = false) => {
                 const percent = Math.max(0, Math.min(100, Math.round(progress * 100)));
-                jobPercent.textContent = `${percent}%`;
+                const percentLabel = progress > 0 && percent === 0 ? "<1%" : `${percent}%`;
+                jobPercent.textContent = percentLabel;
                 progressValue.style.width = indeterminate ? "" : `${percent}%`;
                 progressTrack.dataset.indeterminate = indeterminate ? "true" : "false";
                 progressTrack.setAttribute("aria-valuenow", String(percent));
                 progressTrack.setAttribute(
                     "aria-valuetext",
-                    indeterminate ? "Waiting in preparation queue" : `${percent}% prepared`,
+                    indeterminate ? "Waiting in preparation queue" : `${percentLabel} prepared`,
                 );
             };
 
@@ -1285,7 +1286,7 @@
 
                 if (job.status === "queued") {
                     jobTitle.textContent = "Waiting in queue";
-                    jobMessage.textContent = "The server will start assembling your selected tracks when a preparation worker is free.";
+                    jobMessage.textContent = "The server will start preparing your selected tracks when a preparation worker is free.";
                     setProgress(0, true);
                     showDetail(queueDetail, true);
                     showDetail(estimateDetail, true);
@@ -1296,8 +1297,16 @@
                 }
 
                 if (job.status === "preparing") {
-                    jobTitle.textContent = "Assembling tracks";
-                    jobMessage.textContent = "The video is being packaged without re-encoding. You can leave this page and return later.";
+                    if (job.phase === "fetching") {
+                        jobTitle.textContent = "Fetching tracks";
+                        jobMessage.textContent = "The server is retrieving your selected tracks. You can leave this page and return later.";
+                    } else if (job.phase === "assembling") {
+                        jobTitle.textContent = "Assembling tracks";
+                        jobMessage.textContent = "The video is being packaged without re-encoding. You can leave this page and return later.";
+                    } else {
+                        jobTitle.textContent = "Preparing download";
+                        jobMessage.textContent = "Your selected tracks are being prepared. You can leave this page and return later.";
+                    }
                     setProgress(job.progress || 0);
                     showDetail(estimateDetail, true);
                     estimateValue.textContent = formatDuration(job.estimatedSecondsRemaining);

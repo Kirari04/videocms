@@ -7,6 +7,7 @@ import (
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/services"
 	"ch/kirari04/videocms/services/tusupload"
+	"net/http"
 	"sync"
 )
 
@@ -19,6 +20,8 @@ type Handlers struct {
 
 	downloadJobCreateMu    sync.Mutex
 	remoteDownloadCreateMu sync.Mutex
+	settingsMu             sync.Mutex
+	webhookHTTPClient      *http.Client
 }
 
 func NewHandlers(deps *app.Deps, authSvc *auth.Service, logicSvc *logic.Service, workerGroup *services.WorkerGroup, tusSvc *tusupload.Service) *Handlers {

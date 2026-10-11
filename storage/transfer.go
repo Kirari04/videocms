@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"os"
 	"path/filepath"
@@ -66,31 +67,103 @@ func (s *Service) Materialize(ctx context.Context, storeID string, key Key, purp
 // MaterializePrefix makes a complete object prefix available as a local
 // directory. Relative object names are preserved for manifests such as HLS.
 func (s *Service) MaterializePrefix(ctx context.Context, storeID string, prefix Key, purpose string) (string, func() error, error) {
+	paths, cleanup, err := s.MaterializePrefixes(ctx, storeID, []PrefixMaterialization{{Prefix: prefix, Purpose: purpose}}, nil)
+	if err != nil {
+		return "", nil, err
+	}
+	return paths[0], cleanup, nil
+}
+
+type PrefixMaterialization struct {
+	Prefix  Key
+	Purpose string
+}
+
+// MaterializePrefixes preserves each prefix in a separate local directory.
+// Progress measures bytes copied across all prefixes, including partial objects.
+// Local paths require no copying and do not invoke progress. On failure, all
+// scratch directories are removed; on success, the caller must call cleanup.
+func (s *Service) MaterializePrefixes(ctx context.Context, storeID string, prefixes []PrefixMaterialization, progress func(float64)) ([]string, func() error, error) {
 	store, err := s.StoreOrDefault(storeID)
 	if err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
+	paths := make([]string, len(prefixes))
 	if local, ok := store.(localPathStore); ok {
-		path, err := local.LocalPath(ctx, prefix)
-		if err != nil {
-			return "", nil, err
+		for index, request := range prefixes {
+			path, err := local.LocalPath(ctx, request.Prefix)
+			if err != nil {
+				return nil, nil, err
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				return nil, nil, err
+			}
+			if !info.IsDir() {
+				return nil, nil, fmt.Errorf("%w: %s", ErrNotFound, request.Prefix.String())
+			}
+			paths[index] = path
 		}
-		info, err := os.Stat(path)
-		if err != nil {
-			return "", nil, err
-		}
-		if !info.IsDir() {
-			return "", nil, fmt.Errorf("%w: %s", ErrNotFound, prefix.String())
-		}
-		return path, noCleanup, nil
+		return paths, noCleanup, nil
 	}
 
-	directory, cleanup, err := s.workspace.TempDir(ctx, purpose)
-	if err != nil {
-		return "", nil, err
+	inventories := make([][]ObjectInfo, len(prefixes))
+	var totalBytes int64
+	for index, request := range prefixes {
+		if err := store.Walk(ctx, request.Prefix, func(info ObjectInfo) error {
+			if _, err := relativeObjectKey(request.Prefix, info.Key); err != nil {
+				return err
+			}
+			inventories[index] = append(inventories[index], info)
+			totalBytes += info.Size
+			return nil
+		}); err != nil {
+			return nil, nil, err
+		}
+		if len(inventories[index]) == 0 {
+			return nil, nil, fmt.Errorf("%w: %s", ErrNotFound, request.Prefix.String())
+		}
 	}
-	found := false
-	err = store.Walk(ctx, prefix, func(info ObjectInfo) error {
+
+	cleanups := make([]func() error, 0, len(prefixes))
+	cleanupAll := func() error {
+		var cleanupErr error
+		for index := len(cleanups) - 1; index >= 0; index-- {
+			cleanupErr = errors.Join(cleanupErr, cleanups[index]())
+		}
+		return cleanupErr
+	}
+	var copiedBytes int64
+	reportBytes := func(count int64) {
+		copiedBytes += count
+		if progress != nil && totalBytes > 0 {
+			progress(min(0.99, float64(copiedBytes)/float64(totalBytes)))
+		}
+	}
+	if progress != nil && len(prefixes) > 0 {
+		progress(0)
+	}
+	for index, request := range prefixes {
+		directory, cleanup, err := s.workspace.TempDir(ctx, request.Purpose)
+		if err != nil {
+			_ = cleanupAll()
+			return nil, nil, err
+		}
+		cleanups = append(cleanups, cleanup)
+		if err := materializePrefixObjects(ctx, store, request.Prefix, inventories[index], directory, reportBytes); err != nil {
+			_ = cleanupAll()
+			return nil, nil, err
+		}
+		paths[index] = directory
+	}
+	if progress != nil && len(prefixes) > 0 {
+		progress(1)
+	}
+	return paths, cleanupAll, nil
+}
+
+func materializePrefixObjects(ctx context.Context, store Store, prefix Key, objects []ObjectInfo, directory string, progress func(int64)) error {
+	for _, info := range objects {
 		relative, err := relativeObjectKey(prefix, info.Key)
 		if err != nil {
 			return err
@@ -108,7 +181,7 @@ func (s *Service) MaterializePrefix(ctx context.Context, storeID string, prefix 
 			object.Body.Close()
 			return err
 		}
-		written, copyErr := copyWithContext(ctx, file, object.Body)
+		written, copyErr := copyWithContext(ctx, materializationWriter{Writer: file, progress: progress}, object.Body)
 		closeErr := errors.Join(file.Close(), object.Body.Close())
 		if copyErr != nil {
 			return copyErr
@@ -119,17 +192,21 @@ func (s *Service) MaterializePrefix(ctx context.Context, storeID string, prefix 
 		if written != object.Info.Size {
 			return fmt.Errorf("materialized object %s size mismatch: wrote %d, expected %d", info.Key.String(), written, object.Info.Size)
 		}
-		found = true
-		return nil
-	})
-	if err != nil || !found {
-		_ = cleanup()
-		if err != nil {
-			return "", nil, err
-		}
-		return "", nil, fmt.Errorf("%w: %s", ErrNotFound, prefix.String())
 	}
-	return directory, cleanup, nil
+	return nil
+}
+
+type materializationWriter struct {
+	io.Writer
+	progress func(int64)
+}
+
+func (w materializationWriter) Write(data []byte) (int, error) {
+	count, err := w.Writer.Write(data)
+	if count > 0 && w.progress != nil {
+		w.progress(int64(count))
+	}
+	return count, err
 }
 
 func (s *Service) PublishFile(ctx context.Context, storeID string, key Key, localPath string, opts PutOptions) (ObjectInfo, error) {

@@ -23,12 +23,23 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	auth.GET("/refresh",
 		handlers.AuthRefresh,
 		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateAuth), cfg.RatelimitBurstAuth, time.Minute*5)))
+	auth.POST("/logout", handlers.AuthLogout,
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateAuth), cfg.RatelimitBurstAuth, time.Minute*5)))
 
 	// Routes that dont require authentication
 	apiGroup.GET("/config", handlers.GetConfig)
 	apiGroup.GET("/file/example", handlers.GetFileExample)
 	apiGroup.GET("/p/pages", handlers.ListPublicWebPage)
 	apiGroup.GET("/p/page", handlers.GetPublicWebPage)
+
+	shared := apiGroup.Group("/shares/:token",
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateWeb), cfg.RatelimitBurstWeb, time.Minute*5)))
+	shared.GET("", handlers.GetSharedFolder)
+	shared.POST("/unlock", handlers.UnlockFolderShare,
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateAuth), cfg.RatelimitBurstAuth, time.Minute*5)))
+	shared.POST("/uploads", handlers.UploadToSharedFolder,
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateUpload), cfg.RatelimitBurstUpload, time.Minute*5)),
+		middleware.BodyLimit(fmt.Sprintf("%dk", cfg.MaxUploadFilesize/1024+1024)))
 
 	// Routes that require to be authenticated
 	protectedApi := apiGroup.Group("",
@@ -85,6 +96,10 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	adminV2.POST("/storage/migrations/:id/keep-originals", handlers.KeepStorageMigrationOriginals)
 	adminV2.POST("/storage/migrations/:id/start-cleanup", handlers.StartStorageMigrationCleanupNow)
 	protectedApi.POST("/folder", handlers.CreateFolder)
+	protectedApi.GET("/folder-shares", handlers.ListFolderShares)
+	protectedApi.POST("/folder-shares", handlers.CreateFolderShare)
+	protectedApi.PUT("/folder-shares/:id", handlers.UpdateFolderShare)
+	protectedApi.DELETE("/folder-shares/:id", handlers.DeleteFolderShare)
 	protectedApi.PUT("/folder", handlers.UpdateFolder)
 	protectedApi.DELETE("/folder", handlers.DeleteFolderLegacy)
 	protectedApi.PUT("/move", handlers.MoveItems)
@@ -139,6 +154,7 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	protectedApi.GET("/stats/storage/top", handlers.GetAdminTopStorageStats, middlewareFactory.IsAdmin())
 	protectedApi.GET("/settings", handlers.GetSettings, middlewareFactory.IsAdmin())
 	protectedApi.PUT("/settings", handlers.UpdateSettings, middlewareFactory.IsAdmin())
+	protectedApi.POST("/settings/rotate-signing-keys", handlers.RotateSigningKeys, middlewareFactory.IsAdmin())
 	protectedApi.POST("/settings/test-pgs-server", handlers.TestPgsServerConnection, middlewareFactory.IsAdmin())
 	protectedApi.GET("/admin/storage", handlers.GetStorageAdminOverview, middlewareFactory.IsAdmin())
 	protectedApi.POST("/admin/storage/sftp/host-key", handlers.ScanSFTPHostKey, middlewareFactory.IsAdmin())

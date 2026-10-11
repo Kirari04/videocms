@@ -3,6 +3,7 @@ package controllers
 import (
 	"ch/kirari04/videocms/auth"
 	"ch/kirari04/videocms/helpers"
+	"ch/kirari04/videocms/middlewares"
 	"ch/kirari04/videocms/models"
 	"encoding/base64"
 	"encoding/json"
@@ -82,7 +83,7 @@ func (h *Handlers) PlayerController(c echo.Context) error {
 	var jsonWebhooks []map[string]any
 	var streamUrl, streamUrlWidth, streamUrlHeight, firstAudio string
 
-	mediaToken, mediaExpiration, err := h.Auth.GenerateMediaToken(buildMediaClaims(dbLink))
+	mediaToken, mediaExpiration, err := h.Auth.GenerateMediaToken(h.requestMediaClaims(c, dbLink))
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Failed to generate media token")
 	}
@@ -146,9 +147,9 @@ func (h *Handlers) PlayerController(c echo.Context) error {
 	}
 	for _, webhookItem := range webhooks {
 		jsonWebhooks = append(jsonWebhooks, map[string]any{
-			"url":      webhookItem.Url,
+			"url":      fmt.Sprintf("%s/%s/webhooks/%d", strings.TrimRight(h.Config().FolderVideoQualitysPub, "/"), dbLink.UUID, webhookItem.ID),
 			"rpm":      webhookItem.Rpm,
-			"reqQuery": webhookItem.ReqQuery,
+			"reqField": webhookItem.ReqQuery,
 			"resField": webhookItem.ResField,
 		})
 	}
@@ -202,6 +203,7 @@ func (h *Handlers) PlayerController(c echo.Context) error {
 		"StreamIsReady":                playerStatus.Ready,
 		"PlayerStatus":                 string(rawPlayerStatus),
 		"UUID":                         requestValidation.UUID,
+		"PlayerBase":                   playerBaseURL(c, dbLink.UUID),
 		"Folder":                       h.Config().FolderVideoQualitysPub,
 		"AppName":                      h.Config().AppName,
 		"BaseUrl":                      h.Config().BaseUrl,
@@ -267,6 +269,9 @@ func (h *Handlers) loadPlayerLink(uuid string) (*models.Link, error) {
 }
 
 func (h *Handlers) playerCaptchaAllowed(c echo.Context) bool {
+	if requestFolderShare(c) != nil {
+		return true
+	}
 	if h.Config().CaptchaPlayerEnabled == nil || !*h.Config().CaptchaPlayerEnabled {
 		return true
 	}
@@ -501,5 +506,5 @@ func (h *Handlers) requestIsHTTPS(c echo.Context) bool {
 	if req.TLS != nil {
 		return true
 	}
-	return strings.EqualFold(req.Header.Get("X-Forwarded-Proto"), "https")
+	return middlewares.IsTrustedProxyHTTPS(c)
 }

@@ -11,23 +11,19 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 )
 
 func (s *Service) SimpleUpload(parentFolderID uint, name string, file io.Reader, fileSize int64, userID uint) (status int, response *models.Link, err error) {
 	// check if user is blocked by another asynchronous user operation
-	if s.Deps.RequestGate.Blocked(userID) {
+	if !s.Deps.RequestGate.TryStart(userID) {
 		return http.StatusTooManyRequests, nil, errors.New("wait until the previous delete request finished")
 	}
-	s.Deps.RequestGate.Start(userID)
 	defer s.Deps.RequestGate.End(userID)
 
 	// check parent folder
-	if parentFolderID > 0 {
-		var count int64
-		s.Deps.DB.Model(&models.Folder{}).Where("id = ?", parentFolderID).Count(&count)
-		if count == 0 {
-			return http.StatusBadRequest, nil, errors.New("parent folder doesn't exist")
-		}
+	if status, err := ValidateFolderDestination(s.Deps.DB, parentFolderID, userID); err != nil {
+		return status, nil, err
 	}
 
 	// check storage quota
@@ -101,8 +97,16 @@ func (s *Service) SimpleUpload(parentFolderID uint, name string, file io.Reader,
 		ParentFolderID:   parentFolderID,
 		UserID:           userID,
 	}
-	if err := s.Deps.DB.Create(&session).Error; err != nil {
-		return http.StatusInternalServerError, nil, echo.ErrInternalServerError
+	status = http.StatusInternalServerError
+	if err := s.Deps.DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		if status, err = ValidateFolderDestination(tx, parentFolderID, userID); err != nil {
+			return err
+		}
+		status = http.StatusInternalServerError
+		return tx.Create(&session).Error
+	}); err != nil {
+		return status, nil, err
 	}
 
 	// Track upload

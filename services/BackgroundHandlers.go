@@ -570,7 +570,7 @@ func (w *WorkerGroup) downloadPreparationHandler(ctx context.Context, task backg
 		}
 	}
 	now := time.Now()
-	if err := w.deps.DB.Model(&job).Updates(map[string]any{"status": models.DownloadJobStatusPreparing, "started_at": &now, "finished_at": nil, "error_code": "", "error_message": "", "progress": 0, "background_job_id": task.JobID}).Error; err != nil {
+	if err := w.deps.DB.Model(&job).Updates(map[string]any{"status": models.DownloadJobStatusPreparing, "phase": "", "started_at": &now, "finished_at": nil, "error_code": "", "error_message": "", "progress": 0, "background_job_id": task.JobID}).Error; err != nil {
 		return background.Result{}, background.Transient("state_update_failed", "The download preparation could not start", err)
 	}
 	job.Status, job.StartedAt = models.DownloadJobStatusPreparing, &now
