@@ -519,6 +519,13 @@ func downloadPreparerTestWorker(t *testing.T) (*WorkerGroup, *models.DownloadJob
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	// Match production's SQLite pool so polling cannot lock out worker writes.
+	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	if err := db.AutoMigrate(
 		&models.File{},
 		&models.Link{},
