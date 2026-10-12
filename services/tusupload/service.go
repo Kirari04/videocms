@@ -37,9 +37,10 @@ const (
 type contextKey string
 
 const (
-	userIDContextKey   contextKey = "videocms_tus_user_id"
-	adminContextKey    contextKey = "videocms_tus_admin"
-	apiKeyIDContextKey contextKey = "videocms_tus_api_key_id"
+	userIDContextKey      contextKey = "videocms_tus_user_id"
+	adminContextKey       contextKey = "videocms_tus_admin"
+	apiKeyIDContextKey    contextKey = "videocms_tus_api_key_id"
+	folderShareContextKey contextKey = "videocms_tus_folder_share"
 )
 
 type Service struct {
@@ -240,6 +241,9 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) authenticatedContext(r *http.Request) (context.Context, int, string) {
+	if token := r.Header.Get(FolderShareHeader); token != "" {
+		return s.sharedUploadContext(r, token)
+	}
 	bearer := r.Header.Get("Authorization")
 	if bearer == "" {
 		return r.Context(), http.StatusForbidden, "No JWT Token"
@@ -330,6 +334,9 @@ func (s *Service) authorizeUploadResource(ctx context.Context, tusID string) (*m
 	if session.UserID != userID {
 		return nil, http.StatusForbidden, "upload belongs to another user"
 	}
+	if status, err := s.authorizeSharedSession(ctx, &session); err != nil {
+		return nil, status, err.Error()
+	}
 	if isExpired(&session) {
 		s.expireSession(&session)
 		return nil, http.StatusGone, "upload expired"
@@ -379,6 +386,15 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 	if status, err := logic.ValidateFolderDestination(db, parentFolderID, userID); err != nil {
 		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_INVALID_PARENT", err.Error(), status)
 	}
+	share, _ := hook.Context.Value(folderShareContextKey).(*models.FolderShare)
+	if share != nil {
+		if status, err := s.validateSharedDestination(share, parentFolderID); err != nil {
+			return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_SHARE_DESTINATION", err.Error(), status)
+		}
+		if !validSharedFilename(name) {
+			return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_INVALID_METADATA", "video extension is not supported", http.StatusBadRequest)
+		}
+	}
 
 	clientUploadUUID := strings.TrimSpace(info.MetaData["client_upload_uuid"])
 	if clientUploadUUID == "" {
@@ -386,6 +402,9 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 	}
 	if _, err := uuid.Parse(clientUploadUUID); err != nil {
 		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_INVALID_METADATA", "client_upload_uuid must be a UUID", http.StatusBadRequest)
+	}
+	if status, err := s.validateUploadGroup(hook.Context, userID, clientUploadUUID, parentFolderID, name); err != nil {
+		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_UPLOAD_GROUP", err.Error(), status)
 	}
 
 	kind := models.UploadKindSingle
@@ -431,12 +450,22 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 		UserID:           userID,
 		ExpiresAt:        &expiresAt,
 	}
+	if share != nil {
+		session.FolderShareID = share.ID
+		session.FolderShareVersion = share.AccessVersion
+	}
 
 	createStatus := http.StatusBadRequest
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		if status, err := logic.ValidateFolderDestination(tx, parentFolderID, userID); err != nil {
 			createStatus = status
 			return err
+		}
+		if share != nil {
+			if status, err := s.validateSharedCreate(tx, share, &session, info.MetaData); err != nil {
+				createStatus = status
+				return err
+			}
 		}
 		if err := tx.Create(&session).Error; err != nil {
 			return err
@@ -455,7 +484,7 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 
 		byTusID := map[string]models.UploadSession{}
 		for _, partial := range partials {
-			if partial.UserID != userID || partial.ClientUploadUUID != clientUploadUUID {
+			if partial.UserID != userID || partial.ClientUploadUUID != clientUploadUUID || partial.FolderShareID != session.FolderShareID || partial.FolderShareVersion != session.FolderShareVersion || (share != nil && (partial.ParentFolderID != parentFolderID || partial.Name != name)) {
 				return fmt.Errorf("partial upload belongs to another user or upload group")
 			}
 			if partial.Kind != models.UploadKindPartial {
@@ -1046,6 +1075,9 @@ func (s *Service) EnqueueFinalize(ctx context.Context, uploadID string, userID u
 	if session.UserID != userID {
 		return nil, false, http.StatusForbidden, errors.New("upload not found")
 	}
+	if status, err := s.authorizeSharedSession(ctx, &session); err != nil {
+		return nil, false, status, err
+	}
 	if session.Kind == models.UploadKindPartial {
 		return nil, false, http.StatusBadRequest, errors.New("partial uploads cannot be finalized")
 	}
@@ -1055,6 +1087,11 @@ func (s *Service) EnqueueFinalize(ctx context.Context, uploadID string, userID u
 	}
 	if session.Status != models.UploadStatusUploaded && session.Status != models.UploadStatusFailed && session.Status != models.UploadStatusImporting && session.Status != models.UploadStatusDone {
 		return nil, false, http.StatusConflict, errors.New("upload is not complete")
+	}
+	if share, _ := ctx.Value(folderShareContextKey).(*models.FolderShare); share != nil && session.BackgroundJobID == "" {
+		if status, err := s.validateSharedCapacity(db, share, session.Size, session.ClientUploadUUID); err != nil {
+			return nil, false, status, err
+		}
 	}
 	ownerID := session.UserID
 	job, reused, err := s.Deps.Background.Enqueue(ctx, background.JobSpec{
