@@ -1,15 +1,11 @@
 package controllers
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,6 +18,7 @@ import (
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/middlewares"
 	"ch/kirari04/videocms/models"
+	"ch/kirari04/videocms/services/tusupload"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/crypto/bcrypt"
@@ -47,7 +44,7 @@ func newFolderShareFixture(t *testing.T) *folderShareFixture {
 	sqlDB, _ := db.DB()
 	sqlDB.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	if err := db.AutoMigrate(&models.User{}, &models.Folder{}, &models.FolderShare{}, &models.File{}, &models.Link{}, &models.Quality{}, &models.Tag{}, &models.TagLinks{}, &models.UploadSession{}, &models.UploadLog{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.Folder{}, &models.FolderShare{}, &models.File{}, &models.Link{}, &models.Quality{}, &models.Tag{}, &models.TagLinks{}, &models.UploadSession{}, &models.UploadPart{}, &models.UploadLog{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := background.Migrate(db); err != nil {
@@ -56,9 +53,11 @@ func newFolderShareFixture(t *testing.T) *folderShareFixture {
 	enabled, disabled := true, false
 	deps := &app.Deps{DB: db, RequestGate: app.NewRequestGate(), Background: background.New(db, background.Options{}), Snapshots: app.NewSnapshotStore(app.Snapshot{Config: config.Config{
 		JwtSecretKey: "share-test-secret", JwtMediaSecretKey: "media-test-secret", UploadEnabled: &enabled, CaptchaEnabled: &disabled,
-		FolderVideoUploadsPriv: t.TempDir(), FolderVideoQualitysPub: "/videos/qualitys", MaxUploadFilesize: 1024, MaxUploadSessions: 10,
+		FolderVideoUploadsPriv: t.TempDir(), FolderVideoQualitysPub: "/videos/qualitys", MaxUploadFilesize: 1024, MaxUploadChunkSize: 4, MaxUploadSessions: 10,
 	}})}
 	f := &folderShareFixture{h: NewHandlers(deps, auth.NewService(deps), logic.NewService(deps), nil, nil), e: echo.New()}
+	f.h.TUS = tusupload.NewService(deps, f.h.Auth)
+	t.Cleanup(f.h.TUS.Close)
 	f.owner = models.User{Username: "owner", Email: "private@example.test", Storage: 1024, Settings: models.UserSettings{UploadSessionsMax: 10}}
 	for _, value := range []any{&f.owner} {
 		if err := db.Create(value).Error; err != nil {
@@ -98,7 +97,10 @@ func newFolderShareFixture(t *testing.T) *folderShareFixture {
 	ownerRoutes.DELETE("/:id", f.h.DeleteFolderShare)
 	f.e.GET("/api/shares/:token", f.h.GetSharedFolder)
 	f.e.POST("/api/shares/:token/unlock", f.h.UnlockFolderShare)
-	f.e.POST("/api/shares/:token/uploads", f.h.UploadToSharedFolder)
+	f.e.GET("/api/shares/:token/uploads/:upload_id", f.h.SharedUploadStatus)
+	f.e.POST("/api/shares/:token/uploads/:upload_id/finalize", f.h.FinalizeSharedUpload)
+	f.e.Any("/api/uploads", f.h.TusUpload)
+	f.e.Any("/api/uploads/*", f.h.TusUpload)
 	f.e.GET("/share-videos/:token/:UUID", f.h.SharedVideo(func(c echo.Context) error { return c.NoContent(http.StatusOK) }))
 	f.e.GET("/media/:UUID", func(c echo.Context) error { return c.NoContent(http.StatusOK) }, middlewares.NewFactory(deps, f.h.Auth).MediaAuth())
 	return f
@@ -207,7 +209,7 @@ func TestSharePasswordSessionsInvalidateOnSettingsChange(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `"Locked":true`) || strings.Contains(rec.Body.String(), f.root.Name) {
 		t.Fatal("locked folder leaked content")
 	}
-	if rec := f.request(http.MethodPost, base+"/uploads", "", 0); rec.Code != http.StatusUnauthorized {
+	if rec := f.createGuestUpload(share, f.root.ID, uuid.NewString(), 5); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("locked share accepted an upload: %d", rec.Code)
 	}
 	unlock := func(password string) *httptest.ResponseRecorder {
@@ -289,53 +291,6 @@ func TestSharedMediaChecksRevocationPermissionsAndFolderMoves(t *testing.T) {
 	}
 }
 
-func TestGuestUploadUsesOwnerPipelineWithoutReturningOwnerDetails(t *testing.T) {
-	f := newFolderShareFixture(t)
-	share := f.create(t, false, true, "")
-	upload := func(query string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
-		var body bytes.Buffer
-		writer := multipart.NewWriter(&body)
-		part, _ := writer.CreateFormFile("file", "guest.mp4")
-		_, _ = part.Write([]byte("guest video"))
-		_ = writer.WriteField("ParentFolderID", fmt.Sprint(f.outside.ID))
-		_ = writer.WriteField("Name", "Guest video")
-		_ = writer.Close()
-		req := httptest.NewRequest(http.MethodPost, "/api/shares/"+share.Token+"/uploads"+query, &body)
-		req.Header.Set("Content-Type", writer.FormDataContentType())
-		for _, cookie := range cookies {
-			req.AddCookie(cookie)
-		}
-		rec := httptest.NewRecorder()
-		f.e.ServeHTTP(rec, req)
-		return rec
-	}
-	if rec := upload(fmt.Sprintf("?FolderID=%d", f.outside.ID)); rec.Code != 403 {
-		t.Fatalf("upload escaped folder: %d", rec.Code)
-	}
-	rec := upload("")
-	if rec.Code != 202 || strings.Contains(rec.Body.String(), "UUID") || rec.Header().Get("Location") != "" {
-		t.Fatalf("upload receipt: %d %s", rec.Code, rec.Body.String())
-	}
-	var session models.UploadSession
-	if err := f.h.Deps.DB.First(&session).Error; err != nil {
-		t.Fatal(err)
-	}
-	if session.UserID != f.owner.ID || session.ParentFolderID != f.root.ID || session.FolderShareID != share.ID || session.BackgroundJobID == "" || session.Name != "Guest video.mp4" {
-		t.Fatalf("incorrect upload attribution: %+v", session)
-	}
-	if bytes, err := os.ReadFile(session.StoragePath); err != nil || string(bytes) != "guest video" {
-		t.Fatalf("staging failed: %q %v", bytes, err)
-	}
-	f.h.Deps.DB.Model(&f.owner).Update("storage", 5)
-	if rec := upload(""); rec.Code != 403 {
-		t.Fatalf("owner quota bypassed: %d %s", rec.Code, rec.Body.String())
-	}
-	f.h.Deps.DB.Model(&share).Update("allow_upload", false)
-	if rec := upload(""); rec.Code != 403 {
-		t.Fatalf("read-only upload: %d", rec.Code)
-	}
-}
-
 func TestShareCaptchaFailsClosedWhenServerCaptchaIsDisabled(t *testing.T) {
 	f := newFolderShareFixture(t)
 	body := fmt.Sprintf(`{"FolderID":%d,"AllowRead":true,"RequireCaptcha":true}`, f.root.ID)
@@ -350,79 +305,6 @@ func TestShareCaptchaFailsClosedWhenServerCaptchaIsDisabled(t *testing.T) {
 	remove := fmt.Sprintf(`{"FolderID":%d,"AllowRead":true,"RequireCaptcha":false}`, f.root.ID)
 	if rec := f.request(http.MethodPut, fmt.Sprintf("/api/folder-shares/%d", share.ID), remove, f.owner.ID); rec.Code != http.StatusOK {
 		t.Fatalf("owner could not remove unavailable CAPTCHA: %d %s", rec.Code, rec.Body.String())
-	}
-}
-
-// Change the share only when multipart parsing starts, after the handler has
-// checked the initial authorization. No timing assumptions or goroutines are
-// needed to reproduce settings changes during a slow request body.
-type sharedUploadChangingBody struct {
-	io.Reader
-	onRead func()
-}
-
-func (b *sharedUploadChangingBody) Read(p []byte) (int, error) {
-	if b.onRead != nil {
-		change := b.onRead
-		b.onRead = nil
-		change()
-	}
-	return b.Reader.Read(p)
-}
-
-func TestSharedUploadRechecksAccessAfterReceivingBody(t *testing.T) {
-	for _, change := range []string{"revoke", "expire", "settings", "remove upload", "move", "delete root", "delete owner", "disable uploads"} {
-		t.Run(change, func(t *testing.T) {
-			f := newFolderShareFixture(t)
-			share := f.create(t, true, true, "")
-			var body bytes.Buffer
-			writer := multipart.NewWriter(&body)
-			part, _ := writer.CreateFormFile("file", "guest.mp4")
-			_, _ = part.Write([]byte("guest video"))
-			_ = writer.Close()
-			changingBody := &sharedUploadChangingBody{Reader: &body, onRead: func() {
-				var err error
-				switch change {
-				case "revoke":
-					err = f.h.Deps.DB.Delete(&share).Error
-				case "expire":
-					err = f.h.Deps.DB.Model(&share).Update("expires_at", time.Now().Add(-time.Minute)).Error
-				case "settings":
-					err = f.h.Deps.DB.Model(&share).Update("access_version", uuid.NewString()).Error
-				case "remove upload":
-					err = f.h.Deps.DB.Model(&share).Update("allow_upload", false).Error
-				case "move":
-					err = f.h.Deps.DB.Model(&f.child).Update("parent_folder_id", f.outside.ID).Error
-				case "delete root":
-					err = f.h.Deps.DB.Delete(&f.root).Error
-				case "delete owner":
-					err = f.h.Deps.DB.Delete(&f.owner).Error
-				case "disable uploads":
-					snapshot := f.h.Deps.Snapshots.Current()
-					disabled := false
-					snapshot.Config.UploadEnabled = &disabled
-					f.h.Deps.Snapshots.Replace(snapshot)
-				}
-				if err != nil {
-					t.Fatal(err)
-				}
-			}}
-			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/shares/%s/uploads?FolderID=%d", share.Token, f.child.ID), changingBody)
-			req.Header.Set("Content-Type", writer.FormDataContentType())
-			rec := httptest.NewRecorder()
-			f.e.ServeHTTP(rec, req)
-			if rec.Code != http.StatusForbidden && rec.Code != http.StatusNotFound {
-				t.Fatalf("changed share accepted body: %d %s", rec.Code, rec.Body.String())
-			}
-			var count int64
-			if err := f.h.Deps.DB.Model(&models.UploadSession{}).Count(&count).Error; err != nil || count != 0 {
-				t.Fatalf("rejected upload consumed a session: count=%d err=%v", count, err)
-			}
-			files, err := os.ReadDir(f.h.Config().FolderVideoUploadsPriv)
-			if err != nil || len(files) != 0 {
-				t.Fatalf("rejected upload left staged data: files=%v err=%v", files, err)
-			}
-		})
 	}
 }
 
@@ -449,27 +331,5 @@ func TestProtectedSharedMediaRequiresCurrentVisitorSession(t *testing.T) {
 	session.Value += "invalid"
 	if rec := f.request(http.MethodGet, path, "", 0, media, session); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("invalid visitor session accepted: %d", rec.Code)
-	}
-}
-
-func TestSharedFolderRejectsUnsupportedVideoBeforeStaging(t *testing.T) {
-	f := newFolderShareFixture(t)
-	share := f.create(t, false, true, "")
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	part, _ := writer.CreateFormFile("file", "document.txt")
-	_, _ = part.Write([]byte("not a video"))
-	_ = writer.Close()
-	req := httptest.NewRequest(http.MethodPost, "/api/shares/"+share.Token+"/uploads", &body)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	rec := httptest.NewRecorder()
-	f.e.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("unsupported file accepted: %d", rec.Code)
-	}
-	var count int64
-	f.h.Deps.DB.Model(&models.UploadSession{}).Count(&count)
-	if count != 0 {
-		t.Fatal("unsupported file consumed an upload session")
 	}
 }

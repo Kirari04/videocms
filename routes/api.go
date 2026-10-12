@@ -37,9 +37,9 @@ func Api(apiGroup *echo.Group, handlers *controllers.Handlers, middlewareFactory
 	shared.GET("", handlers.GetSharedFolder)
 	shared.POST("/unlock", handlers.UnlockFolderShare,
 		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateAuth), cfg.RatelimitBurstAuth, time.Minute*5)))
-	shared.POST("/uploads", handlers.UploadToSharedFolder,
-		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateUpload), cfg.RatelimitBurstUpload, time.Minute*5)),
-		middleware.BodyLimit(fmt.Sprintf("%dk", cfg.MaxUploadFilesize/1024+1024)))
+	shared.POST("/uploads/:upload_id/finalize", handlers.FinalizeSharedUpload,
+		middleware.RateLimiterWithConfig(*middlewareFactory.LimiterConfig(rate.Limit(cfg.RatelimitRateUpload), cfg.RatelimitBurstUpload, time.Minute*5)))
+	shared.GET("/uploads/:upload_id", handlers.SharedUploadStatus)
 
 	// Routes that require to be authenticated
 	protectedApi := apiGroup.Group("",
