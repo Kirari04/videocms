@@ -108,6 +108,21 @@ func TestGuestFolderCapacityIncludesSubtreeAndReservations(t *testing.T) {
 			t.Fatalf("cancel: %d", rec.Code)
 		}
 	}
+	// Termination events update the reservations asynchronously after DELETE.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		capacity, err = sharing.UploadCapacity(f.h.Deps.DB, &share, "")
+		if err != nil {
+			t.Fatalf("capacity after cancel: %v", err)
+		}
+		if capacity.Reserved == 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if capacity.Reserved != 0 {
+		t.Fatalf("cancel did not release reservation: %+v", capacity)
+	}
 	if rec := f.createGuestUpload(share, f.root.ID, uuid.NewString(), 10); rec.Code != 201 {
 		t.Fatalf("cancel did not release reservation: %d %s", rec.Code, rec.Body.String())
 	}
