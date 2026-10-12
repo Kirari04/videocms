@@ -285,6 +285,7 @@ func tusCorsHeaders() []string {
 		"Upload-Offset",
 		"Upload-Metadata",
 		"Upload-Concat",
+		"X-Folder-Share",
 		"X-HTTP-Method-Override",
 	}
 }

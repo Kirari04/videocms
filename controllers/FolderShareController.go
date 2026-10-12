@@ -6,14 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"ch/kirari04/videocms/auth"
-	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/models"
 	"ch/kirari04/videocms/sharing"
@@ -26,16 +23,19 @@ import (
 const folderShareContextKey = "folder_share"
 
 type folderShareResponse struct {
-	ID             uint
-	Token          string
-	FolderID       uint
-	Name           string
-	AllowRead      bool
-	AllowUpload    bool
-	RequireCaptcha bool
-	HasPassword    bool
-	ExpiresAt      *time.Time
-	URL            string
+	ID               uint
+	Token            string
+	FolderID         uint
+	Name             string
+	AllowRead        bool
+	AllowUpload      bool
+	MaxVideoSize     int64
+	MaxFolderSize    int64
+	ReturnUploadLink bool
+	RequireCaptcha   bool
+	HasPassword      bool
+	ExpiresAt        *time.Time
+	URL              string
 }
 
 func shareResponse(share models.FolderShare) folderShareResponse {
@@ -43,6 +43,7 @@ func shareResponse(share models.FolderShare) folderShareResponse {
 		ID: share.ID, Token: share.Token, FolderID: share.FolderID, Name: share.Name,
 		AllowRead: share.AllowRead, AllowUpload: share.AllowUpload, RequireCaptcha: share.RequireCaptcha,
 		HasPassword: share.PasswordHash != "", ExpiresAt: share.ExpiresAt, URL: "/s/" + share.Token,
+		MaxVideoSize: share.MaxVideoSize, MaxFolderSize: share.MaxFolderSize, ReturnUploadLink: share.ReturnsUploadLink(),
 	}
 }
 
@@ -105,6 +106,7 @@ func (h *Handlers) UpdateFolderShare(c echo.Context) error {
 			"name": share.Name, "allow_read": share.AllowRead, "allow_upload": share.AllowUpload,
 			"require_captcha": share.RequireCaptcha, "password_hash": share.PasswordHash,
 			"access_version": share.AccessVersion, "expires_at": share.ExpiresAt,
+			"max_video_size": share.MaxVideoSize, "max_folder_size": share.MaxFolderSize, "return_upload_link": share.ReturnUploadLink,
 		})
 	if result.Error != nil {
 		return c.NoContent(http.StatusInternalServerError)
@@ -173,6 +175,15 @@ func (h *Handlers) applyFolderShare(share *models.FolderShare, request models.Fo
 	}
 	share.FolderID, share.Name = request.FolderID, strings.TrimSpace(request.Name)
 	share.AllowRead, share.AllowUpload = request.AllowRead, request.AllowUpload
+	if request.MaxVideoSize != nil {
+		share.MaxVideoSize = *request.MaxVideoSize
+	}
+	if request.MaxFolderSize != nil {
+		share.MaxFolderSize = *request.MaxFolderSize
+	}
+	if request.ReturnUploadLink != nil {
+		share.ReturnUploadLink = request.ReturnUploadLink
+	}
 	share.RequireCaptcha, share.ExpiresAt = request.RequireCaptcha, request.ExpiresAt
 	share.AccessVersion = uuid.NewString()
 	return nil
@@ -228,15 +239,19 @@ type sharedFileItem struct {
 	DownloadURL string
 }
 type sharedFolderResponse struct {
-	Name             string
-	AllowRead        bool
-	AllowUpload      bool
-	PasswordRequired bool
-	RequireCaptcha   bool
-	Locked           bool
-	FolderID         uint
-	Folders          []sharedFolderItem
-	Files            []sharedFileItem
+	Name                 string
+	AllowRead            bool
+	AllowUpload          bool
+	MaxVideoSize         int64
+	MaxFolderSize        int64
+	UploadBytesRemaining *int64
+	ReturnUploadLink     bool
+	PasswordRequired     bool
+	RequireCaptcha       bool
+	Locked               bool
+	FolderID             uint
+	Folders              []sharedFolderItem
+	Files                []sharedFileItem
 }
 
 func (h *Handlers) GetSharedFolder(c echo.Context) error {
@@ -272,6 +287,18 @@ func (h *Handlers) GetSharedFolder(c echo.Context) error {
 		return echo.ErrInternalServerError
 	}
 	response.Name, response.FolderID = folder.Name, folder.ID
+	response.MaxVideoSize = h.Config().MaxUploadFilesize
+	if share.MaxVideoSize > 0 && (response.MaxVideoSize <= 0 || share.MaxVideoSize < response.MaxVideoSize) {
+		response.MaxVideoSize = share.MaxVideoSize
+	}
+	response.MaxFolderSize, response.ReturnUploadLink = share.MaxFolderSize, share.ReturnsUploadLink()
+	if share.MaxFolderSize > 0 {
+		capacity, err := sharing.UploadCapacity(h.Deps.DB, share, "")
+		if err != nil {
+			return echo.ErrInternalServerError
+		}
+		response.UploadBytesRemaining = &capacity.Remaining
+	}
 	if !share.AllowRead {
 		return c.JSON(http.StatusOK, response)
 	}
@@ -327,100 +354,29 @@ func (h *Handlers) UnlockFolderShare(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h *Handlers) UploadToSharedFolder(c echo.Context) error {
-	share, err := h.publicFolderShare(c)
-	if err != nil {
-		return err
-	}
-	folderID := share.FolderID
-	if raw := c.QueryParam("FolderID"); raw != "" {
-		id, err := strconv.ParseUint(raw, 10, 64)
-		if err != nil {
-			return c.String(http.StatusBadRequest, "Invalid folder ID")
-		}
-		folderID = uint(id)
-	}
-	if err := h.validateSharedUpload(c, share, folderID); err != nil {
-		return err
-	}
-	file, err := c.FormFile("file")
-	if err != nil {
-		return c.String(http.StatusBadRequest, "No file uploaded")
-	}
-	if file.Size <= 0 || file.Size > h.Config().MaxUploadFilesize {
-		return c.String(http.StatusRequestEntityTooLarge, "File exceeds the upload limit or is empty")
-	}
-	name := strings.TrimSpace(c.FormValue("Name"))
-	extension := filepath.Ext(file.Filename)
-	if !slices.Contains(config.EXTENSIONS, strings.ToLower(strings.TrimPrefix(extension, "."))) {
-		return c.String(http.StatusBadRequest, "Video extension is not supported")
-	}
-	if name == "" {
-		name = file.Filename
-	} else if filepath.Ext(name) == "" {
-		name += extension
-	}
-	if !strings.EqualFold(filepath.Ext(name), extension) {
-		return c.String(http.StatusBadRequest, "File name must keep the uploaded video's extension")
-	}
-	if len(name) == 0 || len(name) > 120 {
-		return c.String(http.StatusBadRequest, "File name must be between 1 and 120 bytes")
-	}
-	if h.background() == nil {
+func (h *Handlers) FinalizeSharedUpload(c echo.Context) error {
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	if h.TUS == nil {
 		return c.String(http.StatusServiceUnavailable, "Upload processing is unavailable")
 	}
-	src, err := file.Open()
-	if err != nil {
-		return echo.ErrInternalServerError
-	}
-	defer src.Close()
-	// Receiving a whole file may take minutes. Recheck live access after reading
-	// the body so revocation, expiry, settings changes and moves take effect
-	// before an upload is accepted into the owner's durable pipeline.
-	current, err := h.publicFolderShare(c)
-	if err != nil {
-		return err
-	}
-	if current.AccessVersion != share.AccessVersion {
-		return echo.NewHTTPError(http.StatusForbidden, "Share settings changed during this upload. Open the link again before retrying")
-	}
-	if err := h.validateSharedUpload(c, current, folderID); err != nil {
-		return err
-	}
-	status, session, err := h.Logic.StageSimpleUpload(folderID, name, src, file.Size, share.UserID)
-	if err != nil {
-		if status == http.StatusForbidden {
-			return c.String(status, "The folder owner has insufficient storage for this upload")
-		}
+	if _, _, status, err := h.TUS.EnqueueSharedFinalize(c.Request(), c.Param("token"), c.Param("upload_id")); err != nil {
 		return c.String(status, err.Error())
 	}
-	if err := h.Deps.DB.Model(session).Update("folder_share_id", share.ID).Error; err != nil {
-		return echo.ErrInternalServerError
-	}
-	if _, err := h.enqueueSimpleUpload(c, session); err != nil {
-		return err
-	}
-	// Never return an owner job URL, link UUID, or media URL to upload-only visitors.
+	// The receipt exposes no owner job data. Public links are retrieved separately
+	// after processing, only when the share owner permits them.
 	return c.JSON(http.StatusAccepted, echo.Map{"Status": "received", "Message": "Upload received and queued for processing"})
 }
 
-func (h *Handlers) validateSharedUpload(c echo.Context, share *models.FolderShare, folderID uint) error {
-	if !share.AllowUpload {
-		return echo.NewHTTPError(http.StatusForbidden, "This link does not allow uploads")
+func (h *Handlers) SharedUploadStatus(c echo.Context) error {
+	c.Response().Header().Set("Cache-Control", "private, no-store")
+	if h.TUS == nil {
+		return c.String(http.StatusServiceUnavailable, "Upload processing is unavailable")
 	}
-	if !h.folderShareUnlocked(c, share) {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Unlock this share first")
+	result, status, err := h.TUS.SharedUploadStatus(c.Request(), c.Param("token"), c.Param("upload_id"))
+	if err != nil {
+		return c.String(status, err.Error())
 	}
-	if h.Config().UploadEnabled == nil || !*h.Config().UploadEnabled {
-		return echo.NewHTTPError(http.StatusForbidden, "Uploads are disabled")
-	}
-	if !share.AllowRead && folderID != share.FolderID {
-		return echo.NewHTTPError(http.StatusForbidden, "Upload to the shared destination only")
-	}
-	if err := sharing.ContainsFolder(h.Deps.DB, share, folderID); err != nil {
-		return echo.NewHTTPError(http.StatusForbidden, "Folder is outside this share")
-	}
-	return nil
+	return c.JSON(http.StatusOK, result)
 }
 
 // SharedVideo verifies current permissions and ancestry before serving the
