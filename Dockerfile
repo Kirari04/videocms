@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
 ARG ALPINE_VERSION=3.24.2
-ARG BUN_VERSION=1.4.3
-ARG GO_VERSION=1.26.9
+ARG BUN_VERSION=1.4.4
+ARG GO_VERSION=1.26.10
 
 FROM --platform=$BUILDPLATFORM oven/bun:${BUN_VERSION} AS frontend_build
 
