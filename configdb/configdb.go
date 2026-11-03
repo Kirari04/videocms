@@ -4,16 +4,30 @@ import (
 	"ch/kirari04/videocms/app"
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/models"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"strconv"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/xyproto/randomstring"
 	"gorm.io/gorm"
 )
 
 func LoadSnapshot(db *gorm.DB, base config.Config) (app.Snapshot, error) {
+	var snapshot app.Snapshot
+	err := db.Transaction(func(tx *gorm.DB) error {
+		var err error
+		snapshot, err = loadSnapshot(tx, base)
+		return err
+	})
+	if err != nil {
+		return app.Snapshot{}, err
+	}
+	return snapshot, nil
+}
+
+func loadSnapshot(db *gorm.DB, base config.Config) (app.Snapshot, error) {
 	env := base.Clone()
 	var setting models.Setting
 	if res := db.FirstOrCreate(&setting); res.Error != nil {
@@ -25,8 +39,17 @@ func LoadSnapshot(db *gorm.DB, base config.Config) (app.Snapshot, error) {
 
 	env.ProjectExampleVideo = getEnvDb(&setting.ProjectExampleVideo, "notfound")
 
-	env.JwtSecretKey = getEnvDb(&setting.JwtSecretKey, randomstring.CookieFriendlyString(64))
-	env.JwtMediaSecretKey = getEnvDb(&setting.JwtMediaSecretKey, randomstring.CookieFriendlyString(64))
+	for _, key := range []*string{&setting.JwtSecretKey, &setting.JwtMediaSecretKey} {
+		if *key == "" || isLegacySigningKey(*key) {
+			var err error
+			*key, err = GenerateSigningKey()
+			if err != nil {
+				return app.Snapshot{}, fmt.Errorf("failed to generate signing key: %w", err)
+			}
+		}
+	}
+	env.JwtSecretKey = setting.JwtSecretKey
+	env.JwtMediaSecretKey = setting.JwtMediaSecretKey
 
 	env.ReloadHtml = getEnvDb_bool(&setting.ReloadHtml, boolPtr(false))
 	env.EncodingEnabled = getEnvDb_bool(&setting.EncodingEnabled, boolPtr(true))
@@ -258,6 +281,22 @@ func LoadSnapshot(db *gorm.DB, base config.Config) (app.Snapshot, error) {
 		},
 	}
 	return app.Snapshot{Config: env, Qualities: qualities}, nil
+}
+
+// GenerateSigningKey returns 384 bits of independently generated key material.
+func GenerateSigningKey() (string, error) {
+	var key [48]byte
+	if _, err := rand.Read(key[:]); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(key[:]), nil
+}
+
+func isLegacySigningKey(key string) bool {
+	// v1.2.0 of randomstring used a fixed PRNG seed. Either known default
+	// is unsafe in either signing column, including keys copied by an admin.
+	return key == "BpLnfgDsc2WD8F2qNfHK5a84jjJkwzDkh9h2fhfUVuS9jZ8uVbhV3vC5AWX39IVU" ||
+		key == "WSP2NcHciWvqZTa2N95RxRTZHWUsaD6HEdz0ThbXfQ6pYSQ3n267l1VQKGNbSuJE"
 }
 
 func getEnvDb(value *string, defaultValue string) string {

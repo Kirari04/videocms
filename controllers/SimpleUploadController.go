@@ -74,9 +74,18 @@ func (h *Handlers) SimpleUploadController(c echo.Context) error {
 		}
 		session = staged
 	}
+	job, err := h.enqueueSimpleUpload(c, session)
+	if err != nil {
+		return err
+	}
+	return acceptedBackgroundJob(c, job)
+}
+
+func (h *Handlers) enqueueSimpleUpload(c echo.Context, session *models.UploadSession) (*background.Job, error) {
+	userID := session.UserID
 	if session.BackgroundJobID != "" {
 		if existingJob, err := h.background().Job(c.Request().Context(), session.BackgroundJobID, &userID, false); err == nil {
-			return acceptedBackgroundJob(c, &existingJob.Job)
+			return &existingJob.Job, nil
 		}
 	}
 
@@ -92,12 +101,12 @@ func (h *Handlers) SimpleUploadController(c echo.Context) error {
 		}},
 	})
 	if err != nil {
-		return c.String(http.StatusInternalServerError, "Failed to queue uploaded file")
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Failed to queue uploaded file")
 	}
 	if err := h.Deps.DB.Model(session).Update("background_job_id", job.ID).Error; err != nil {
-		return c.String(http.StatusInternalServerError, "Failed to link uploaded file to background job")
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Failed to link uploaded file to background job")
 	}
-	return acceptedBackgroundJob(c, job)
+	return job, nil
 }
 
 func (h *Handlers) SimpleUploadLegacy(c echo.Context) error {

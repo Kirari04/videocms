@@ -1,15 +1,14 @@
 # syntax=docker/dockerfile:1.7
 
-ARG ALPINE_VERSION=3.22
-ARG BUN_VERSION=1.2.18
-ARG GO_VERSION=1.26.0
+ARG ALPINE_VERSION=3.24.2
+ARG BUN_VERSION=1.4.4
+ARG GO_VERSION=1.26.10
 
 FROM --platform=$BUILDPLATFORM oven/bun:${BUN_VERSION} AS frontend_build
 
 WORKDIR /app
 
 ARG CHANNEL=beta
-ARG DOCKER_IMAGE_TAG=kirari04/videocms:beta
 
 COPY videocms-frontend/package.json videocms-frontend/bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
@@ -20,8 +19,6 @@ COPY videocms-frontend/ .
 RUN printf '%s\n' \
     'NUXT_PUBLIC_API_URL=/api' \
     'NUXT_PUBLIC_BASE_URL=' \
-    "NUXT_PUBLIC_DOCKER_HUB_TAG=${DOCKER_IMAGE_TAG}" \
-    'NUXT_PUBLIC_NAME=VideoCMS' \
     'NUXT_PUBLIC_DEMO=false' \
     "NUXT_PUBLIC_RELEASE_CHANNEL=${CHANNEL}" \
     > .env
@@ -60,6 +57,7 @@ COPY middlewares ./middlewares
 COPY models ./models
 COPY routes ./routes
 COPY services ./services
+COPY sharing ./sharing
 COPY storage ./storage
 COPY traffic ./traffic
 

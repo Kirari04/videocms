@@ -34,7 +34,7 @@ func (h *Handlers) GetM3u8Data(c echo.Context) error {
 
 	h.Logic.TrackTraffic(userID, fileID, 0, audioID, uint64(len(*m3u8Str)))
 
-	return c.String(status, *m3u8Str)
+	return c.Blob(status, "application/vnd.apple.mpegurl", []byte(*m3u8Str))
 }
 
 func (h *Handlers) GetM3u8DataMulti(c echo.Context) error {
@@ -52,5 +52,5 @@ func (h *Handlers) GetM3u8DataMulti(c echo.Context) error {
 
 	h.Logic.TrackTraffic(userID, fileID, 0, 0, uint64(len(*m3u8Str)))
 
-	return c.String(status, *m3u8Str)
+	return c.Blob(status, "application/vnd.apple.mpegurl", []byte(*m3u8Str))
 }

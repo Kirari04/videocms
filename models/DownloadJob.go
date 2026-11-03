@@ -9,6 +9,9 @@ const (
 	DownloadJobStatusFailed    = "failed"
 	DownloadJobStatusCanceled  = "canceled"
 	DownloadJobStatusExpired   = "expired"
+
+	DownloadJobPhaseFetching   = "fetching"
+	DownloadJobPhaseAssembling = "assembling"
 )
 
 type DownloadJob struct {
@@ -28,6 +31,7 @@ type DownloadJob struct {
 	MediaDuration   float64
 
 	Status       string `gorm:"size:24;index"`
+	Phase        string `gorm:"size:24"`
 	Progress     float64
 	OutputPath   string `gorm:"size:1024" json:"-"`
 	OutputName   string `gorm:"size:255"`

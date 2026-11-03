@@ -15,12 +15,12 @@ import (
 	"time"
 
 	"ch/kirari04/videocms/app"
+	"ch/kirari04/videocms/auth"
 	"ch/kirari04/videocms/background"
 	"ch/kirari04/videocms/config"
 	"ch/kirari04/videocms/logic"
 	"ch/kirari04/videocms/models"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/tus/tusd/v2/pkg/filelocker"
@@ -37,14 +37,15 @@ const (
 type contextKey string
 
 const (
-	userIDContextKey   contextKey = "videocms_tus_user_id"
-	adminContextKey    contextKey = "videocms_tus_admin"
-	apiKeyIDContextKey contextKey = "videocms_tus_api_key_id"
+	userIDContextKey      contextKey = "videocms_tus_user_id"
+	adminContextKey       contextKey = "videocms_tus_admin"
+	apiKeyIDContextKey    contextKey = "videocms_tus_api_key_id"
+	folderShareContextKey contextKey = "videocms_tus_folder_share"
 )
 
 type Service struct {
 	Deps  *app.Deps
-	Auth  any
+	Auth  *auth.Service
 	Logic *logic.Service
 
 	handler    http.Handler
@@ -71,14 +72,7 @@ type ConsumerHealth struct {
 	LastError   string
 }
 
-type tusClaims struct {
-	UserID   uint   `json:"userid"`
-	Username string `json:"username"`
-	Admin    bool   `json:"admin"`
-	jwt.RegisteredClaims
-}
-
-func NewService(deps *app.Deps, authSvc any) *Service {
+func NewService(deps *app.Deps, authSvc *auth.Service) *Service {
 	if deps == nil {
 		deps = &app.Deps{
 			Snapshots: app.NewSnapshotStore(app.Snapshot{}),
@@ -86,6 +80,9 @@ func NewService(deps *app.Deps, authSvc any) *Service {
 	}
 	if deps.Snapshots == nil {
 		deps.Snapshots = app.NewSnapshotStore(app.Snapshot{})
+	}
+	if authSvc == nil {
+		authSvc = auth.NewService(deps)
 	}
 	logicSvc := logic.NewService(deps)
 
@@ -244,6 +241,9 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) authenticatedContext(r *http.Request) (context.Context, int, string) {
+	if token := r.Header.Get(FolderShareHeader); token != "" {
+		return s.sharedUploadContext(r, token)
+	}
 	bearer := r.Header.Get("Authorization")
 	if bearer == "" {
 		return r.Context(), http.StatusForbidden, "No JWT Token"
@@ -257,7 +257,7 @@ func (s *Service) authenticatedContext(r *http.Request) (context.Context, int, s
 			return r.Context(), http.StatusInternalServerError, "database unavailable"
 		}
 
-		apiKey, err := s.verifyAPIKey(tokenString)
+		apiKey, err := s.Auth.VerifyApiKey(tokenString)
 		if err != nil {
 			return r.Context(), http.StatusForbidden, "Invalid or Expired API Key"
 		}
@@ -278,7 +278,7 @@ func (s *Service) authenticatedContext(r *http.Request) (context.Context, int, s
 		return ctx, 0, ""
 	}
 
-	token, claims, err := s.verifyJWT(tokenString)
+	token, claims, err := s.Auth.VerifyJWT(tokenString)
 	if err != nil {
 		return r.Context(), http.StatusForbidden, "Invalid JWT Token"
 	}
@@ -288,34 +288,6 @@ func (s *Service) authenticatedContext(r *http.Request) (context.Context, int, s
 	ctx := context.WithValue(r.Context(), userIDContextKey, claims.UserID)
 	ctx = context.WithValue(ctx, adminContextKey, claims.Admin)
 	return ctx, 0, ""
-}
-
-func (s *Service) verifyAPIKey(key string) (*models.ApiKey, error) {
-	db := s.db()
-	if db == nil {
-		return nil, errors.New("database unavailable")
-	}
-
-	var apiKey models.ApiKey
-	if err := db.Preload("User").Where("`key` = ?", key).First(&apiKey).Error; err != nil {
-		return nil, err
-	}
-	if apiKey.ExpiresAt != nil && time.Now().After(*apiKey.ExpiresAt) {
-		return nil, errors.New("api key expired")
-	}
-	return &apiKey, nil
-}
-
-func (s *Service) verifyJWT(tokenString string) (*jwt.Token, *tusClaims, error) {
-	claims := &tusClaims{}
-	key := []byte(s.Config().JwtSecretKey)
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return key, nil
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	return token, claims, nil
 }
 
 func userIDFromContext(ctx context.Context) (uint, bool) {
@@ -361,6 +333,9 @@ func (s *Service) authorizeUploadResource(ctx context.Context, tusID string) (*m
 	}
 	if session.UserID != userID {
 		return nil, http.StatusForbidden, "upload belongs to another user"
+	}
+	if status, err := s.authorizeSharedSession(ctx, &session); err != nil {
+		return nil, status, err.Error()
 	}
 	if isExpired(&session) {
 		s.expireSession(&session)
@@ -408,13 +383,16 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 	if err != nil {
 		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_INVALID_METADATA", "parent_folder_id must be a positive integer", http.StatusBadRequest)
 	}
-	if parentFolderID > 0 {
-		var count int64
-		if err := db.Model(&models.Folder{}).Where("id = ?", parentFolderID).Count(&count).Error; err != nil {
-			return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_DATABASE", "failed to validate parent folder", http.StatusInternalServerError)
+	if status, err := logic.ValidateFolderDestination(db, parentFolderID, userID); err != nil {
+		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_INVALID_PARENT", err.Error(), status)
+	}
+	share, _ := hook.Context.Value(folderShareContextKey).(*models.FolderShare)
+	if share != nil {
+		if status, err := s.validateSharedDestination(share, parentFolderID); err != nil {
+			return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_SHARE_DESTINATION", err.Error(), status)
 		}
-		if count == 0 {
-			return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_INVALID_PARENT", "parent folder doesn't exist", http.StatusBadRequest)
+		if !validSharedFilename(name) {
+			return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_INVALID_METADATA", "video extension is not supported", http.StatusBadRequest)
 		}
 	}
 
@@ -424,6 +402,9 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 	}
 	if _, err := uuid.Parse(clientUploadUUID); err != nil {
 		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_INVALID_METADATA", "client_upload_uuid must be a UUID", http.StatusBadRequest)
+	}
+	if status, err := s.validateUploadGroup(hook.Context, userID, clientUploadUUID, parentFolderID, name); err != nil {
+		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_UPLOAD_GROUP", err.Error(), status)
 	}
 
 	kind := models.UploadKindSingle
@@ -469,8 +450,23 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 		UserID:           userID,
 		ExpiresAt:        &expiresAt,
 	}
+	if share != nil {
+		session.FolderShareID = share.ID
+		session.FolderShareVersion = share.AccessVersion
+	}
 
+	createStatus := http.StatusBadRequest
 	if err := db.Transaction(func(tx *gorm.DB) error {
+		if status, err := logic.ValidateFolderDestination(tx, parentFolderID, userID); err != nil {
+			createStatus = status
+			return err
+		}
+		if share != nil {
+			if status, err := s.validateSharedCreate(tx, share, &session, info.MetaData); err != nil {
+				createStatus = status
+				return err
+			}
+		}
 		if err := tx.Create(&session).Error; err != nil {
 			return err
 		}
@@ -488,7 +484,7 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 
 		byTusID := map[string]models.UploadSession{}
 		for _, partial := range partials {
-			if partial.UserID != userID || partial.ClientUploadUUID != clientUploadUUID {
+			if partial.UserID != userID || partial.ClientUploadUUID != clientUploadUUID || partial.FolderShareID != session.FolderShareID || partial.FolderShareVersion != session.FolderShareVersion || (share != nil && (partial.ParentFolderID != parentFolderID || partial.Name != name)) {
 				return fmt.Errorf("partial upload belongs to another user or upload group")
 			}
 			if partial.Kind != models.UploadKindPartial {
@@ -510,7 +506,7 @@ func (s *Service) preUploadCreate(hook tusd.HookEvent) (tusd.HTTPResponse, tusd.
 		}
 		return nil
 	}); err != nil {
-		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_UPLOAD_REJECTED", err.Error(), http.StatusBadRequest)
+		return tusd.HTTPResponse{}, tusd.FileInfoChanges{}, tusd.NewError("ERR_UPLOAD_REJECTED", err.Error(), createStatus)
 	}
 
 	metadata := tusd.MetaData{}
@@ -1079,6 +1075,9 @@ func (s *Service) EnqueueFinalize(ctx context.Context, uploadID string, userID u
 	if session.UserID != userID {
 		return nil, false, http.StatusForbidden, errors.New("upload not found")
 	}
+	if status, err := s.authorizeSharedSession(ctx, &session); err != nil {
+		return nil, false, status, err
+	}
 	if session.Kind == models.UploadKindPartial {
 		return nil, false, http.StatusBadRequest, errors.New("partial uploads cannot be finalized")
 	}
@@ -1088,6 +1087,11 @@ func (s *Service) EnqueueFinalize(ctx context.Context, uploadID string, userID u
 	}
 	if session.Status != models.UploadStatusUploaded && session.Status != models.UploadStatusFailed && session.Status != models.UploadStatusImporting && session.Status != models.UploadStatusDone {
 		return nil, false, http.StatusConflict, errors.New("upload is not complete")
+	}
+	if share, _ := ctx.Value(folderShareContextKey).(*models.FolderShare); share != nil && session.BackgroundJobID == "" {
+		if status, err := s.validateSharedCapacity(db, share, session.Size, session.ClientUploadUUID); err != nil {
+			return nil, false, status, err
+		}
 	}
 	ownerID := session.UserID
 	job, reused, err := s.Deps.Background.Enqueue(ctx, background.JobSpec{

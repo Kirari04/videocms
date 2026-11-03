@@ -3,12 +3,18 @@ package controllers
 import (
 	"ch/kirari04/videocms/helpers"
 	"ch/kirari04/videocms/models"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 )
+
+// Same bcrypt cost as production password hashes, generated once for the
+// missing-account path so a failed lookup still performs password work.
+const dummyLoginHash = "$2b$14$DV.O1wq5WjyMPWD7z4yFhe.D.QGRYiJPK7/.MGo6dH2QCCJWsCb9C"
 
 func (h *Handlers) AuthLogin(c echo.Context) error {
 	var userValidation models.UserLoginValidation
@@ -31,12 +37,17 @@ func (h *Handlers) AuthLogin(c echo.Context) error {
 	res := h.Deps.DB.Model(&models.User{}).Where(&models.User{
 		Username: userValidation.Username,
 	}).First(&user)
-	if res.Error != nil {
-		return c.String(http.StatusBadRequest, "User not found")
+	if res.Error != nil && !errors.Is(res.Error, gorm.ErrRecordNotFound) {
+		log.Println("Failed to query login account", res.Error)
+		return c.NoContent(http.StatusInternalServerError)
 	}
-
-	if !helpers.CheckPasswordHash(userValidation.Password, user.Hash) {
-		return c.String(http.StatusBadRequest, "Wrong password")
+	hash := user.Hash
+	if errors.Is(res.Error, gorm.ErrRecordNotFound) {
+		hash = dummyLoginHash
+	}
+	passwordMatches := helpers.CheckPasswordHash(userValidation.Password, hash)
+	if res.Error != nil || !passwordMatches {
+		return c.String(http.StatusBadRequest, "Invalid credentials")
 	}
 
 	tokenString, expirationTime, err := h.Auth.GenerateJWT(user)

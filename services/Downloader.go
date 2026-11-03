@@ -11,6 +11,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -341,6 +342,10 @@ func secureHTTPClient() *http.Client {
 	}
 }
 
+// NewPublicHTTPClient shares connect-time IP checks and redirect validation
+// with remote downloads. It never uses environment-configured proxies.
+func NewPublicHTTPClient() *http.Client { return secureHTTPClient() }
+
 func dialPublicAddress(ctx context.Context, network string, address string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
@@ -366,15 +371,29 @@ func dialPublicAddress(ctx context.Context, network string, address string) (net
 }
 
 func isBlockedRemoteIP(ip net.IP) bool {
-	if ip == nil {
+	address, valid := netip.AddrFromSlice(ip)
+	if !valid {
 		return true
 	}
-	return ip.IsUnspecified() ||
+	address = address.Unmap()
+	for _, prefix := range blockedRemotePrefixes {
+		if prefix.Contains(address) {
+			return true
+		}
+	}
+	return !ip.IsGlobalUnicast() || ip.IsUnspecified() ||
 		ip.IsLoopback() ||
 		ip.IsPrivate() ||
 		ip.IsLinkLocalUnicast() ||
 		ip.IsLinkLocalMulticast() ||
 		ip.IsMulticast()
+}
+
+var blockedRemotePrefixes = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"),
+	netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("240.0.0.0/4"),
 }
 
 func validateRemoteURLScheme(rawURL string) error {

@@ -220,7 +220,7 @@ func (s *Service) RemoveLinkThumbnailFile(link models.Link) {
 	}
 	releaseFile := s.Deps.StorageLifecycle.FileReadLock(link.FileID)
 	defer releaseFile()
-	if err := s.Deps.DB.Preload("File").First(&link, link.ID).Error; err != nil || link.Thumbnail == "" {
+	if err := s.Deps.DB.Unscoped().Preload("File").First(&link, link.ID).Error; err != nil || link.Thumbnail == "" {
 		return
 	}
 	releaseMount := s.Deps.StorageLifecycle.ReadLock(link.File.StorageID)
@@ -243,13 +243,14 @@ func (s *Service) RemoveLinkThumbnailFile(link models.Link) {
 
 func (s *Service) loadThumbnailLink(linkID uint, userID uint, isAdmin bool) (models.Link, int, error) {
 	var dbLink models.Link
-	if res := s.Deps.DB.
+	query := s.Deps.DB
+	if !isAdmin {
+		query = query.Where("user_id = ?", userID)
+	}
+	if res := query.
 		Preload("File").
 		First(&dbLink, linkID); res.Error != nil {
 		return models.Link{}, http.StatusBadRequest, errors.New("file doesn't exist")
-	}
-	if !isAdmin && dbLink.UserID != userID {
-		return models.Link{}, http.StatusForbidden, errors.New("unauthorized access to file")
 	}
 	return dbLink, http.StatusOK, nil
 }

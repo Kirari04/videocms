@@ -16,20 +16,17 @@ func (h *Handlers) ListFolders(c echo.Context) error {
 		return c.String(status, err.Error())
 	}
 
-	//check if requested folder exists
-	if folderValidation.ParentFolderID > 0 {
-		res := h.Deps.DB.First(&models.Folder{}, folderValidation.ParentFolderID)
-		if res.Error != nil {
-			return c.String(http.StatusBadRequest, "Parent folder doesn't exist")
-		}
-	}
-
 	// Determine which UserID to use
 	userID := c.Get("UserID").(uint)
 	isAdmin, _ := c.Get("Admin").(bool)
 
 	if isAdmin && folderValidation.UserID > 0 {
 		userID = folderValidation.UserID
+	}
+	if folderValidation.ParentFolderID > 0 {
+		if res := h.Deps.DB.Where("user_id = ?", userID).First(&models.Folder{}, folderValidation.ParentFolderID); res.Error != nil {
+			return c.String(http.StatusBadRequest, "Parent folder doesn't exist")
+		}
 	}
 
 	// query all folders

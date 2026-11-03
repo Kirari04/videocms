@@ -63,7 +63,7 @@ func (s *Service) buildLinkListItems(links []models.Link) *[]LinkListItem {
 func (s *Service) ListFiles(fromFolder uint, userId uint) (status int, response *[]LinkListItem, err error) {
 	//check if requested folder exists
 	if fromFolder > 0 {
-		res := s.Deps.DB.First(&models.Folder{}, fromFolder)
+		res := s.Deps.DB.Where("user_id = ?", userId).First(&models.Folder{}, fromFolder)
 		if res.Error != nil {
 			return http.StatusBadRequest, nil, errors.New("parent folder doesn't exist")
 		}

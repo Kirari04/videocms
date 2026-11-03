@@ -376,7 +376,8 @@
         const FOLDER = "{{.Folder}}";
         const THUMB = "{{ .Thumbnail }}";
         const DOWNLOAD_ENABLED = "{{ .DownloadEnabled }}" === "true";
-        const DOWNLOAD_PAGE_URL = new URL(`/v/${UUID}/download`, window.location.origin).href;
+        const PLAYER_BASE_URL = {{.PlayerBase}};
+        const DOWNLOAD_PAGE_URL = new URL(`${PLAYER_BASE_URL}/download`, window.location.origin).href;
         const CONTINUE_WATCHING_ENABLED = "{{ .ContinueWatchingPopupEnabled }}" === "true";
         const StreamIsReady = ("{{.StreamIsReady}}" === "true");
         
@@ -459,7 +460,7 @@
             let failedPolls = 0;
 
             const poll = () => {
-                fetch(`/v/${UUID}/status`, {
+                fetch(`${PLAYER_BASE_URL}/status`, {
                     credentials: "same-origin",
                     headers: {
                         "Accept": "application/json",
@@ -541,15 +542,11 @@
                     const urlParams = new URLSearchParams(window.location.search);
                     const reqFieldValue = urlParams.get(Webhook.reqField);
 
-                    const formdata = new FormData();
-                    formdata.append("uuid", UUID);
-                    formdata.append("position", player.currentTime);
-                    formdata.append(Webhook.resField, reqFieldValue);
-
                     fetch(Webhook.url, {
                         method: "POST",
-                        body: formdata,
-                        redirect: "follow",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ position: player.currentTime, value: reqFieldValue || "" }),
+                        redirect: "error",
                     }).catch((e) => {
                         console.error("Webhook error", Webhook, e);
                     });

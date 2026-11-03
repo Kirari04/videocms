@@ -71,6 +71,39 @@ func TestCreateDownloadJobDeduplicatesActiveSelection(t *testing.T) {
 	}
 }
 
+func TestGetDownloadJobReportsPersistedPreparationPhase(t *testing.T) {
+	h, link, _ := downloadJobTestHandlers(t, 20)
+	created := callCreateDownloadJob(t, h, link, []byte(`{"quality":"720p","container":"mkv","audioUUIDs":[],"subtitleUUIDs":[]}`))
+	if created.Code != http.StatusAccepted {
+		t.Fatalf("create status = %d: %s", created.Code, created.Body.String())
+	}
+	var response downloadJobResponse
+	if err := json.Unmarshal(created.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	for _, phase := range []string{models.DownloadJobPhaseFetching, models.DownloadJobPhaseAssembling, ""} {
+		if err := h.Deps.DB.Model(&models.DownloadJob{}).Where("uuid = ?", response.ID).
+			Updates(map[string]interface{}{"status": models.DownloadJobStatusPreparing, "phase": phase, "progress": 0.25}).Error; err != nil {
+			t.Fatal(err)
+		}
+		rec := httptest.NewRecorder()
+		c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/download-jobs/"+response.ID, nil), rec)
+		c.SetParamNames("UUID", "JOBUUID")
+		c.SetParamValues(link.UUID, response.ID)
+		c.Set(middlewares.MediaClaimsContextKey, &auth.MediaClaims{LinkUUID: link.UUID, FileID: link.FileID, UserID: link.UserID})
+		if err := h.GetDownloadJob(c); err != nil {
+			t.Fatal(err)
+		}
+		var polled downloadJobResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &polled); err != nil {
+			t.Fatal(err)
+		}
+		if rec.Code != http.StatusOK || polled.Status != models.DownloadJobStatusPreparing || polled.Phase != phase || polled.Progress != 0.25 {
+			t.Fatalf("poll response = %d, %#v", rec.Code, polled)
+		}
+	}
+}
+
 func TestCreateDownloadJobHonorsBoundedQueue(t *testing.T) {
 	h, link, _ := downloadJobTestHandlers(t, 1)
 	if err := h.Deps.DB.Create(&models.DownloadJob{

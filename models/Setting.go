@@ -12,8 +12,8 @@ type Setting struct {
 
 	ProjectExampleVideo string `validate:"required,min=1,max=512" gorm:"size:512;"`
 
-	JwtSecretKey      string `validate:"required,min=8,max=512" gorm:"size:512;"`
-	JwtMediaSecretKey string `validate:"required,min=8,max=512" gorm:"size:512;"`
+	JwtSecretKey      string `json:"-" validate:"required,min=8,max=512" gorm:"size:512;"`
+	JwtMediaSecretKey string `json:"-" validate:"required,min=8,max=512" gorm:"size:512;"`
 
 	ReloadHtml       string `validate:"required,boolean"`
 	EncodingEnabled  string `validate:"required,boolean"`

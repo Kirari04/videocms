@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -54,6 +55,22 @@ func TestParseCORSAllowOrigins(t *testing.T) {
 				t.Fatalf("parseCORSAllowOrigins(%q) = %#v, want %#v", test.value, got, test.want)
 			}
 		})
+	}
+}
+
+func TestSharedTusPreflightAllowsGuestHeaderAndCredentials(t *testing.T) {
+	enabled := true
+	app := echo.New()
+	app.Use(middleware.CORSWithConfig(serverCORSConfig(config.Config{CorsAllowOrigins: "https://app.example.test", CorsAllowCredentials: &enabled})))
+	app.PATCH("/api/uploads/:id", func(c echo.Context) error { return c.NoContent(http.StatusNoContent) })
+	req := httptest.NewRequest(http.MethodOptions, "/api/uploads/example", nil)
+	req.Header.Set(echo.HeaderOrigin, "https://app.example.test")
+	req.Header.Set(echo.HeaderAccessControlRequestMethod, http.MethodPatch)
+	req.Header.Set(echo.HeaderAccessControlRequestHeaders, "X-Folder-Share,Tus-Resumable,Upload-Offset,Content-Type")
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+	if rec.Code != 204 || rec.Header().Get(echo.HeaderAccessControlAllowCredentials) != "true" || !strings.Contains(rec.Header().Get(echo.HeaderAccessControlAllowHeaders), "X-Folder-Share") {
+		t.Fatalf("guest tus preflight: %d %v", rec.Code, rec.Header())
 	}
 }
 

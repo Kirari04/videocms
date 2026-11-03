@@ -15,6 +15,9 @@ func (s *Service) VerifyApiKey(key string) (*models.ApiKey, error) {
 	if err := s.Deps.DB.Preload("User").Where("`key` = ?", key).First(&apiKey).Error; err != nil {
 		return nil, err
 	}
+	if apiKey.User.ID == 0 || apiKey.User.ID != apiKey.UserID {
+		return nil, errors.New("api key owner not found")
+	}
 
 	if apiKey.ExpiresAt != nil && time.Now().After(*apiKey.ExpiresAt) {
 		return nil, errors.New("api key expired")

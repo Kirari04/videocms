@@ -2,15 +2,16 @@ package models
 
 type User struct {
 	Model
-	Username      string `gorm:"unique;size:32;"`
-	Hash          string `gorm:"size:250;" json:"-"`
-	Admin         bool
-	Email         string
-	Balance       float64
-	Storage       int64
-	Settings      UserSettings
-	StoragePoolID *uint
-	StoragePool   *StoragePool `json:"-"`
+	Username       string `gorm:"unique;size:32;"`
+	Hash           string `gorm:"size:250;" json:"-"`
+	SessionVersion uint64 `gorm:"not null;default:0" json:"-"`
+	Admin          bool
+	Email          string
+	Balance        float64
+	Storage        int64
+	Settings       UserSettings
+	StoragePoolID  *uint
+	StoragePool    *StoragePool `json:"-"`
 
 	Folders  []Folder  `json:"-"`
 	Webhooks []Webhook `json:"-"`

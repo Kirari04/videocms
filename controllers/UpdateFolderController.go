@@ -24,16 +24,13 @@ func (h *Handlers) UpdateFolder(c echo.Context) error {
 	}
 
 	var dbFolder models.Folder
-	//check if requested folder id exists
-	if res := h.Deps.DB.First(&dbFolder, folderValidation.FolderID); res.Error != nil {
-		return c.String(http.StatusBadRequest, "Folder doesn't exist")
+	query := h.Deps.DB
+	if isAdmin, _ := c.Get("Admin").(bool); !isAdmin {
+		query = query.Where("user_id = ?", c.Get("UserID").(uint))
 	}
-
-	// Verify ownership
-	userID := c.Get("UserID").(uint)
-	isAdmin, _ := c.Get("Admin").(bool)
-	if !isAdmin && dbFolder.UserID != userID {
-		return c.String(http.StatusForbidden, "Unauthorized access to folder")
+	//check if requested folder id exists
+	if res := query.First(&dbFolder, folderValidation.FolderID); res.Error != nil {
+		return c.String(http.StatusBadRequest, "Folder doesn't exist")
 	}
 
 	//update folder data

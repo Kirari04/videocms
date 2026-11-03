@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+
+	"gorm.io/gorm"
 )
 
 type UserResponse struct {
@@ -160,6 +162,7 @@ func (s *Service) UpdateUser(id uint64, username, email string, admin *bool, sto
 	if result := s.Deps.DB.First(&user, id); result.Error != nil {
 		return http.StatusNotFound, nil, errors.New("user not found")
 	}
+	updates := map[string]any{}
 
 	if username != "" && username != user.Username {
 		var count int64
@@ -168,6 +171,7 @@ func (s *Service) UpdateUser(id uint64, username, email string, admin *bool, sto
 			return http.StatusConflict, nil, errors.New("username already exists")
 		}
 		user.Username = username
+		updates["username"] = username
 	}
 
 	if email != "" && email != user.Email {
@@ -177,19 +181,24 @@ func (s *Service) UpdateUser(id uint64, username, email string, admin *bool, sto
 			return http.StatusConflict, nil, errors.New("email already exists")
 		}
 		user.Email = email
+		updates["email"] = email
 	} else if email == "" && user.Email != "" {
 		// Allow clearing the email if explicitly passed as empty string
 		user.Email = ""
+		updates["email"] = ""
 	}
 
 	if admin != nil {
-		user.Admin = *admin
+		updates["admin"] = *admin
+		// Compare with the persisted role in the same write: concurrent role
+		// changes must revoke sessions without restoring a stale version.
+		updates["session_version"] = gorm.Expr("COALESCE(session_version, 0) + CASE WHEN COALESCE(admin, 0) <> ? THEN 1 ELSE 0 END", *admin)
 	}
 	if storageLimit != nil {
-		user.Storage = *storageLimit
+		updates["storage"] = *storageLimit
 	}
 	if balance != nil {
-		user.Balance = *balance
+		updates["balance"] = *balance
 	}
 	if maxRemoteDownloads != nil {
 		user.Settings.MaxRemoteDownloads = *maxRemoteDownloads
@@ -197,16 +206,22 @@ func (s *Service) UpdateUser(id uint64, username, email string, admin *bool, sto
 	if remoteDownloadEnabled != nil {
 		user.Settings.RemoteDownloadEnabled = remoteDownloadEnabled
 	}
+	if maxRemoteDownloads != nil || remoteDownloadEnabled != nil {
+		updates["settings"] = user.Settings
+	}
 	if storagePoolID != nil {
 		normalized, err := s.normalizeUserStoragePoolID(storagePoolID)
 		if err != nil {
 			return http.StatusBadRequest, nil, err
 		}
-		user.StoragePoolID = normalized
+		updates["storage_pool_id"] = normalized
 	}
 
-	if result := s.Deps.DB.Save(&user); result.Error != nil {
+	if result := s.Deps.DB.Model(&models.User{}).Where("id = ?", id).Updates(updates); result.Error != nil {
 		return http.StatusInternalServerError, nil, errors.New("failed to update user")
+	}
+	if err := s.Deps.DB.First(&user, id).Error; err != nil {
+		return http.StatusNotFound, nil, errors.New("user not found")
 	}
 
 	s.Deps.Cache.Delete(fmt.Sprintf("account-%d", id))
@@ -247,9 +262,14 @@ func (s *Service) ResetUserPassword(id uint64, newPassword string) (int, error) 
 		return http.StatusInternalServerError, errors.New("failed to process password")
 	}
 
-	user.Hash = hash
-	if result := s.Deps.DB.Save(&user); result.Error != nil {
+	result := s.Deps.DB.Model(&models.User{}).Where("id = ?", id).Updates(map[string]any{
+		"hash": hash, "session_version": gorm.Expr("COALESCE(session_version, 0) + 1"),
+	})
+	if result.Error != nil {
 		return http.StatusInternalServerError, errors.New("failed to update password")
+	}
+	if result.RowsAffected == 0 {
+		return http.StatusNotFound, errors.New("user not found")
 	}
 
 	return http.StatusOK, nil

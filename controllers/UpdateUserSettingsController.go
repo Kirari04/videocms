@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 )
 
 func (h *Handlers) UpdateUserSettingsController(c echo.Context) error {
@@ -41,9 +42,10 @@ func (h *Handlers) UpdateUserSettingsController(c echo.Context) error {
 			log.Println("Failed to hash new password", err)
 			return c.NoContent(http.StatusInternalServerError)
 		}
-		user.Hash = rawhash
-
-		if res := h.Deps.DB.Save(&user); res.Error != nil {
+		res := h.Deps.DB.Model(&models.User{}).Where("id = ?", userId).Updates(map[string]any{
+			"hash": rawhash, "session_version": gorm.Expr("COALESCE(session_version, 0) + 1"),
+		})
+		if res.Error != nil || res.RowsAffected == 0 {
 			log.Println("Failed to update user password", res.Error)
 			return c.NoContent(http.StatusInternalServerError)
 		}

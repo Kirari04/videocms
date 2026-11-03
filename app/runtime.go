@@ -94,10 +94,16 @@ func (g *RequestGate) Blocked(userID uint) bool {
 	return g.block || g.active[userID]
 }
 
-func (g *RequestGate) Start(userID uint) {
+// TryStart atomically admits an operation only when the user is not blocked.
+// Callers that are admitted must call End when the operation finishes.
+func (g *RequestGate) TryStart(userID uint) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if g.block || g.active[userID] {
+		return false
+	}
 	g.active[userID] = true
+	return true
 }
 
 func (g *RequestGate) End(userID uint) {
