@@ -558,15 +558,22 @@
         player.addEventListener('provider-change', (event) => {
              // Provider (HLS) loaded
              activateWebhooks();
-             setupDownloads();
         });
 
         // --- Download Logic ---
-        function setupDownloads() {
-            if (!DOWNLOAD_ENABLED) return;
+        setupDownloads();
 
-            const layout = document.querySelector('media-video-layout');
-            if (!layout || Qualitys.length === 0) return;
+        async function setupDownloads() {
+            if (!DOWNLOAD_ENABLED || Qualitys.length === 0) return;
+
+            const layout = player.querySelector('media-video-layout');
+            await customElements.whenDefined('media-video-layout');
+
+            const downloadLinkSelector = 'a.vds-download-button';
+            // Vidstack's tooltip cancels touchstart on its trigger, suppressing the native link click.
+            layout.addEventListener('touchstart', (event) => {
+                if (event.target.closest(downloadLinkSelector)) event.stopPropagation();
+            }, { capture: true, passive: true });
 
             layout.download = {
                 url: DOWNLOAD_PAGE_URL,
@@ -574,21 +581,17 @@
             };
 
             const prepareDownloadLink = () => {
-                const link = document.querySelector('.vds-download-button');
-                if (!link) return false;
-                link.href = DOWNLOAD_PAGE_URL;
+                const link = layout.querySelector(downloadLinkSelector);
+                if (!link) return;
+                if (link.href !== DOWNLOAD_PAGE_URL) link.href = DOWNLOAD_PAGE_URL;
                 link.removeAttribute('download');
-                link.target = '_blank';
-                link.rel = 'noopener';
-                return true;
+                if (link.rel !== 'noopener') link.rel = 'noopener';
             };
 
-            if (!prepareDownloadLink()) {
-                const observer = new MutationObserver(() => {
-                    if (prepareDownloadLink()) observer.disconnect();
-                });
-                observer.observe(layout, { childList: true, subtree: true });
-            }
+            // Vidstack can recreate or update the link when the layout or source changes.
+            const observer = new MutationObserver(prepareDownloadLink);
+            observer.observe(layout, { childList: true, subtree: true, attributeFilter: ['href', 'download'] });
+            prepareDownloadLink();
         }
 
         // --- Position Tracking & Continue Watching ---
