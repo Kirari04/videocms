@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
-ARG ALPINE_VERSION=3.24.2
+ARG ALPINE_VERSION=3.24.4
 ARG BUN_VERSION=1.4.4
-ARG GO_VERSION=1.26.10
+ARG GO_VERSION=1.26.11
 
 FROM --platform=$BUILDPLATFORM oven/bun:${BUN_VERSION} AS frontend_build
 
@@ -78,7 +78,7 @@ FROM --platform=$TARGETPLATFORM alpine:${ALPINE_VERSION}
 
 WORKDIR /app
 
-RUN apk add --no-cache ffmpeg bash
+RUN apk upgrade --no-cache && apk add --no-cache ffmpeg bash
 
 ARG VERSION=v0.0.0-dev
 ARG CHANNEL=dev
